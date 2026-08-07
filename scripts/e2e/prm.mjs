@@ -31,7 +31,7 @@ import {
 
 const PORT = 4315;
 const N = 11;
-const SETTLE = 1400; // flat mode veils through ~600ms of cut-fade; React render + focus effect deserve margin
+const SETTLE = 2800; // flat mode veils through ~600ms of cut-fade, and each PRM snap re-renders the 3D frame on this container's CPU raster — cover both
 
 const r = makeReporter('prm');
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
