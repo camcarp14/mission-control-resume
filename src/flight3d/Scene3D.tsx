@@ -1,11 +1,13 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree, invalidate } from '@react-three/fiber';
+import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
-import { fovAt, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT } from '../engine';
+import { fovAt, legInto, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT } from '../engine';
 import { SpaceEnvironment } from './SpaceEnvironment';
 import { SolarBodies } from './SolarBodies';
 import { Rocket3D } from './Rocket3D';
+import { Dressing } from './Dressing';
 import { Effects } from './Effects';
 
 /**
@@ -30,7 +32,17 @@ const tmpUp = new THREE.Vector3(0, 1, 0);
 const tmpRight = new THREE.Vector3();
 const tmpRocket = new THREE.Vector3();
 const tmpQuat = new THREE.Quaternion();
+const tmpQuatLand = new THREE.Quaternion();
 const tmpMat = new THREE.Matrix4();
+const tmpSite = new THREE.Vector3();
+const tmpDir = new THREE.Vector3();
+const tmpHover = new THREE.Vector3();
+const tmpAim = new THREE.Vector3();
+
+const smooth = (x: number, a: number, b: number) => {
+  const s = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return s * s * (3 - 2 * s);
+};
 
 function Rig({
   t,
@@ -98,9 +110,22 @@ function Rig({
     // at full size it read as a prop shoved at the lens, not a craft under
     // way (screenshot finding).
     const rk = rocketRef.current;
+    const velThrust = THREE.MathUtils.clamp(Math.abs(vel.get()) / 0.85, 0, 1);
+    let thrust = velThrust;
+
     if (rk) {
       rk.scale.setScalar(0.62);
-      const ra = camPath.posAt(tv + 0.24);
+
+      // ==== THE LANDING — the finale is choreographed, not implied. Over
+      // the homecoming leg the shuttle pulls ahead of the camera, flips
+      // tail-down, rides a retro-burn to the surface point between camera
+      // and planet, and settles onto its legs as the engines cut. ====
+      const home = points[n - 1];
+      const ramp = home && home.kind === 'earthReturn' ? legInto(n, n - 1, tv) : 0;
+
+      // Cruise pose: ahead on the path, pulling further ahead as the
+      // homecoming begins (it should visibly RACE you home).
+      const ra = camPath.posAt(tv + 0.24 + ramp * 0.34);
       tmpRight.crossVectors(tmpTan, tmpUp).normalize();
       tmpRocket
         .set(ra[0], ra[1], ra[2])
@@ -108,22 +133,64 @@ function Rig({
         .addScaledVector(tmpRight, mobile ? 0 : -5.2)
         .addScaledVector(tmpTan, kick.get() * 0.35);
       if (!reduced) {
-        // Idle float — barely there, sells zero-g.
-        tmpRocket.y += Math.sin(state.clock.elapsedTime * 1.1) * 0.14;
+        // Idle float — barely there, sells zero-g. Fades out on approach; a
+        // ship on final descent does not bob.
+        tmpRocket.y += Math.sin(state.clock.elapsedTime * 1.1) * 0.14 * (1 - ramp);
       }
-      rk.position.copy(tmpRocket);
-      // Nose along the tangent: build a look-at basis facing -Z forward.
-      tmpMat.lookAt(tmpRocket, tmpPos.copy(tmpRocket).add(tmpTan), tmpUp);
+      tmpMat.lookAt(tmpRocket, tmpAim.copy(tmpRocket).add(tmpTan), tmpUp);
       tmpQuat.setFromRotationMatrix(tmpMat);
-      rk.quaternion.slerp(tmpQuat, reduced ? 1 : 0.12); // heading lag, ported from 2D
+
+      if (ramp > 0 && home) {
+        // Landing site: on the planet's surface along the camera ray, so the
+        // touchdown happens centre-frame as you arrive. Leg tips reach
+        // ~1.4 units aft at ship scale, so the origin rests just above.
+        tmpSite.set(home.bodyPos[0], home.bodyPos[1], home.bodyPos[2]);
+        tmpDir
+          .set(
+            home.camPos[0] - home.bodyPos[0],
+            home.camPos[1] - home.bodyPos[1],
+            home.camPos[2] - home.bodyPos[2],
+          )
+          .normalize();
+        // Bias the touchdown off the camera axis — dead centre is where the
+        // DOM panel docks, and a ship landing behind the text is a ship
+        // nobody sees. Desktop: left half (panel sits right). Mobile: high
+        // (panel sits low).
+        tmpRight.crossVectors(tmpDir, tmpUp).normalize();
+        tmpDir
+          .addScaledVector(tmpRight, mobile ? 0 : 0.52)
+          .addScaledVector(tmpUp, mobile ? 0.5 : 0.14)
+          .normalize();
+        tmpHover.copy(tmpSite).addScaledVector(tmpDir, home.bodyRadius + 7.5);
+        tmpSite.addScaledVector(tmpDir, home.bodyRadius + 1.42);
+
+        // Position: cruise → hover (approach) → surface (descent).
+        const wApproach = smooth(ramp, 0.4, 0.82);
+        const wDown = smooth(ramp, 0.82, 0.975);
+        tmpHover.lerp(tmpSite, wDown);
+        tmpRocket.lerp(tmpHover, wApproach);
+
+        // Orientation: flip tail-down — nose (local -Z) points away from the
+        // planet, legs at the surface.
+        tmpMat.lookAt(tmpRocket, tmpAim.copy(tmpRocket).add(tmpDir), tmpUp);
+        tmpQuatLand.setFromRotationMatrix(tmpMat);
+        tmpQuat.slerp(tmpQuatLand, smooth(ramp, 0.42, 0.78));
+
+        // Retro-burn envelope: braking flare through the flip, full burn on
+        // descent, engines cut at touchdown (RCS puffs take over).
+        const retro = 0.5 * smooth(ramp, 0.4, 0.7) + 0.5 * smooth(ramp, 0.82, 0.9);
+        const cut = 1 - smooth(ramp, 0.965, 0.995);
+        thrust = Math.max(velThrust * (1 - wApproach), retro * cut);
+      }
+
+      rk.position.copy(tmpRocket);
+      rk.quaternion.slerp(tmpQuat, reduced ? 1 : ramp > 0 ? 0.2 : 0.12);
       const bank = THREE.MathUtils.clamp(-tan[0] * 0.55, -0.45, 0.45);
-      if (!reduced) rk.rotateZ(bank);
+      if (!reduced && ramp === 0) rk.rotateZ(bank);
     }
 
-    // Thrust for the flame + trail; bloom boost for the sun approach.
-    // Cruise speed is ~0.5 station/s now that legs are cinematic — normalise
-    // so the burn reads at full glow mid-leg, idle at dock.
-    thrustRef.current = THREE.MathUtils.clamp(Math.abs(vel.get()) / 0.85, 0, 1);
+    // Thrust for the flames + trail; bloom boost for the sun approach.
+    thrustRef.current = thrust;
     boostRef.current = sunApproach(n, tv);
   });
 
@@ -170,8 +237,13 @@ export function Scene3D({
       style={{ position: 'absolute', inset: 0 }}
     >
       <Suspense fallback={null}>
+        {/* Image-based lighting from a CC0 night HDRI — this is most of the
+            difference between "material" and "grey plastic" on the hull and
+            planet dark sides. Lighting only, never the background. */}
+        <Environment files="/hdri/dikhololo_night_1k.hdr" />
         <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 3200 : 6400} />
         <SolarBodies waypoints={points} reduced={reduced} />
+        <Dressing waypoints={points} reduced={reduced} />
         <Rig
           t={t}
           kick={kick}

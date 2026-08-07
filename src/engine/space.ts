@@ -100,9 +100,11 @@ export function voyage(n: number): Waypoint[] {
     }
 
     // The outbound flight line: forward is -Z; drift keeps every leg unique.
+    // Amplitude widened so future stations' bodies stagger across the frame
+    // instead of clumping into one down-route pile (live-site finding).
     const camPos: Vec3 = [
-      26 * Math.sin(i * PHI),
-      9 * Math.sin(i * 1.7 + 1),
+      38 * Math.sin(i * PHI),
+      13 * Math.sin(i * 1.7 + 1),
       -i * STEP,
     ];
 

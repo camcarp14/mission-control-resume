@@ -31,14 +31,18 @@ const SKY_TINT = '#c8ccd2';
 // carries across the whole voyage; the fill is a whisper from the camera's
 // general direction so dark sides shade to charcoal instead of void-black.
 const AMBIENT_COLOR = '#aebccb';
-const AMBIENT_INTENSITY = 0.32;
+const AMBIENT_INTENSITY = 0.24;
 const SUN_LIGHT_COLOR = '#fff2e0';
 const SUN_LIGHT_INTENSITY = 2.6;
-const FILL_COLOR = '#b9c6d6';
-const FILL_INTENSITY = 0.38;
+// The KEY light: a cool-white directional from high over the viewer's right
+// shoulder. This is what carves a real day/night terminator across every
+// body — with only the far sun point light, mid-voyage planets photographed
+// flat (live-site finding). Ambient dropped to let the shadow side breathe.
+const FILL_COLOR = '#dfe8ff';
+const FILL_INTENSITY = 1.15;
 // Direction only (directional lights ignore distance): high, right, and
 // behind the flight line, roughly where the viewer's eye comes from.
-const FILL_FROM: Vec3 = [4, 6, 10];
+const FILL_FROM: Vec3 = [10, 7, 12];
 
 // Star-field shape: a shell well inside the sky sphere but far outside every
 // body, so stars drift with parallax while the milky way holds still.

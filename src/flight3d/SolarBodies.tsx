@@ -23,17 +23,41 @@ export type SolarBodiesProps = {
 type BodyProps = { wp: Waypoint; reduced: boolean };
 
 /* ---- tunable constants ---------------------------------------------------
- * Spin rates are rad/s; they are deliberately an order of magnitude slower
- * than "screensaver" speed because the bodies are vistas, not toys. */
-const EARTH_SPIN = 0.02;
-const CLOUD_COUNTER_SPIN = 0.006; // opposite sign to the globe — sells depth
-const SUN_SPIN = 0.006;
+ * Spin rates are rad/s — tuned so every body is unmistakably TURNING within
+ * ~10 seconds of watching, without ever reading as a spin-top. (The previous
+ * pass was 5x slower and photographed as a still — live-site finding.) */
+const EARTH_SPIN = 0.09; // ~70s per revolution — a visible crawl
+const CLOUD_COUNTER_SPIN = 0.03; // opposite sign to the globe — sells depth
+const SUN_SPIN = 0.03;
+const SATURN_SPIN = 0.2;
 const ASTEROID_COUNT = 120;
-const ASTEROID_DRIFT = 0.004; // collective field rotation, barely perceptible
+const ASTEROID_DRIFT = 0.02; // collective field rotation — slow, but alive
 const NEBULA_PUFF_COUNT = 40;
+const NEBULA_DRIFT_X = 2.8; // per-puff orbit excursion, world units
+const NEBULA_DRIFT_Y = 2.2;
+const NEBULA_SPEED_BASE = 0.04; // per-puff orbit rate floor, rad/s
+const NEBULA_SPEED_VAR = 0.08; // + seeded variance on top of the floor
 const CLUSTER_POINT_COUNT = 300;
 const RING_TILT = 0.45;
 const NAV_LIGHT_STEADY = 1.4; // emissive intensity when reduced (never pulses)
+const OUTPOST_TRACK_YAW = 0.02; // rad/s — solar panels crawling sunward
+const SUN_LIGHT_COLOR = '#ffd9a0';
+const SUN_LIGHT_BASE = 600; // local-drama pointLight, decay 0, at world scale
+const SUN_LIGHT_PULSE = 0.12; // ± fraction, split across two detuned sines
+const CORONA_BREATHE = 0.04; // ± scale fraction on the corona sprites
+const CORONA_ROT = 0.01; // rad/s outer corona drift; inner counter-rotates
+
+/* Bump relief per textured body — the surface map doubles as its own bump
+ * map, which is cheap and honest for these albedos. three r150+ treats
+ * bumpScale in world-ish units at these radii, so TUNE BY EYE. */
+const BUMP = {
+  earth: 0.15,
+  moon: 0.5,
+  mars: 0.4,
+  jupiter: 0.1,
+  neptune: 0.1,
+  saturn: 0.1,
+} as const;
 
 const TEX = {
   earthDay: '/textures/4k_earth_daymap.webp',
@@ -199,14 +223,19 @@ function Earth({ wp, reduced }: BodyProps) {
       <mesh ref={globeRef}>
         <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
         {/* White emissive + the night map makes the dark limb glitter with
-            cities without washing out the lit side. */}
+            cities without washing out the lit side. The day map re-used as a
+            bump map gives the terminator texture, and the lowered roughness
+            puts a specular sheen on the oceans — the single cheapest "that is
+            a real planet" upgrade. */}
         <meshStandardMaterial
           map={day}
+          bumpMap={day}
+          bumpScale={BUMP.earth}
           emissiveMap={night}
           emissive="#ffffff"
           emissiveIntensity={0.6}
-          roughness={0.9}
-          metalness={0}
+          roughness={0.55}
+          metalness={0.02}
         />
       </mesh>
       <mesh ref={cloudRef}>
@@ -238,10 +267,10 @@ type RockyKind = 'moon' | 'mars' | 'jupiter' | 'neptune';
 /* Distinct spin rates and tilts so the four simple spheres never read as
  * copies of one another. Jupiter spins fastest — the real one does too. */
 const PLANET_TUNING: Record<RockyKind, { url: string; spin: number; tilt: number }> = {
-  moon: { url: '/textures/2k_moon.webp', spin: 0.006, tilt: 0.03 },
-  mars: { url: '/textures/2k_mars.webp', spin: 0.024, tilt: 0.44 },
-  jupiter: { url: '/textures/2k_jupiter.webp', spin: 0.058, tilt: 0.06 },
-  neptune: { url: '/textures/2k_neptune.webp', spin: 0.042, tilt: 0.49 },
+  moon: { url: '/textures/2k_moon.webp', spin: 0.03, tilt: 0.03 },
+  mars: { url: '/textures/2k_mars.webp', spin: 0.1, tilt: 0.44 },
+  jupiter: { url: '/textures/2k_jupiter.webp', spin: 0.24, tilt: 0.06 },
+  neptune: { url: '/textures/2k_neptune.webp', spin: 0.18, tilt: 0.49 },
 };
 
 function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
@@ -259,7 +288,15 @@ function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
     <group position={wp.bodyPos} rotation={[0, 0, spec.tilt]}>
       <mesh ref={ref}>
         <sphereGeometry args={[wp.bodyRadius, 48, 36]} />
-        <meshStandardMaterial map={tex} roughness={0.95} metalness={0} />
+        {/* Self-bump: craters and cloud bands catch the key light instead of
+            rendering as flat decals. */}
+        <meshStandardMaterial
+          map={tex}
+          bumpMap={tex}
+          bumpScale={BUMP[kind]}
+          roughness={0.95}
+          metalness={0}
+        />
       </mesh>
       {tint && (
         <Atmosphere radius={wp.bodyRadius * 1.06} color={tint.color} intensity={tint.intensity} />
@@ -299,7 +336,7 @@ function Saturn({ wp, reduced }: BodyProps) {
 
   useFrame((_state, delta) => {
     if (reduced) return;
-    if (sphereRef.current) sphereRef.current.rotation.y += 0.05 * delta;
+    if (sphereRef.current) sphereRef.current.rotation.y += SATURN_SPIN * delta;
   });
 
   return (
@@ -307,7 +344,13 @@ function Saturn({ wp, reduced }: BodyProps) {
     <group position={wp.bodyPos} rotation={[0.08, 0, RING_TILT]}>
       <mesh ref={sphereRef}>
         <sphereGeometry args={[wp.bodyRadius, 48, 36]} />
-        <meshStandardMaterial map={tex} roughness={0.95} metalness={0} />
+        <meshStandardMaterial
+          map={tex}
+          bumpMap={tex}
+          bumpScale={BUMP.saturn}
+          roughness={0.95}
+          metalness={0}
+        />
       </mesh>
       <mesh geometry={ringGeo} rotation={[Math.PI / 2, 0, 0]}>
         {/* depthWrite off so the translucent ring never punches sorting holes
@@ -406,7 +449,7 @@ function Nebula({ wp, reduced }: BodyProps) {
         // Low opacities on additive blending smoulder instead of glowing neon.
         opacity: 0.05 + rand() * 0.17,
         phase: rand() * Math.PI * 2,
-        speed: 0.02 + rand() * 0.04,
+        speed: NEBULA_SPEED_BASE + rand() * NEBULA_SPEED_VAR,
       });
     }
     return out;
@@ -421,10 +464,11 @@ function Nebula({ wp, reduced }: BodyProps) {
       const child = g.children[i];
       const p = puffs[i];
       if (!child || !p) continue;
-      // Each puff orbits its own seed point a little — smoke shifting, not
-      // a field spinning.
-      child.position.x = p.x + Math.cos(t * p.speed + p.phase) * 1.4;
-      child.position.y = p.y + Math.sin(t * p.speed * 0.8 + p.phase) * 1.1;
+      // Each puff orbits its own seed point — smoke shifting, not a field
+      // spinning. Excursion and rate are ~2x the first pass so the backdrop
+      // visibly smoulders instead of freezing on camera (live-site finding).
+      child.position.x = p.x + Math.cos(t * p.speed + p.phase) * NEBULA_DRIFT_X;
+      child.position.y = p.y + Math.sin(t * p.speed * 0.8 + p.phase) * NEBULA_DRIFT_Y;
     }
   });
 
@@ -449,15 +493,22 @@ function Nebula({ wp, reduced }: BodyProps) {
 
 function Outpost({ wp, reduced }: BodyProps) {
   const r = wp.bodyRadius;
+  const trackRef = useRef<THREE.Group>(null);
   const groupRef = useRef<THREE.Group>(null);
   const lampRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame((state, delta) => {
-    const g = groupRef.current;
-    if (g && !reduced) {
-      // Two-axis tumble reads as an object adrift, not a turntable.
-      g.rotation.y += 0.03 * delta;
-      g.rotation.x += 0.011 * delta;
+    if (!reduced) {
+      // Whole-station yaw: the solar panels slowly tracking the sun — a
+      // deliberate, mechanical motion layered under the drift tumble.
+      const track = trackRef.current;
+      if (track) track.rotation.y += OUTPOST_TRACK_YAW * delta;
+      const g = groupRef.current;
+      if (g) {
+        // Two-axis tumble reads as an object adrift, not a turntable.
+        g.rotation.y += 0.03 * delta;
+        g.rotation.x += 0.011 * delta;
+      }
     }
     const lamp = lampRef.current;
     if (lamp) {
@@ -469,7 +520,8 @@ function Outpost({ wp, reduced }: BodyProps) {
   });
 
   return (
-    <group ref={groupRef} position={wp.bodyPos} rotation={[0.2, 0.6, 0.1]}>
+    <group ref={trackRef} position={wp.bodyPos}>
+      <group ref={groupRef} rotation={[0.2, 0.6, 0.1]}>
       {/* Central hull */}
       <mesh>
         <cylinderGeometry args={[r * 0.16, r * 0.16, r * 0.95, 20]} />
@@ -515,6 +567,7 @@ function Outpost({ wp, reduced }: BodyProps) {
           emissiveIntensity={NAV_LIGHT_STEADY}
         />
       </mesh>
+      </group>
     </group>
   );
 }
@@ -594,14 +647,53 @@ function Cluster({ wp }: { wp: Waypoint }) {
 function Sun({ wp, reduced }: BodyProps) {
   const tex = useSurfaceTexture(TEX.sun);
   const ref = useRef<THREE.Mesh>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+  const coronaOuterRef = useRef<THREE.Sprite>(null);
+  const coronaInnerRef = useRef<THREE.Sprite>(null);
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
+    // Under reduced motion the JSX props already hold the still: base light
+    // intensity, base corona scales, zero rotation.
     if (reduced) return;
     if (ref.current) ref.current.rotation.y += SUN_SPIN * delta;
+    const t = state.clock.elapsedTime;
+    const light = lightRef.current;
+    if (light) {
+      // Two slow detuned sines sum to a ±SUN_LIGHT_PULSE breath that never
+      // reads as a strobe — the furnace inhaling, not a warning light.
+      light.intensity =
+        SUN_LIGHT_BASE *
+        (1 + SUN_LIGHT_PULSE * 0.5 * (Math.sin(t * 0.31) + Math.sin(t * 0.47)));
+    }
+    const outer = coronaOuterRef.current;
+    if (outer) {
+      const s = wp.bodyRadius * 3.6 * (1 + CORONA_BREATHE * Math.sin(t * 0.23));
+      outer.scale.set(s, s, 1);
+      outer.material.rotation = t * CORONA_ROT;
+    }
+    const inner = coronaInnerRef.current;
+    if (inner) {
+      const s = wp.bodyRadius * 2.5 * (1 + CORONA_BREATHE * Math.sin(t * 0.31 + 1.7));
+      inner.scale.set(s, s, 1);
+      // Counter-rotation against the outer layer — the two halos slide over
+      // each other, which is what makes the corona read as plasma, not decal.
+      inner.material.rotation = -t * CORONA_ROT * 1.6;
+    }
   });
 
   return (
     <group position={wp.bodyPos}>
+      {/* Local drama light: the SpaceEnvironment key light stays authoritative
+          for the scene; this warm pool makes anything that flies NEAR the sun
+          (the ship, the corona-side limb) catch fire. decay 0 with a distance
+          cutoff keeps it a local pool rather than a second global key. */}
+      <pointLight
+        ref={lightRef}
+        color={SUN_LIGHT_COLOR}
+        intensity={SUN_LIGHT_BASE}
+        decay={0}
+        distance={wp.bodyRadius * 8}
+      />
       <mesh ref={ref}>
         <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
         {/* The texture doubles as emissiveMap so granulation survives into
@@ -616,8 +708,9 @@ function Sun({ wp, reduced }: BodyProps) {
           metalness={0}
         />
       </mesh>
-      {/* Two corona layers at different scales avoid a hard halo edge. */}
-      <sprite scale={[wp.bodyRadius * 3.6, wp.bodyRadius * 3.6, 1]}>
+      {/* Two corona layers at different scales avoid a hard halo edge; they
+          breathe ±4% and counter-rotate in useFrame (frozen under reduced). */}
+      <sprite ref={coronaOuterRef} scale={[wp.bodyRadius * 3.6, wp.bodyRadius * 3.6, 1]}>
         <spriteMaterial
           map={emberTexture()}
           transparent
@@ -626,7 +719,7 @@ function Sun({ wp, reduced }: BodyProps) {
           depthWrite={false}
         />
       </sprite>
-      <sprite scale={[wp.bodyRadius * 2.5, wp.bodyRadius * 2.5, 1]}>
+      <sprite ref={coronaInnerRef} scale={[wp.bodyRadius * 2.5, wp.bodyRadius * 2.5, 1]}>
         <spriteMaterial
           map={glowTexture()}
           transparent

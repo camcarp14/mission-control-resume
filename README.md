@@ -130,8 +130,14 @@ visit's own progress row, so replay is harmless by construction.
   Scope](https://www.solarsystemscope.com/textures/), licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vendored under
   `public/textures/`.
-- Everything else on screen — the rocket, asteroid field, nebula, relay
-  outpost, star cluster, HUD — is generated procedurally in this repo's code.
+- **Astronaut and distant-ship models** — [Quaternius Ultimate Space
+  Kit](https://quaternius.com) (CC0). Vendored under `public/models/`.
+- **HDRI lighting** — "Dikhololo Night" from [Poly Haven](https://polyhaven.com)
+  (CC0), used for image-based lighting only, never as a backdrop. Vendored
+  under `public/hdri/`.
+- Everything else on screen — the crew shuttle, asteroid fields, nebula, relay
+  outpost, star cluster, dust, HUD — is generated procedurally in this repo's
+  code.
 
 ## Escape hatches (deliberate, load-bearing)
 
