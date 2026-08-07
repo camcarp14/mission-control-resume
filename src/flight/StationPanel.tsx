@@ -44,14 +44,17 @@ export function StationPanel({
     if (secRef.current) secRef.current.inert = !active;
   }, [active]);
 
+  // A generous slide — the outgoing panel must clear its own 560px width, or
+  // the incoming one reads as double-exposed text (a real screenshot finding,
+  // not a guess). Fully faded by three-quarters of a leg: mid-travel the
+  // frame belongs to the voyage, not to two ghost panels.
   const transform = useTransform(t, (v) => {
     const d = clamp(index - v, -1.2, 1.2);
     return axis === 'x'
-      ? `translate3d(${d * 150}px, 0, 0)`
-      : `translate3d(0, ${d * 110}px, 0)`;
+      ? `translate3d(${d * 560}px, 0, 0)`
+      : `translate3d(0, ${d * 340}px, 0)`;
   });
-  // Neighbours fade almost out — the voyage behind them is the context now.
-  const opacity = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index), 1) * 0.88);
+  const opacity = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index) / 0.75, 1));
   const scale = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index), 1) * 0.045);
 
   const body = (

@@ -1,14 +1,20 @@
 # Mission Control — a résumé you pilot
 
-A gated, single-page interactive resume: the visitor flies an SVG rocket along a
-continuous path past eleven stations, each one a real career artifact. Advance is
+A gated, single-page interactive resume: the visitor pilots a rocket through a
+WebGL solar system — Earth departure, Jupiter, Saturn's rings, an ember nebula,
+docking at the sun — with a career artifact stationed at every body. Advance is
 deliberate — spacebar, arrow keys, click, swipe, or the on-screen button — never
 free scroll. A Supabase-backed gate attributes every visit to a per-company access
 code and logs how far each visitor flew; a passcode-protected `/dashboard` shows
 you the logbook.
 
-Built with Vite + React + Tailwind + Framer Motion + Supabase, deployed on
-Netlify. No CDN dependencies in the core render; system font stack; dark only.
+Built with Vite + React 19 + Tailwind + Framer Motion + three.js
+(react-three-fiber, drei, postprocessing) + Supabase, deployed on Netlify. No CDN
+dependencies in the core render; system font stack; dark only. Everything the
+visitor can read lives in the DOM — the canvas is aria-hidden scenery, so
+keyboard order, focus, and screen-reader flow are identical with WebGL on or
+off. Fallback ladder: WebGL + motion → full voyage · reduced-motion → still
+solar backdrop with cross-fading panels · no WebGL → cross-fading panels.
 
 ## Quickstart
 
@@ -117,6 +123,15 @@ chunk isn't even fetched until a code redeems). A technical visitor who has
 already redeemed a code can read the JS bundle — it contains nothing that isn't
 on the PDF you're handing out anyway. Visit tokens only authorize updating that
 visit's own progress row, so replay is harmless by construction.
+
+## Assets & credits
+
+- **Planet, moon, and sun textures + Milky Way panorama** — [Solar System
+  Scope](https://www.solarsystemscope.com/textures/), licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vendored under
+  `public/textures/`.
+- Everything else on screen — the rocket, asteroid field, nebula, relay
+  outpost, star cluster, HUD — is generated procedurally in this repo's code.
 
 ## Escape hatches (deliberate, load-bearing)
 

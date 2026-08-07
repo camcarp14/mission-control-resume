@@ -86,15 +86,18 @@ function Rig({
 
     // The ship cruises ahead of the camera, low in the frame (lower-left on
     // desktop where the panel docks right; low-centre on mobile), nose into
-    // the travel direction, banking gently into lateral turns.
+    // the travel direction, banking gently into lateral turns. Scaled down —
+    // at full size it read as a prop shoved at the lens, not a craft under
+    // way (screenshot finding).
     const rk = rocketRef.current;
     if (rk) {
-      const ra = camPath.posAt(tv + 0.15);
+      rk.scale.setScalar(0.62);
+      const ra = camPath.posAt(tv + 0.24);
       tmpRight.crossVectors(tmpTan, tmpUp).normalize();
       tmpRocket
         .set(ra[0], ra[1], ra[2])
-        .addScaledVector(tmpUp, -2.4)
-        .addScaledVector(tmpRight, mobile ? 0 : -3.4)
+        .addScaledVector(tmpUp, -2.0)
+        .addScaledVector(tmpRight, mobile ? 0 : -5.2)
         .addScaledVector(tmpTan, kick.get() * 0.35);
       if (!reduced) {
         // Idle float — barely there, sells zero-g.

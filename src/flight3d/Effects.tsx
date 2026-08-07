@@ -44,7 +44,16 @@ export function Effects({ getBoost }: EffectsProps) {
   return (
     <EffectComposer multisampling={0}>
       <Bloom
-        ref={bloomRef}
+        // CALLBACK ref, not an object ref, and it is load-bearing: React 19
+        // passes `ref` through props, and @react-three/postprocessing memoizes
+        // effect args with JSON.stringify(props). Once an object ref holds the
+        // (circular) BloomEffect instance, the next re-render throws
+        // "Converting circular structure to JSON" and takes the whole app
+        // down. JSON.stringify skips function values — a callback ref is
+        // invisible to the memo.
+        ref={(b: BloomEffect | null) => {
+          bloomRef.current = b;
+        }}
         mipmapBlur
         intensity={BLOOM_BASE}
         luminanceThreshold={BLOOM_THRESHOLD}
