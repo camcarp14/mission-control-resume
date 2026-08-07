@@ -28,7 +28,7 @@ import {
 
 const PORT = 4312;
 const N = 11;
-const SETTLE = 700; // transitions run 250–400ms; generous margin
+const SETTLE = 5600; // cinematic legs run 1.7–4.8s (homecoming longest); generous margin
 const AXE_PATH = join(ROOT, 'node_modules', 'axe-core', 'axe.min.js');
 
 const r = makeReporter('a11y');

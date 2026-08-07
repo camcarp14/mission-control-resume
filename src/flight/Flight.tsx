@@ -66,6 +66,10 @@ export default function Flight({
   const [mode, setMode] = useState<'flight' | 'static'>(() =>
     sessionStorage.getItem('mc.mode') === 'static' ? 'static' : 'flight',
   );
+  // Flat-mode station changes fade through the ground colour instead of hard
+  // cutting — a cut-fade is the canonical reduced-motion transition, and a
+  // bare t.set() read as "it just jumps" (verbatim user report).
+  const [veil, setVeil] = useState(false);
   const start = clampN(initialStation, 0, N - 1);
   const [current, setCurrent] = useState(start);
   const [visited, setVisited] = useState(start);
@@ -130,21 +134,35 @@ export default function Flight({
       currentRef.current = c;
 
       if (flat) {
-        // Flat mode: an instant reposition and a cross-fade — the flight
-        // becomes a slideshow, every control identical.
-        setFromIdx(c);
-        setCurrent(c);
-        setVisited((v) => Math.max(v, c));
-        t.set(c);
+        // Flat mode: veil in, reposition under the veil, veil out — a
+        // deliberate cut-fade (opacity only, reduced-motion safe), never a
+        // hard jump.
+        setVeil(true);
+        window.setTimeout(() => {
+          setFromIdx(c);
+          setCurrent(c);
+          setVisited((v) => Math.max(v, c));
+          t.set(c);
+          window.setTimeout(() => setVeil(false), 80);
+        }, 250);
         return;
       }
 
-      const dur = clampN(0.25 + 0.05 * Math.abs(c - from), 0.25, 0.4);
+      // Cinematic legs. The 2D deck's 250–400ms bar made sense when a
+      // transition moved a panel; here it moves a SOLAR SYSTEM, and covering
+      // a 95-unit leg that fast reads as a teleport (verbatim user report:
+      // "just jumps from planet to the next"). Travel now earns its name —
+      // about two seconds a leg, longer for rail jumps, and the flight home
+      // gets the full homecoming.
+      const legs = Math.abs(c - from);
+      const homecoming = c === N - 1 && legs === 1;
+      const dur = homecoming ? 4.8 : clampN(1.7 + 0.5 * (legs - 1), 1.7, 3.6);
       const dir = c > from ? 1 : -1;
-      animate(kick, KICK * dir, { duration: dur * 0.5, ease: 'easeOut' });
+      animate(kick, KICK * dir, { duration: dur * 0.22, ease: 'easeOut' });
       animate(t, c, {
         duration: dur,
-        ease: [0.22, 1, 0.36, 1], // the house --ease-out; monotone, no overshoot
+        // Accelerate, cruise, long deceleration — a burn, a coast, a dock.
+        ease: [0.42, 0.05, 0.16, 1],
         onComplete: () => {
           // The settle: an underdamped spring back to rest overshoots a few
           // units past the dock — the mass the eye expects, now in 3D.
@@ -301,6 +319,7 @@ export default function Flight({
                 />
               );
             })}
+            <div className={`veil${veil ? ' on' : ''}`} aria-hidden="true" />
           </div>
 
           {webgl && <BootSequence />}

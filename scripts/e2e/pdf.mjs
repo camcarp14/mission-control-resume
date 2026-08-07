@@ -17,7 +17,7 @@
 import { pw, serve, installGateMock, unlock, makeReporter } from './_lib.mjs';
 
 const PORT = 4316;
-const SETTLE = 700; // transitions run 250–400ms; generous margin
+const SETTLE = 5600; // cinematic legs run 1.7–4.8s (homecoming longest); generous margin
 const TOL = 1; // px tolerance
 const WIDTHS = [
   { w: 390, h: 844 },

@@ -76,6 +76,14 @@ function Rig({
     tmpPos.set(p[0], p[1], p[2]).addScaledVector(tmpTan, k);
     camera.position.copy(tmpPos);
     tmpGaze.set(g[0], g[1], g[2]);
+    if (!reduced) {
+      // Docked breathing: the frame is never a freeze-frame. Slow, small,
+      // and phase-offset so it reads as station-keeping, not wobble.
+      const e = state.clock.elapsedTime;
+      camera.position.y += Math.sin(e * 0.45) * 0.5;
+      camera.position.x += Math.sin(e * 0.31 + 1.7) * 0.35;
+      tmpGaze.y += Math.sin(e * 0.38 + 0.6) * 0.35;
+    }
     camera.lookAt(tmpGaze);
 
     const fov = fovAt(points, tv) + (mobile ? 9 : 0);
@@ -113,7 +121,9 @@ function Rig({
     }
 
     // Thrust for the flame + trail; bloom boost for the sun approach.
-    thrustRef.current = THREE.MathUtils.clamp(Math.abs(vel.get()) / 3.2, 0, 1);
+    // Cruise speed is ~0.5 station/s now that legs are cinematic — normalise
+    // so the burn reads at full glow mid-leg, idle at dock.
+    thrustRef.current = THREE.MathUtils.clamp(Math.abs(vel.get()) / 0.85, 0, 1);
     boostRef.current = sunApproach(n, tv);
   });
 
@@ -160,7 +170,7 @@ export function Scene3D({
       style={{ position: 'absolute', inset: 0 }}
     >
       <Suspense fallback={null}>
-        <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 2200 : 4200} />
+        <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 3200 : 6400} />
         <SolarBodies waypoints={points} reduced={reduced} />
         <Rig
           t={t}

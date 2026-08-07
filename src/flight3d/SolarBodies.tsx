@@ -111,6 +111,71 @@ function glowTexture(): THREE.CanvasTexture {
   return glowTexCache;
 }
 
+/* ==== ATMOSPHERE — the fresnel limb glow that makes a sphere read as a
+   world. Rendered on a slightly larger BackSide shell so only the rim
+   survives; additive, so it costs one draw and never occludes. ==== */
+
+const ATMOS_VERT = `
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  vNormal = normalize(normalMatrix * normal);
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vView = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const ATMOS_FRAG = `
+uniform vec3 uColor;
+uniform float uIntensity;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+  float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
+  gl_FragColor = vec4(uColor * rim * uIntensity, rim * uIntensity);
+}`;
+
+function Atmosphere({
+  radius,
+  color,
+  intensity = 1,
+}: {
+  radius: number;
+  color: string;
+  intensity?: number;
+}) {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: new THREE.Color(color) },
+          uIntensity: { value: intensity },
+        },
+        vertexShader: ATMOS_VERT,
+        fragmentShader: ATMOS_FRAG,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        transparent: true,
+        depthWrite: false,
+      }),
+    [color, intensity],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+  return (
+    <mesh material={material}>
+      <sphereGeometry args={[radius, 48, 36]} />
+    </mesh>
+  );
+}
+
+/* Limb tints per world — restrained, never neon; the moon gets none (it has
+ * no atmosphere and pretending otherwise reads as a rendering bug). */
+const ATMOS_TINT: Partial<Record<RockyKind, { color: string; intensity: number }>> = {
+  mars: { color: '#c77b57', intensity: 0.5 },
+  jupiter: { color: '#d8c2a0', intensity: 0.55 },
+  neptune: { color: '#5f86e8', intensity: 0.7 },
+};
+
 /* ==== EARTH ==== */
 
 function Earth({ wp, reduced }: BodyProps) {
@@ -159,6 +224,9 @@ function Earth({ wp, reduced }: BodyProps) {
           metalness={0}
         />
       </mesh>
+      {/* The blue limb is most of what makes it read as HOME — and it doubles
+          as the landing glow on the return approach. */}
+      <Atmosphere radius={wp.bodyRadius * 1.07} color="#6f9fe8" intensity={1.15} />
     </group>
   );
 }
@@ -186,12 +254,16 @@ function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
     if (ref.current) ref.current.rotation.y += spec.spin * delta;
   });
 
+  const tint = ATMOS_TINT[kind];
   return (
     <group position={wp.bodyPos} rotation={[0, 0, spec.tilt]}>
       <mesh ref={ref}>
         <sphereGeometry args={[wp.bodyRadius, 48, 36]} />
         <meshStandardMaterial map={tex} roughness={0.95} metalness={0} />
       </mesh>
+      {tint && (
+        <Atmosphere radius={wp.bodyRadius * 1.06} color={tint.color} intensity={tint.intensity} />
+      )}
     </group>
   );
 }
@@ -239,9 +311,14 @@ function Saturn({ wp, reduced }: BodyProps) {
       </mesh>
       <mesh geometry={ringGeo} rotation={[Math.PI / 2, 0, 0]}>
         {/* depthWrite off so the translucent ring never punches sorting holes
-            against the globe behind it. */}
+            against the globe behind it. A touch of self-emission keeps the
+            bands legible even when the sun key light rakes them edge-on —
+            unlit they photographed as washed grey (live-site finding). */}
         <meshStandardMaterial
           map={ringTex}
+          emissiveMap={ringTex}
+          emissive="#cbbfa4"
+          emissiveIntensity={0.38}
           transparent
           side={THREE.DoubleSide}
           depthWrite={false}
@@ -249,6 +326,7 @@ function Saturn({ wp, reduced }: BodyProps) {
           metalness={0}
         />
       </mesh>
+      <Atmosphere radius={wp.bodyRadius * 1.06} color="#e0cf9e" intensity={0.5} />
     </group>
   );
 }
@@ -584,6 +662,10 @@ function Body({ wp, reduced }: BodyProps) {
       return <Cluster wp={wp} />;
     case 'sun':
       return <Sun wp={wp} reduced={reduced} />;
+    case 'earthReturn':
+      // The landing waypoint shares waypoint 0's Earth — one planet, rendered
+      // once. Painting a second globe at the same coordinates would z-fight.
+      return null;
   }
 }
 

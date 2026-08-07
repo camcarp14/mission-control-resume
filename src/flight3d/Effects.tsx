@@ -8,8 +8,8 @@
 
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
-import type { BloomEffect } from 'postprocessing';
+import { Bloom, EffectComposer, ToneMapping, Vignette } from '@react-three/postprocessing';
+import { ToneMappingMode, type BloomEffect } from 'postprocessing';
 
 // Threshold sits above anything a lit grey material can reach, so only
 // deliberately emissive surfaces bloom — a glowing planet would break the
@@ -60,6 +60,12 @@ export function Effects({ getBoost }: EffectsProps) {
         luminanceSmoothing={BLOOM_SMOOTHING}
       />
       <Vignette darkness={VIGNETTE_DARKNESS} offset={VIGNETTE_OFFSET} />
+      {/* Mounting an EffectComposer sets the renderer to NoToneMapping, so
+          without this final pass the whole scene renders in raw linear —
+          washed, flat, and visibly worse than the same scene un-composed
+          (live-site screenshot finding). ACES filmic restores the contrast
+          and highlight roll-off every real GPU pipeline expects. */}
+      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
   );
 }

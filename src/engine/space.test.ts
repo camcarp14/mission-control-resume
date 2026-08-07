@@ -4,37 +4,57 @@ import { makePath3 } from './path3';
 import type { Vec3 } from './space';
 
 describe('voyage layout', () => {
-  it('pins earth to the first slot and the sun to the last, at any mission length', () => {
+  it('pins the arc: earth first, sun second-to-last, the landing home last', () => {
     for (const n of [3, 11, 12, 15, 25]) {
       const w = voyage(n);
       expect(w).toHaveLength(n);
       expect(w[0]?.kind).toBe('earth');
-      expect(w[n - 1]?.kind).toBe('sun');
+      expect(w[n - 2]?.kind).toBe('sun');
+      expect(w[n - 1]?.kind).toBe('earthReturn');
     }
   });
 
-  it('advances monotonically along -Z with a constant step', () => {
+  it('lands the return on the SAME earth the mission departed from', () => {
     const w = voyage(11);
-    for (let i = 1; i < w.length; i++) {
+    const home = w[0]!;
+    const landing = w[10]!;
+    expect(landing.bodyPos).toEqual(home.bodyPos);
+    expect(landing.bodyRadius).toBe(home.bodyRadius);
+    // Landing approach is CLOSE — well inside the outbound framing distance.
+    const d = Math.hypot(
+      landing.camPos[0] - landing.bodyPos[0],
+      landing.camPos[1] - landing.bodyPos[1],
+      landing.camPos[2] - landing.bodyPos[2],
+    );
+    expect(d).toBeLessThan(landing.bodyRadius * 2.2);
+  });
+
+  it('advances the OUTBOUND legs monotonically along -Z with a constant step', () => {
+    const w = voyage(11);
+    for (let i = 1; i < w.length - 1; i++) {
       const prev = w[i - 1]!.camPos[2];
       const cur = w[i]!.camPos[2];
       expect(cur).toBeLessThan(prev);
       expect(prev - cur).toBeCloseTo(95, 6);
     }
+    // ...and the final leg turns FOR HOME: back toward the start of the line.
+    expect(w[10]!.camPos[2]).toBeGreaterThan(w[9]!.camPos[2]);
   });
 
   it('cycles the middle roster instead of running out on long missions', () => {
     const w = voyage(25);
-    for (let i = 1; i < 24; i++) {
+    for (let i = 1; i < 23; i++) {
       expect(w[i]?.kind).not.toBe('earth');
-      expect(w[i]?.kind).not.toBe('sun');
+      expect(w[i]?.kind).not.toBe('earthReturn');
+      if (i !== 23) expect(w[i]?.kind).not.toBe('sun');
     }
     // Slot 1 and slot 10 both draw the first roster entry (9-long cycle).
     expect(w[1]?.kind).toBe(w[10]?.kind);
   });
 
-  it('keeps every body off the flight line, never centred on the camera', () => {
-    for (const p of voyage(11)) {
+  it('keeps every outbound body off the flight line, never centred on the camera', () => {
+    const w = voyage(11);
+    for (const p of w.slice(0, -1)) {
       const dx = p.bodyPos[0] - p.camPos[0];
       expect(Math.abs(dx), `station ${p.index} body sits on the flight line`).toBeGreaterThan(10);
     }
@@ -49,12 +69,13 @@ describe('voyage layout', () => {
     }
   });
 
-  it('ramps the sun approach over exactly the final leg', () => {
+  it('peaks the sun ramp at the sun dock and eases off on the flight home', () => {
     expect(sunApproach(11, 0)).toBe(0);
-    expect(sunApproach(11, 8.9)).toBe(0);
-    expect(sunApproach(11, 9.5)).toBeGreaterThan(0);
-    expect(sunApproach(11, 9.5)).toBeLessThan(1);
-    expect(sunApproach(11, 10)).toBe(1);
+    expect(sunApproach(11, 7.9)).toBe(0);
+    expect(sunApproach(11, 8.5)).toBeGreaterThan(0);
+    expect(sunApproach(11, 9)).toBe(1); // docked at the sun (station 10, index 9)
+    expect(sunApproach(11, 9.5)).toBeLessThan(1); // turning for home
+    expect(sunApproach(11, 10)).toBe(0);
   });
 });
 

@@ -31,7 +31,7 @@ import {
 
 const PORT = 4315;
 const N = 11;
-const SETTLE = 650; // transitions run 250–400ms with motion; PRM snaps, but React render + focus effect deserve margin
+const SETTLE = 1400; // flat mode veils through ~600ms of cut-fade; React render + focus effect deserve margin
 
 const r = makeReporter('prm');
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));

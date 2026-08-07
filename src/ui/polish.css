@@ -144,6 +144,15 @@ kbd {
 }
 @media (min-width: 768px) { .panelwrap { padding-left: 96px; } .panel { transform: translateX(9vw); } }
 .xfade { animation: fadein var(--dur-3) var(--ease-out) both; }
+/* flat-mode station changes fade through the ground colour — opacity only,
+   so it stays legitimate under prefers-reduced-motion (it IS that mode's
+   transition; a bare snap read as a broken jump) */
+.veil {
+  position: absolute; inset: 0; z-index: 3; background: var(--ground);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+.veil.on { opacity: 1; }
 
 /* HUD + rail: the persistent chrome. Solid panels, hairline rules — no blur. */
 .hud {
