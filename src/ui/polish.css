@@ -149,6 +149,24 @@ kbd {
 }
 .panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; padding: 76px 16px calc(96px + env(safe-area-inset-bottom)); }
 .panelwrap > * { pointer-events: auto; }
+/* World-anchored panels (desktop flight mode): the wrap stops centering and
+   the .anchorpos child is pinned to its planet — the Rig projects a point
+   beside the body every frame and writes translate3d directly. The CSS
+   transform below is only the first-frame estimate before the Rig's first
+   write lands. */
+.panelwrap.anchored { display: block; padding: 0; }
+.anchorpos {
+  position: absolute; left: 0; top: 0;
+  width: min(560px, calc(100vw - 32px));
+  transform: translate3d(56vw, 44vh, 0) translateY(-50%);
+  will-change: transform;
+}
+.panelwrap.anchored .panel { max-height: calc(100vh - 210px); }
+/* the callout tether: panel -> planet limb. Attribute-driven (no animation);
+   sits between the canvas and the panels. */
+.tether { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.tether line { stroke: var(--cyan); stroke-width: 1; }
+.tether circle { fill: var(--cyan-bright); }
 .panel {
   width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto;
   background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;

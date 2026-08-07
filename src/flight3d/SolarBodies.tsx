@@ -18,6 +18,12 @@ import { mulberry32 } from '../engine';
 export type SolarBodiesProps = {
   waypoints: Waypoint[];
   reduced: boolean;
+  /** Landing ramp (0 → 1 over the homecoming leg), written by the Rig each
+   *  frame. Earth's atmosphere shell and cloud sphere fade out with it —
+   *  the touchdown camera sits almost exactly ON the shell radius, and the
+   *  additive rim sliced a bright arc across the landing pad (screenshot
+   *  finding). The LandingSite's own sky/clouds take over. */
+  landingRef?: { current: number };
 };
 
 type BodyProps = { wp: Waypoint; reduced: boolean };
@@ -152,10 +158,11 @@ void main() {
 const ATMOS_FRAG = `
 uniform vec3 uColor;
 uniform float uIntensity;
+uniform float uFade;
 varying vec3 vNormal;
 varying vec3 vView;
 void main() {
-  float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
+  float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6) * uFade;
   gl_FragColor = vec4(uColor * rim * uIntensity, rim * uIntensity);
 }`;
 
@@ -163,10 +170,13 @@ function Atmosphere({
   radius,
   color,
   intensity = 1,
+  fadeRef,
 }: {
   radius: number;
   color: string;
   intensity?: number;
+  /** 0 = full shell, 1 = invisible — driven by the landing ramp. */
+  fadeRef?: { current: number };
 }) {
   const material = useMemo(
     () =>
@@ -174,6 +184,7 @@ function Atmosphere({
         uniforms: {
           uColor: { value: new THREE.Color(color) },
           uIntensity: { value: intensity },
+          uFade: { value: 1 },
         },
         vertexShader: ATMOS_VERT,
         fragmentShader: ATMOS_FRAG,
@@ -185,6 +196,10 @@ function Atmosphere({
     [color, intensity],
   );
   useEffect(() => () => material.dispose(), [material]);
+  useFrame(() => {
+    const u = material.uniforms['uFade'];
+    if (fadeRef && u) u.value = 1 - fadeRef.current;
+  });
   return (
     <mesh material={material}>
       <sphereGeometry args={[radius, 48, 36]} />
@@ -202,7 +217,7 @@ const ATMOS_TINT: Partial<Record<RockyKind, { color: string; intensity: number }
 
 /* ==== EARTH ==== */
 
-function Earth({ wp, reduced }: BodyProps) {
+function Earth({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current: number } }) {
   const day = useSurfaceTexture(TEX.earthDay);
   const night = useSurfaceTexture(TEX.earthNight);
   // Clouds drive alpha, not color, so they stay in linear space.
@@ -211,6 +226,12 @@ function Earth({ wp, reduced }: BodyProps) {
   const cloudRef = useRef<THREE.Mesh>(null);
 
   useFrame((_state, delta) => {
+    // The orbital cloud shell fades over the landing approach — state, not
+    // motion, so it runs on every rung. LandingSite's cumulus takes over.
+    if (landingRef && cloudRef.current) {
+      (cloudRef.current.material as THREE.MeshStandardMaterial).opacity =
+        0.55 * (1 - landingRef.current);
+    }
     if (reduced) return;
     if (globeRef.current) globeRef.current.rotation.y += EARTH_SPIN * delta;
     if (cloudRef.current) cloudRef.current.rotation.y -= CLOUD_COUNTER_SPIN * delta;
@@ -255,7 +276,12 @@ function Earth({ wp, reduced }: BodyProps) {
       </mesh>
       {/* The blue limb is most of what makes it read as HOME — and it doubles
           as the landing glow on the return approach. */}
-      <Atmosphere radius={wp.bodyRadius * 1.07} color="#6f9fe8" intensity={1.15} />
+      <Atmosphere
+        radius={wp.bodyRadius * 1.07}
+        color="#6f9fe8"
+        intensity={1.15}
+        {...(landingRef ? { fadeRef: landingRef } : {})}
+      />
     </group>
   );
 }
@@ -734,10 +760,10 @@ function Sun({ wp, reduced }: BodyProps) {
 
 /* ==== DISPATCH ==== */
 
-function Body({ wp, reduced }: BodyProps) {
+function Body({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current: number } }) {
   switch (wp.kind) {
     case 'earth':
-      return <Earth wp={wp} reduced={reduced} />;
+      return <Earth wp={wp} reduced={reduced} {...(landingRef ? { landingRef } : {})} />;
     case 'moon':
     case 'mars':
     case 'jupiter':
@@ -762,11 +788,16 @@ function Body({ wp, reduced }: BodyProps) {
   }
 }
 
-export function SolarBodies({ waypoints, reduced }: SolarBodiesProps) {
+export function SolarBodies({ waypoints, reduced, landingRef }: SolarBodiesProps) {
   return (
     <group>
       {waypoints.map((wp) => (
-        <Body key={wp.index} wp={wp} reduced={reduced} />
+        <Body
+          key={wp.index}
+          wp={wp}
+          reduced={reduced}
+          {...(landingRef ? { landingRef } : {})}
+        />
       ))}
     </group>
   );

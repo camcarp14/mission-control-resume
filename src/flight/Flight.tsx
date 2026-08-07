@@ -36,7 +36,7 @@ import { StaticMode } from './StaticMode';
  */
 
 const N = stations.length;
-const KICK = 9;
+const KICK = 7;
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -85,8 +85,17 @@ export default function Flight({
   const t = useMotionValue(start);
   const kick = useMotionValue(0);
   const vel = useVelocity(t);
+  // The scheduled kick bleed-off for the leg in flight — cleared whenever a
+  // new leg preempts it, so back-to-back jumps never fight over the spring.
+  const kickTimer = useRef<number | null>(null);
 
   const panelRefs = useRef(new Map<number, HTMLElement>());
+  // World-anchor wrappers (desktop flight): the 3D rig projects each panel's
+  // planet and writes these elements' transforms directly, frame-synced with
+  // the camera — the DOM never learns about it.
+  const anchorRefs = useRef(new Map<number, HTMLDivElement>());
+  const tetherLine = useRef<SVGLineElement>(null);
+  const tetherDot = useRef<SVGCircleElement>(null);
   // Focus can outrun the panel: the windowing commit is a low-priority
   // transition, and on a saturated main thread (software-rendered WebGL is
   // the measured case) it can still be pending when the travel animation
@@ -105,6 +114,11 @@ export default function Flight({
     } else {
       panelRefs.current.delete(i);
     }
+  }, []);
+
+  const registerAnchor = useCallback((i: number, el: HTMLDivElement | null) => {
+    if (el) anchorRefs.current.set(i, el);
+    else anchorRefs.current.delete(i);
   }, []);
 
   const focusPanel = useCallback((i: number) => {
@@ -160,17 +174,26 @@ export default function Flight({
       const homecoming = c === N - 1 && legs === 1;
       const dur = homecoming ? 4.8 : clampN(1.7 + 0.5 * (legs - 1), 1.7, 3.6);
       const dir = c > from ? 1 : -1;
-      animate(kick, KICK * dir, { duration: dur * 0.22, ease: 'easeOut' });
+      // The kick envelope lives entirely INSIDE the leg: surge up through
+      // the burn, bleed off during the deceleration, ZERO by the time t
+      // stops. The old shape settled the kick AFTER arrival, so the whole
+      // world slid for another half-second once the panel had docked — the
+      // "weird jump/skip as you get to each artifact" (verbatim). Now the
+      // camera, the panel, and the kick all come to rest on the same frame.
+      if (kickTimer.current !== null) {
+        window.clearTimeout(kickTimer.current);
+        kickTimer.current = null;
+      }
+      animate(kick, KICK * dir, { duration: dur * 0.32, ease: [0.45, 0, 0.55, 1] });
+      kickTimer.current = window.setTimeout(() => {
+        kickTimer.current = null;
+        animate(kick, 0, { duration: dur * 0.34, ease: [0.22, 1, 0.36, 1] });
+      }, dur * 0.62 * 1000);
       animate(t, c, {
         duration: dur,
         // Accelerate, cruise, long deceleration — a burn, a coast, a dock.
         ease: [0.42, 0.05, 0.16, 1],
         onComplete: () => {
-          // The settle: a critically-damped glide back to rest. The old
-          // underdamped spring oscillated the CAMERA against deep parallax —
-          // what read as "mass" on a 2D panel read as a judder in 3D ("a
-          // weird shake as it locks in", verbatim). Zero overshoot now.
-          animate(kick, 0, { duration: 0.55, ease: [0.22, 1, 0.36, 1] });
           focusPanel(c);
           // Shrinking the panel window unmounts DOM — time-sliced, off the
           // arrival frame.
@@ -305,9 +328,27 @@ export default function Flight({
                 over the visible buttons and documented keys. */}
             <div className="absolute inset-0" aria-hidden="true" onClick={advance}>
               {webgl && (
-                <Scene3D t={t} kick={kick} vel={vel} n={N} reduced={reduced} vw={vw} />
+                <Scene3D
+                  t={t}
+                  kick={kick}
+                  vel={vel}
+                  n={N}
+                  reduced={reduced}
+                  vw={vw}
+                  anchors={anchorRefs}
+                  tetherLine={tetherLine}
+                  tetherDot={tetherDot}
+                />
               )}
             </div>
+            {/* The callout tether: current panel -> its planet's limb. The
+                rig writes the endpoints; pure decoration. */}
+            {webgl && !flat && !mobile && (
+              <svg className="tether" aria-hidden="true">
+                <line ref={tetherLine} x1="0" y1="0" x2="0" y2="0" strokeOpacity="0" />
+                <circle ref={tetherDot} cx="0" cy="0" r="3" fillOpacity="0" />
+              </svg>
+            )}
             {stations.map((s, i) => {
               if (!mounted.has(i)) return null;
               return (
@@ -320,6 +361,7 @@ export default function Flight({
                   flat={flat}
                   active={i === current}
                   onRegister={registerPanel}
+                  {...(!flat && !mobile && webgl ? { onAnchor: registerAnchor } : {})}
                 />
               );
             })}

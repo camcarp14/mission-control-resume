@@ -40,11 +40,12 @@ const SUB_BLOCK_H = 40;
 const LABEL_OPACITY = 0.92;
 const FLOAT_AMP = 0.4;
 const FLOAT_FREQ = 0.5;
-// Distance fade: full strength through the current leg, gone two legs out.
-// Without it every down-route label stacked into one glowing pile on the
-// right edge of the frame (screenshot finding).
-const FADE_NEAR = 170;
-const FADE_FAR = 360;
+// Distance fade: full strength through the current leg, gone before two legs
+// out. Without it every down-route label stacked into one glowing pile on
+// the right edge of the frame (live-site finding, twice — the second pass
+// tightened it so ONLY the next station teases).
+const FADE_NEAR = 120;
+const FADE_FAR = 250;
 const WIDTH_MIN = 14; // world-unit plane width clamp
 const WIDTH_MAX = 30;
 const X_TOWARD_LINE = 10; // bodies sit LEFT of the flight line; shift right

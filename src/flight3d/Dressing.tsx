@@ -88,7 +88,7 @@ const HERO_SEED = 0x8e60;
 // Earth's moon: orbits the hero Earth, position recomputed each frame from a
 // phase angle; parked at its start position under reduced motion.
 const MOON_RADIUS = 4.2;
-const MOON_START: Vec3 = [16, 18, -66]; // upper-right of the hero frame
+const MOON_START: Vec3 = [2, 26, -80]; // high and near-central, floating clear above Earth's limb
 const MOON_ORBIT_RATE = 0.008; // rad/s around Earth
 const MOON_SPIN = 0.02; // rad/s self-rotation
 const MOON_BUMP = 0.5; // mirrors SolarBodies' moon relief
@@ -96,26 +96,27 @@ const MOON_STILL_YAW = 1.9; // composed still pose for reduced motion
 const EARTH_FALLBACK: Vec3 = [-47, 10.9, -39.6]; // hero Earth bodyPos, should the voyage thin out
 
 // Decor planets: procedural canvas-banded spheres far beyond the corridor.
-const GIANT_POS: Vec3 = [66, -4, -150];
+const GIANT_POS: Vec3 = [128, 30, -262]; // far upper-right and DEEP — distant ringed world, clear of the telemetry corridor
 const GIANT_RADIUS = 9;
 const GIANT_SPIN = 0.015; // rad/s
 const GIANT_TILT: Vec3 = [0.35, 0, 0.45]; // the x tilt opens the ring to the camera
 const GIANT_BANDS = ['#1d3a4f', '#24506b', '#2e6a86', '#1a2f40', '#24506b', '#1d3a4f'] as const;
-const DWARF_POS: Vec3 = [-88, 30, -210];
+const DWARF_POS: Vec3 = [-88, 30, -260]; // far left-high, pushed deep so it doesn't crowd Earth's upper limb
 const DWARF_RADIUS = 5.5;
 const DWARF_SPIN = 0.01; // rad/s
 const DWARF_TILT: Vec3 = [0, 0, 0.3];
 const DWARF_BANDS = ['#6b4a3a', '#5a3e30', '#6b4a3a', '#4e352a', '#6b4a3a', '#5a3e30'] as const;
 const HERO_GLOW_SCALE = 3.4; // × body radius
-const HERO_GLOW_OPACITY = 0.3;
+const HERO_GLOW_OPACITY = 0.2;
 
 // Mini-Saturn ring arc on the teal giant.
 const HERO_RING_INNER = 1.5; // × radius
 const HERO_RING_OUTER = 2.1;
 const HERO_RING_OPACITY = 0.5;
 
-// Three extra drifting rocks in the hero frame's upper-right mid-distance.
-const HERO_ROCK_COUNT = 3;
+// Two extra drifting rocks, high and deep in the hero frame's upper-right —
+// above the telemetry corridor band.
+const HERO_ROCK_COUNT = 2;
 const HERO_ROCK_SCALE_MIN = 0.8;
 const HERO_ROCK_SCALE_MAX = 1.6;
 const HERO_ROCK_CLEARANCE = 12; // min world units from the camera flight path
@@ -572,7 +573,8 @@ function HeroMoon({ earthPos, reduced }: { earthPos: Vec3; reduced: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null);
 
   // Orbit parameters derive from the prescribed start position, so the moon
-  // begins exactly in the hero frame's upper-right, then swings around Earth.
+  // begins exactly where the hero frame wants it — high and near-central,
+  // clear above Earth's limb — then swings around Earth.
   const orbit = useMemo(() => {
     const dx = MOON_START[0] - earthPos[0];
     const dz = MOON_START[2] - earthPos[2];
@@ -699,7 +701,7 @@ function DecorPlanet({
   );
 }
 
-/* Hero rocks: three loners in the opening frame's upper-right mid-distance. */
+/* Hero rocks: two loners, high and deep in the opening frame's upper-right. */
 
 type HeroRockSpec = {
   p: Vec3;
@@ -727,14 +729,14 @@ function buildHeroRocks(): HeroRockSpec[] {
   const rng = mulberry32(HERO_SEED);
   const out: HeroRockSpec[] = [];
   for (let i = 0; i < HERO_ROCK_COUNT; i++) {
-    // The prescribed box (x 24-40, y 6-20, z -80..-120) overlaps the
+    // The prescribed box (x 34-48, y 18-28, z -95..-130) skirts the
     // station-1 leg of the camera path, so seeded rejection sampling keeps
     // every rock clear of the flight line; the fallbacks are hand-checked
     // clear. Draw counts vary per rock but stay deterministic — one seed,
     // one sequence.
-    let p: Vec3 = [34, 16, -100 - i * 10];
+    let p: Vec3 = [42, 24, -108 - i * 14];
     for (let tries = 0; tries < 20; tries++) {
-      const cand: Vec3 = [24 + rng() * 16, 6 + rng() * 14, -80 - rng() * 40];
+      const cand: Vec3 = [34 + rng() * 14, 18 + rng() * 10, -95 - rng() * 35];
       if (flightPathClearance(cand) >= HERO_ROCK_CLEARANCE) {
         p = cand;
         break;

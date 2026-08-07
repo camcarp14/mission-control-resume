@@ -6,14 +6,20 @@ import { StationContent, type Station } from './StationContent';
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /**
- * One station's DOM panel. Since the WebGL voyage took over the sense of
- * travel, panels no longer carry world transforms — they dock in screen
- * space with a short slide (horizontal on desktop, vertical on mobile) and a
- * distance fade, all still derived from the same MotionValue `t`. Windowed
- * as before: current ±1 mounted, everything else gone.
+ * One station's DOM panel. Three docking modes:
  *
- * In `flat` mode (reduced motion, or no WebGL) there is no slide at all —
- * only the current panel exists and it cross-fades in.
+ * ANCHORED (desktop flight, WebGL): the panel belongs to its PLANET — the
+ * Rig projects a point beside the body every frame and writes translate3d
+ * onto the .anchorpos wrapper (registered via onAnchor), so the panel
+ * arrives WITH its planet, decelerates with the camera, and never moves
+ * again after dock. Opacity/scale still derive from the same MotionValue.
+ *
+ * SLIDE (mobile flight): the panel docks with a short vertical slide — the
+ * mobile framing composes bodies loosely, so a world anchor buys nothing at
+ * 390px and risks parking panels off-frame.
+ *
+ * FLAT (reduced motion, or no WebGL): no motion at all — only the current
+ * panel exists and it cross-fades in.
  */
 export function StationPanel({
   station,
@@ -23,6 +29,7 @@ export function StationPanel({
   flat,
   active,
   onRegister,
+  onAnchor,
 }: {
   station: Station;
   index: number;
@@ -33,6 +40,9 @@ export function StationPanel({
   /** True when this is the docked station. Non-active panels are scenery. */
   active: boolean;
   onRegister: (index: number, el: HTMLElement | null) => void;
+  /** Registers the world-anchored positioning wrapper (desktop flight only);
+   *  the 3D rig writes its transform directly. */
+  onAnchor?: (index: number, el: HTMLDivElement | null) => void;
 }) {
   const secRef = useRef<HTMLElement | null>(null);
 
@@ -75,6 +85,18 @@ export function StationPanel({
     return (
       <div className="panelwrap">
         <div className="xfade w-full max-w-[560px]">{body}</div>
+      </div>
+    );
+  }
+
+  if (axis === 'x' && onAnchor) {
+    return (
+      <div className="panelwrap anchored">
+        <div ref={(el) => onAnchor(index, el)} className="anchorpos">
+          <m.div style={{ opacity, scale }} className="w-full max-w-[560px]">
+            {body}
+          </m.div>
+        </div>
       </div>
     );
   }

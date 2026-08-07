@@ -10,6 +10,7 @@ import { StationLabels } from './StationLabels';
 import { Meteors } from './Meteors';
 import { Rocket3D } from './Rocket3D';
 import { Dressing } from './Dressing';
+import { LandingSite } from './LandingSite';
 import { Effects } from './Effects';
 
 /**
@@ -41,6 +42,13 @@ const tmpDir = new THREE.Vector3();
 const tmpHover = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
 const tmpNorm = new THREE.Vector3();
+// Panel-anchoring scratch: a shadow camera that holds the BASE pose (kick
+// included, breathing excluded) so projected anchors are rock-still at rest.
+const projCam = new THREE.PerspectiveCamera(50, 1, 0.5, 2600);
+const tmpView = new THREE.Vector3();
+const tmpNdc = new THREE.Vector3();
+const tmpRightW = new THREE.Vector3();
+const clampPx = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 const smooth = (x: number, a: number, b: number) => {
   const s = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -56,6 +64,10 @@ function Rig({
   mobile,
   thrustRef,
   boostRef,
+  landingRef,
+  anchors,
+  tetherLine,
+  tetherDot,
 }: {
   t: MotionValue<number>;
   kick: MotionValue<number>;
@@ -65,9 +77,22 @@ function Rig({
   mobile: boolean;
   thrustRef: { current: number };
   boostRef: { current: number };
+  landingRef: { current: number };
+  anchors?: { current: Map<number, HTMLDivElement> } | undefined;
+  tetherLine?: { current: SVGLineElement | null } | undefined;
+  tetherDot?: { current: SVGCircleElement | null } | undefined;
 }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
   const rocketRef = useRef<THREE.Group>(null);
+  // Last-written anchor px per station — writes are skipped when unchanged,
+  // which is what keeps the docked frame byte-for-byte still.
+  const lastAnchor = useRef(new Map<number, { x: number; y: number }>());
+  const lastTether = useRef('');
+  // Panel heights, measured once per station (offsetHeight forces layout —
+  // never per frame). Cleared on viewport change; transforms don't dirty it.
+  const panelHeights = useRef(new Map<number, number>());
+  const lastSizeKey = useRef('');
 
   const { points, camPath, gazePath } = useMemo(() => {
     const pts = voyage(n);
@@ -103,7 +128,8 @@ function Rig({
     }
 
     // Camera: ride the spline, displaced along the tangent by the kick
-    // spring (departure lunge, arrival settle — the mass the eye expects).
+    // spring (departure lunge — bled off before arrival, so the dock frame
+    // is motionless).
     const p = camPath.posAt(tv);
     const g = gazePath.posAt(tv);
     const tan = camPath.tangentAt(tv);
@@ -111,11 +137,132 @@ function Rig({
     // Low coupling: the kick is seasoning on the camera, never a shake.
     const k = kick.get() * 0.3;
     tmpPos.set(p[0], p[1], p[2]).addScaledVector(tmpTan, k);
-    camera.position.copy(tmpPos);
     tmpGaze.set(g[0], g[1], g[2]);
+
+    const fov = fovAt(points, tv) + (mobile ? 9 : 0);
+
+    // ==== PANEL ANCHORS — "the artifact is ON the planet". Each mounted
+    // panel's wrapper is pinned to a projected point beside its body, so
+    // panels arrive WITH their planet and never move after dock. Projection
+    // uses the BASE pose (kick yes, breathing no): at rest every input is
+    // constant, the rounded px never change, and the write is skipped —
+    // which is what the frame-stability check measures. ====
+    const anchorMap = anchors?.current;
+    if (anchorMap && !mobile && anchorMap.size > 0) {
+      projCam.position.copy(tmpPos);
+      projCam.up.copy(camera.up);
+      projCam.fov = fov;
+      projCam.aspect = size.width / size.height;
+      projCam.lookAt(tmpGaze);
+      projCam.updateMatrixWorld();
+      projCam.updateProjectionMatrix();
+      tmpRightW.setFromMatrixColumn(projCam.matrixWorld, 0).normalize();
+      const w = size.width;
+      const h = size.height;
+      const sizeKey = `${w}x${h}`;
+      if (lastSizeKey.current !== sizeKey) {
+        lastSizeKey.current = sizeKey;
+        panelHeights.current.clear();
+        lastAnchor.current.clear();
+      }
+      const panelW = Math.min(560, w - 32);
+      const cur = Math.round(tv);
+      let tetherStr = '';
+
+      anchorMap.forEach((el, i) => {
+        const wp = points[i];
+        if (!wp) return;
+        let ph = panelHeights.current.get(i);
+        if (ph === undefined || ph === 0) {
+          ph = el.offsetHeight;
+          panelHeights.current.set(i, ph);
+        }
+        // Vertical clamp keeps the WHOLE panel on-screen around its -50%
+        // translate; an over-tall panel just centres in the safe band.
+        const yLo = ph / 2 + 88;
+        const yHi = h - ph / 2 - 118;
+        let ax: number;
+        let ay: number;
+        let limbX = 0;
+        let limbY = 0;
+        let hasLimb = false;
+
+        if (wp.kind === 'earthReturn') {
+          // The landing camera sits ON the planet — projecting its centre is
+          // meaningless. The homecoming panel docks centre-right, fixed.
+          ax = clampPx(w * 0.52, w * 0.34, w - 24 - panelW);
+          ay = yLo > yHi ? (88 + h - 118) / 2 : clampPx(h * 0.44, yLo, yHi);
+        } else {
+          tmpView
+            .set(wp.bodyPos[0], wp.bodyPos[1], wp.bodyPos[2])
+            .applyMatrix4(projCam.matrixWorldInverse);
+          if (tmpView.z > -1) return; // behind the lens — keep last position
+          tmpNdc.copy(tmpView).applyMatrix4(projCam.projectionMatrix);
+          const by = (-tmpNdc.y * 0.5 + 0.5) * h;
+          tmpView
+            .set(wp.bodyPos[0], wp.bodyPos[1], wp.bodyPos[2])
+            .addScaledVector(tmpRightW, wp.bodyRadius)
+            .applyMatrix4(projCam.matrixWorldInverse);
+          if (tmpView.z > -1) return;
+          tmpNdc.copy(tmpView).applyMatrix4(projCam.projectionMatrix);
+          limbX = (tmpNdc.x * 0.5 + 0.5) * w;
+          limbY = (-tmpNdc.y * 0.5 + 0.5) * h;
+          hasLimb = true;
+          ax = clampPx(limbX + 42, w * 0.34, w - 24 - panelW);
+          ay = yLo > yHi ? (88 + h - 118) / 2 : clampPx(by, yLo, yHi);
+        }
+
+        const rx = Math.round(ax);
+        const ry = Math.round(ay);
+        const prev = lastAnchor.current.get(i);
+        if (!prev || prev.x !== rx || prev.y !== ry) {
+          lastAnchor.current.set(i, { x: rx, y: ry });
+          el.style.transform = `translate3d(${rx}px, ${ry}px, 0) translateY(-50%)`;
+        }
+
+        // The callout tether: current panel -> its planet's limb.
+        if (i === cur && hasLimb) {
+          const op = (1 - Math.min(Math.abs(tv - cur) / 0.45, 1)) * 0.8;
+          tetherStr = `${rx},${ry},${Math.round(limbX)},${Math.round(limbY)},${op.toFixed(2)}`;
+        }
+      });
+
+      if (tetherStr !== lastTether.current) {
+        lastTether.current = tetherStr;
+        const line = tetherLine?.current;
+        const dot = tetherDot?.current;
+        if (line && dot) {
+          if (tetherStr === '') {
+            line.setAttribute('stroke-opacity', '0');
+            dot.setAttribute('fill-opacity', '0');
+          } else {
+            const parts = tetherStr.split(',');
+            const [x1, y1, x2, y2, op] = [
+              parts[0] ?? '0',
+              parts[1] ?? '0',
+              parts[2] ?? '0',
+              parts[3] ?? '0',
+              parts[4] ?? '0',
+            ];
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            line.setAttribute('stroke-opacity', op);
+            dot.setAttribute('cx', x2);
+            dot.setAttribute('cy', y2);
+            dot.setAttribute('fill-opacity', op);
+          }
+        }
+      }
+    }
+
+    camera.position.copy(tmpPos);
     if (!reduced) {
       // Docked breathing: the frame is never a freeze-frame. Slow, small,
-      // and phase-offset so it reads as station-keeping, not wobble.
+      // and phase-offset so it reads as station-keeping, not wobble. Added
+      // AFTER the anchor projection on purpose: panels hold still while the
+      // world breathes behind them.
       const e = state.clock.elapsedTime;
       camera.position.y += Math.sin(e * 0.45) * 0.5;
       camera.position.x += Math.sin(e * 0.31 + 1.7) * 0.35;
@@ -123,7 +270,6 @@ function Rig({
     }
     camera.lookAt(tmpGaze);
 
-    const fov = fovAt(points, tv) + (mobile ? 9 : 0);
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = fov;
       camera.updateProjectionMatrix();
@@ -149,12 +295,15 @@ function Rig({
 
       // Cruise pose: ahead on the path, pulling further ahead as the
       // homecoming begins (it should visibly RACE you home).
-      const ra = camPath.posAt(tv + 0.24 + ramp * 0.34);
+      const ra = camPath.posAt(tv + 0.22 + ramp * 0.36);
       tmpRight.crossVectors(tmpTan, tmpUp).normalize();
+      // Offsets push the ship low and LEFT of the flight line — at the old
+      // -5.2 it parked over the right-edge telemetry column in the hero
+      // frame (live screenshot finding).
       tmpRocket
         .set(ra[0], ra[1], ra[2])
-        .addScaledVector(tmpUp, -2.0)
-        .addScaledVector(tmpRight, mobile ? 0 : -5.2)
+        .addScaledVector(tmpUp, -3.2)
+        .addScaledVector(tmpRight, mobile ? 0 : -7.6)
         .addScaledVector(tmpTan, kick.get() * 0.35);
       if (!reduced) {
         // Idle float — barely there, sells zero-g. Fades out on approach; a
@@ -197,9 +346,11 @@ function Rig({
       if (!reduced && ramp === 0) rk.rotateZ(bank);
     }
 
-    // Thrust for the flames + trail; bloom boost for the sun approach.
+    // Thrust for the flames + trail; bloom boost for the sun approach; the
+    // landing ramp for the site fade-in and the atmosphere fade-out.
     thrustRef.current = thrust;
     boostRef.current = sunApproach(n, tv);
+    landingRef.current = ramp;
   });
 
   return <Rocket3D ref={rocketRef} thrustRef={thrustRef} reduced={reduced} />;
@@ -219,6 +370,9 @@ export function Scene3D({
   n,
   reduced,
   vw,
+  anchors,
+  tetherLine,
+  tetherDot,
 }: {
   t: MotionValue<number>;
   kick: MotionValue<number>;
@@ -226,10 +380,16 @@ export function Scene3D({
   n: number;
   reduced: boolean;
   vw: number;
+  /** Panel anchor wrappers keyed by station index — the Rig writes their
+   *  transforms so panels ride their planets (desktop flight only). */
+  anchors?: { current: Map<number, HTMLDivElement> };
+  tetherLine?: { current: SVGLineElement | null };
+  tetherDot?: { current: SVGCircleElement | null };
 }) {
   const mobile = vw < MOBILE_BREAKPOINT;
   const thrustRef = useRef(0);
   const boostRef = useRef(0);
+  const landingRef = useRef(0);
   const points = useMemo(() => voyage(n), [n]);
   const sunPos = (points[n - 1]?.bodyPos ?? [0, 0, 0]) as [number, number, number];
 
@@ -250,7 +410,7 @@ export function Scene3D({
             planet dark sides. Lighting only, never the background. */}
         <Environment files="/hdri/dikhololo_night_1k.hdr" />
         <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 3200 : 6400} />
-        <SolarBodies waypoints={points} reduced={reduced} />
+        <SolarBodies waypoints={points} reduced={reduced} landingRef={landingRef} />
         {/* Floating section labels beside each body — the "ABOUT ME in space"
             read. Static world objects, so they render on every rung. */}
         <StationLabels waypoints={points} reduced={reduced} />
@@ -258,6 +418,9 @@ export function Scene3D({
             entirely under reduced. */}
         {!reduced && <Meteors vel={vel} extent={(n - 1) * STEP + 60} />}
         <Dressing waypoints={points} reduced={reduced} />
+        {/* The homecoming's ground truth: pad, terrain, sky — fades in over
+            the final approach so touchdown happens in a real place. */}
+        <LandingSite waypoints={points} t={t} reduced={reduced} />
         <Rig
           t={t}
           kick={kick}
@@ -267,6 +430,10 @@ export function Scene3D({
           mobile={mobile}
           thrustRef={thrustRef}
           boostRef={boostRef}
+          landingRef={landingRef}
+          anchors={anchors}
+          tetherLine={tetherLine}
+          tetherDot={tetherDot}
         />
         <Effects reduced={reduced} getBoost={() => boostRef.current} />
       </Suspense>
