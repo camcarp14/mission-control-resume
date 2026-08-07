@@ -93,6 +93,7 @@ export default function Flight({
       panelRefs.current.set(i, el);
       if (pendingFocus.current === i) {
         pendingFocus.current = null;
+        el.inert = false;
         el.focus({ preventScroll: true });
       }
     } else {
@@ -108,6 +109,13 @@ export default function Flight({
     const el = panelRefs.current.get(i);
     if (el) {
       pendingFocus.current = null;
+      // The arriving panel usually ALREADY exists — mounted as an inert
+      // neighbour — and the React commit that clears `inert` is a
+      // low-priority transition a busy main thread can starve past this
+      // moment. focus() on an inert element silently no-ops (measured:
+      // focus fell to BODY on every advance). Clear it imperatively; the
+      // commit's own effect re-asserts the same value later, idempotently.
+      el.inert = false;
       el.focus({ preventScroll: true });
     } else {
       pendingFocus.current = i;
