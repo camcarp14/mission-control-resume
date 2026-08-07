@@ -34,7 +34,7 @@ import { StaticMode } from './StaticMode';
  */
 
 const N = stations.length;
-const KICK = 11;
+const KICK = 9;
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -164,9 +164,11 @@ export default function Flight({
         // Accelerate, cruise, long deceleration — a burn, a coast, a dock.
         ease: [0.42, 0.05, 0.16, 1],
         onComplete: () => {
-          // The settle: an underdamped spring back to rest overshoots a few
-          // units past the dock — the mass the eye expects, now in 3D.
-          animate(kick, 0, { type: 'spring', stiffness: 380, damping: 13 });
+          // The settle: a critically-damped glide back to rest. The old
+          // underdamped spring oscillated the CAMERA against deep parallax —
+          // what read as "mass" on a 2D panel read as a judder in 3D ("a
+          // weird shake as it locks in", verbatim). Zero overshoot now.
+          animate(kick, 0, { duration: 0.55, ease: [0.22, 1, 0.36, 1] });
           focusPanel(c);
           // Shrinking the panel window unmounts DOM — time-sliced, off the
           // arrival frame.

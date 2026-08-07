@@ -42,7 +42,26 @@ export type Waypoint = {
   gaze: Vec3;
   /** Docked field of view; travel interpolates between neighbours. */
   fov: number;
+  /** Landing pad (earthReturn only): where the shuttle touches down. */
+  site?: Vec3;
 };
+
+/* Minimal vector helpers for composing the landing frame — kept local so the
+ * engine stays dependency-free. */
+const norm3 = (v: Vec3): Vec3 => {
+  const m = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / m, v[1] / m, v[2] / m];
+};
+const cross3 = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const madd3 = (base: Vec3, dir: Vec3, k: number): Vec3 => [
+  base[0] + dir[0] * k,
+  base[1] + dir[1] * k,
+  base[2] + dir[2] * k,
+];
 
 const STEP = 95; // world units between stations
 const PHI = 2.399963; // golden angle — non-repeating drift, same as the 2D layout
@@ -88,14 +107,37 @@ export function voyage(n: number): Waypoint[] {
 
     if (isReturn) {
       // The landing: the SAME Earth the mission departed from (one body,
-      // rendered once — the return waypoint reuses waypoint 0's planet). The
-      // camera pulls in close over the sunlit green hemisphere; low altitude
-      // plus a wide-ish fov reads as descent, not orbit.
+      // rendered once — the return waypoint reuses waypoint 0's planet).
+      //
+      // Shot grammar matters here: a ship "standing" between the camera and
+      // a distant globe reads as a toy floating in front of a poster (live
+      // verdict: "the landing looks silly"). To read as LANDED, the ground
+      // must be visibly under the legs — so the final camera sits LOW over
+      // the surface, a few units up and a few back along the ground, looking
+      // across the curved horizon at the shuttle silhouetted against space.
       const first = out[0] as Waypoint;
       const bodyPos = first.bodyPos;
-      const camPos: Vec3 = [bodyPos[0] + 20, bodyPos[1] + 9, bodyPos[2] + 26];
-      const gaze: Vec3 = [bodyPos[0], bodyPos[1] + 2, bodyPos[2]];
-      out.push({ index: i, kind: 'earthReturn', bodyPos, bodyRadius: first.bodyRadius, camPos, gaze, fov: 56 });
+      const r = first.bodyRadius;
+      // Surface frame at the pad: nHat = local "up", tHat = along-surface.
+      const nHat = norm3([20, 9, 26]);
+      const tHat = norm3(cross3(nHat, [0, 1, 0]));
+      const site = madd3(bodyPos, nHat, r + 1.35);
+      const camPos = madd3(madd3(bodyPos, nHat, r + 2.6), tHat, 12);
+      // Gaze: above the pad (a raised eyeline drops the horizon to the lower
+      // third), carried past it along-surface, nudged sideways so the
+      // shuttle frames left-of-centre — the panel docks centre-right.
+      const bHat = cross3(nHat, tHat);
+      const gaze = madd3(madd3(madd3(site, nHat, 3.2), tHat, -3), bHat, 6.5);
+      out.push({
+        index: i,
+        kind: 'earthReturn',
+        bodyPos,
+        bodyRadius: r,
+        camPos,
+        gaze,
+        fov: 48,
+        site,
+      });
       continue;
     }
 

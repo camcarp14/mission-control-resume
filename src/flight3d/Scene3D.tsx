@@ -38,6 +38,7 @@ const tmpSite = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const tmpHover = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
+const tmpNorm = new THREE.Vector3();
 
 const smooth = (x: number, a: number, b: number) => {
   const s = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -78,13 +79,35 @@ function Rig({
   useFrame((state) => {
     const tv = t.get();
 
+    // Homecoming staging is needed by BOTH the camera (roll) and the ship
+    // (landing), so it hoists to the top of the frame.
+    const home = points[n - 1];
+    const landing = home && home.kind === 'earthReturn' && home.site ? home : null;
+    const ramp = landing ? legInto(n, n - 1, tv) : 0;
+    if (landing && ramp > 0) {
+      tmpNorm
+        .set(
+          landing.site![0] - landing.bodyPos[0],
+          landing.site![1] - landing.bodyPos[1],
+          landing.site![2] - landing.bodyPos[2],
+        )
+        .normalize();
+      // Roll the camera onto the pad's local vertical as the descent begins
+      // — with world-up held, the horizon crossed the frame diagonally and
+      // the "landed" read fell apart (screenshot finding).
+      camera.up.set(0, 1, 0).lerp(tmpNorm, smooth(ramp, 0.45, 0.9)).normalize();
+    } else {
+      camera.up.set(0, 1, 0);
+    }
+
     // Camera: ride the spline, displaced along the tangent by the kick
     // spring (departure lunge, arrival settle — the mass the eye expects).
     const p = camPath.posAt(tv);
     const g = gazePath.posAt(tv);
     const tan = camPath.tangentAt(tv);
     tmpTan.set(tan[0], tan[1], tan[2]);
-    const k = kick.get() * 0.55;
+    // Low coupling: the kick is seasoning on the camera, never a shake.
+    const k = kick.get() * 0.3;
     tmpPos.set(p[0], p[1], p[2]).addScaledVector(tmpTan, k);
     camera.position.copy(tmpPos);
     tmpGaze.set(g[0], g[1], g[2]);
@@ -118,10 +141,9 @@ function Rig({
 
       // ==== THE LANDING — the finale is choreographed, not implied. Over
       // the homecoming leg the shuttle pulls ahead of the camera, flips
-      // tail-down, rides a retro-burn to the surface point between camera
-      // and planet, and settles onto its legs as the engines cut. ====
-      const home = points[n - 1];
-      const ramp = home && home.kind === 'earthReturn' ? legInto(n, n - 1, tv) : 0;
+      // tail-down, rides a retro-burn to the pad, and settles onto its legs
+      // as the engines cut. (Staging hoisted above — the camera rolls with
+      // the same ramp.) ====
 
       // Cruise pose: ahead on the path, pulling further ahead as the
       // homecoming begins (it should visibly RACE you home).
@@ -140,29 +162,13 @@ function Rig({
       tmpMat.lookAt(tmpRocket, tmpAim.copy(tmpRocket).add(tmpTan), tmpUp);
       tmpQuat.setFromRotationMatrix(tmpMat);
 
-      if (ramp > 0 && home) {
-        // Landing site: on the planet's surface along the camera ray, so the
-        // touchdown happens centre-frame as you arrive. Leg tips reach
-        // ~1.4 units aft at ship scale, so the origin rests just above.
-        tmpSite.set(home.bodyPos[0], home.bodyPos[1], home.bodyPos[2]);
-        tmpDir
-          .set(
-            home.camPos[0] - home.bodyPos[0],
-            home.camPos[1] - home.bodyPos[1],
-            home.camPos[2] - home.bodyPos[2],
-          )
-          .normalize();
-        // Bias the touchdown off the camera axis — dead centre is where the
-        // DOM panel docks, and a ship landing behind the text is a ship
-        // nobody sees. Desktop: left half (panel sits right). Mobile: high
-        // (panel sits low).
-        tmpRight.crossVectors(tmpDir, tmpUp).normalize();
-        tmpDir
-          .addScaledVector(tmpRight, mobile ? 0 : 0.52)
-          .addScaledVector(tmpUp, mobile ? 0.5 : 0.14)
-          .normalize();
-        tmpHover.copy(tmpSite).addScaledVector(tmpDir, home.bodyRadius + 7.5);
-        tmpSite.addScaledVector(tmpDir, home.bodyRadius + 1.42);
+      if (ramp > 0 && landing && landing.site) {
+        // The engine owns the landing pad (composed with the low-horizon
+        // camera in space.ts); the rig just flies the descent to it. Local
+        // "up" at the pad is the surface normal (tmpNorm, set above).
+        tmpSite.set(landing.site[0], landing.site[1], landing.site[2]);
+        tmpDir.copy(tmpNorm);
+        tmpHover.copy(tmpSite).addScaledVector(tmpDir, 6.5);
 
         // Position: cruise → hover (approach) → surface (descent).
         const wApproach = smooth(ramp, 0.4, 0.82);
