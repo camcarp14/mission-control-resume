@@ -43,6 +43,10 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules/react') || id.includes('react-router')) return 'react';
           if (id.includes('@supabase')) return 'supabase';
+          // The WebGL stack rides its own chunk so the flight code and the
+          // ~200 kB of three.js fetch in parallel — both only ever after a
+          // code redeems (they're reachable solely from the lazy Flight).
+          if (/node_modules\/(three|three-stdlib|@react-three|postprocessing|maath)/.test(id)) return 'gl';
           return undefined;
         },
       },

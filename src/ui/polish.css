@@ -131,11 +131,7 @@ kbd {
   touch-action: none; /* the stage owns its gestures — advance is deliberate, never scrolled */
   user-select: none;
 }
-/* Wrap offsets are (-512, 0] — the tile only ever slides LEFT/UP, so the
-   overdraw belongs on the right/bottom edge only. Sizing +1024 on both axes
-   once cost a third more pixels per composite for coverage nothing used. */
-.stars { position: absolute; inset: 0; width: calc(100% + 512px); height: calc(100% + 512px); will-change: transform; background-repeat: repeat; }
-.panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; will-change: transform; pointer-events: none; padding: 76px 16px calc(96px + env(safe-area-inset-bottom)); }
+.panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; padding: 76px 16px calc(96px + env(safe-area-inset-bottom)); }
 .panelwrap > * { pointer-events: auto; }
 .panel {
   width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto;
@@ -147,13 +143,6 @@ kbd {
   content-visibility: auto; contain-intrinsic-size: 512px 480px;
 }
 @media (min-width: 768px) { .panelwrap { padding-left: 96px; } .panel { transform: translateX(9vw); } }
-/* The ship rides UNDER the panels (z 1 < 2): at dock it must never sit on
-   the copy — on small screens the panel is tall and the overlap is real. */
-.rocketwrap { position: fixed; will-change: transform; pointer-events: none; z-index: 1; }
-.bob { animation: bob var(--dur-4) ease-in-out infinite alternate; }
-@keyframes bob { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
-.flare { animation: flare var(--dur-2) var(--ease-out) both; transform-origin: 0% 50%; }
-@keyframes flare { 0% { transform: scaleX(0.5); opacity: 0.4; } 45% { transform: scaleX(1.6); opacity: 1; } 100% { transform: scaleX(1); opacity: 0.8; } }
 .xfade { animation: fadein var(--dur-3) var(--ease-out) both; }
 
 /* HUD + rail: the persistent chrome. Solid panels, hairline rules — no blur. */
@@ -202,7 +191,7 @@ kbd {
    adversarial review proved the claim false and this comment is the fix's
    receipt. */
 @media (prefers-reduced-motion: reduce) {
-  .pagefade, .stagger > *, .toast, .bob, .flare { animation: none !important; }
+  .pagefade, .stagger > *, .toast { animation: none !important; }
   .expand, .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot { transition: none !important; }
   .sk::after { animation: none; }
   html { scroll-behavior: auto; }

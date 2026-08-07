@@ -5,37 +5,36 @@ import {
   animate,
   useMotionValue,
   useReducedMotion,
-  useSpring,
-  useTransform,
   useVelocity,
 } from 'framer-motion';
-import { MOBILE_BREAKPOINT, makePath, stationPositions } from '../engine';
+import { MOBILE_BREAKPOINT } from '../engine';
 import { stations } from '../content/stations.js';
+import { Scene3D, webglAvailable } from '../flight3d/Scene3D';
+import { BootSequence } from '../flight3d/BootSequence';
 import { HUD } from './HUD';
 import { Rail } from './Rail';
-import { Rocket } from './Rocket';
-import { Stars } from './Stars';
 import { StationPanel } from './StationPanel';
 import { StaticMode } from './StaticMode';
 
 /**
- * The flight deck. One MotionValue `t` (continuous station index) is the
- * single source of truth: the camera, every panel, the parallax sky, the
- * rocket's heading and the flame all derive from it — Framer writes the
- * transforms straight to style, so nothing re-renders per frame.
+ * The flight deck, WebGL era. One MotionValue `t` (continuous station index)
+ * is still the single source of truth — it now drives a react-three-fiber
+ * solar-system voyage (camera, rocket, bloom) instead of 2D parallax, while
+ * the DOM keeps everything that matters: panels, rail, HUD, focus order,
+ * announcements. The canvas is aria-hidden decoration by construction.
  *
- * Motion physics, per the adversarial design review:
- *   - `t` moves MONOTONICALLY to its target (house ease-out, 250–400ms).
- *     Overshoot in `t` would sample the next spline segment and visibly hook
- *     the rocket at bends, so it is banned by construction.
- *   - The "mass" lives in rocket-local space: a small kick spring lunges the
- *     sprite forward on departure and overshoots-and-settles on arrival,
- *     while the heading lags the tangent through a spring.
+ * Motion physics carry over verbatim from the 2D deck: `t` moves
+ * MONOTONICALLY to its target (house ease-out, 250–400ms); the mass lives in
+ * the kick spring, which now displaces the camera and ship along the flight
+ * tangent for the departure lunge and arrival settle.
+ *
+ * Fallback ladder: WebGL + motion → full voyage · WebGL + reduced-motion →
+ * still solar backdrop, cross-fading panels · no WebGL → cross-fading panels
+ * on the ground colour. Every rung keeps identical controls.
  */
 
 const N = stations.length;
-const MAX_TILT = 18; // degrees off-axis — past this the ship reads frantic
-const KICK = 11; // px of rocket-local lunge
+const KICK = 11;
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -57,14 +56,12 @@ export default function Flight({
   onStationReached?: (index: number, stationCount: number) => void;
 }) {
   const reduced = useReducedMotion() ?? false;
-  const { vw, vh } = useViewport();
+  const webgl = useMemo(webglAvailable, []);
+  // Flat mode: no travel animation at all — the crossfade deck. Reduced
+  // motion chooses it; a machine with no WebGL falls back to it.
+  const flat = reduced || !webgl;
+  const { vw } = useViewport();
   const mobile = vw < MOBILE_BREAKPOINT;
-  // Mobile flies BOTTOM-UP (the rocket climbs), so world-y is flipped on the
-  // way to the screen. Desktop reads left-to-right, unflipped.
-  const flip = mobile ? -1 : 1;
-
-  const positions = useMemo(() => stationPositions(N, vw, vh), [vw, vh]);
-  const path = useMemo(() => makePath(positions), [positions]);
 
   const [mode, setMode] = useState<'flight' | 'static'>(() =>
     sessionStorage.getItem('mc.mode') === 'static' ? 'static' : 'flight',
@@ -73,29 +70,15 @@ export default function Flight({
   const [current, setCurrent] = useState(start);
   const [visited, setVisited] = useState(start);
   const [fromIdx, setFromIdx] = useState(start);
-  const [flareKey, setFlareKey] = useState(0);
   const currentRef = useRef(start);
   // The live region is written DIRECTLY (textContent), never via state: a
   // setState here re-renders the whole flight tree inside the arrival window
-  // — measured as a ~55ms task under 4× CPU throttle, for one string.
+  // — measured at ~55ms under 4× CPU throttle, for one string.
   const announceRef = useRef<HTMLDivElement>(null);
 
   const t = useMotionValue(start);
   const kick = useMotionValue(0);
-  const kickX = useTransform(kick, (k) => (mobile ? 0 : k));
-  const kickY = useTransform(kick, (k) => (mobile ? -k : 0));
-
-  const rotateRaw = useTransform(t, (v) => {
-    const deg = (path.headingAt(v) * 180) / Math.PI;
-    // Desktop: tilt around "pointing right". Mobile (world flipped, climbing):
-    // tilt around "pointing up"; drift right in world tilts the nose right.
-    return mobile ? -90 + clampN(90 - deg, -MAX_TILT, MAX_TILT) : clampN(deg, -MAX_TILT, MAX_TILT);
-  });
-  const rotateSpring = useSpring(rotateRaw, { stiffness: 140, damping: 18 });
-
   const vel = useVelocity(t);
-  const flameScaleX = useTransform(vel, (v) => 0.55 + Math.min(Math.abs(v) / 3.5, 1) * 0.95);
-  const flameOpacity = useTransform(vel, (v) => 0.55 + Math.min(Math.abs(v) / 3.5, 1) * 0.45);
 
   const panelRefs = useRef(new Map<number, HTMLElement>());
   const registerPanel = useCallback((i: number, el: HTMLElement | null) => {
@@ -118,8 +101,8 @@ export default function Flight({
       if (c === from) return;
       currentRef.current = c;
 
-      if (reduced) {
-        // Reduced motion: an instant reposition and a cross-fade — the flight
+      if (flat) {
+        // Flat mode: an instant reposition and a cross-fade — the flight
         // becomes a slideshow, every control identical.
         setFromIdx(c);
         setCurrent(c);
@@ -136,7 +119,7 @@ export default function Flight({
         ease: [0.22, 1, 0.36, 1], // the house --ease-out; monotone, no overshoot
         onComplete: () => {
           // The settle: an underdamped spring back to rest overshoots a few
-          // px past the dock — the mass the eye expects.
+          // units past the dock — the mass the eye expects, now in 3D.
           animate(kick, 0, { type: 'spring', stiffness: 380, damping: 13 });
           focusPanel(c);
           // Shrinking the panel window unmounts DOM — time-sliced, off the
@@ -144,26 +127,24 @@ export default function Flight({
           startTransition(() => setFromIdx(c));
         },
       });
-      // The React commit (windowing mounts, rail state, flame re-key) is real
-      // work — measured at 50–90ms under 4× CPU throttle. It does NOT belong
-      // in the keydown task: let the first animation frame paint, then commit
-      // as a transition so the mount can't stretch an interaction long task.
+      // The React commit (windowing mounts, rail state) is real work — it
+      // does NOT belong in the keydown task: let the first animation frame
+      // paint, then commit as a transition.
       requestAnimationFrame(() => {
         startTransition(() => {
           setFromIdx(from);
           setCurrent(c);
           setVisited((v) => Math.max(v, c));
-          setFlareKey((k) => k + 1); // thrust burst on departure
         });
       });
     },
-    [reduced, t, kick, focusPanel],
+    [flat, t, kick, focusPanel],
   );
 
-  // Reduced-motion arrivals focus after the re-render that mounts the panel.
+  // Flat-mode arrivals focus after the re-render that mounts the panel.
   useEffect(() => {
-    if (reduced) focusPanel(current);
-  }, [reduced, current, focusPanel]);
+    if (flat) focusPanel(current);
+  }, [flat, current, focusPanel]);
 
   const advance = useCallback(() => goTo(currentRef.current + 1), [goTo]);
   const back = useCallback(() => goTo(currentRef.current - 1), [goTo]);
@@ -241,11 +222,11 @@ export default function Flight({
   }, []);
 
   // Windowing: current ±1, plus the departure neighbourhood while a jump is
-  // in flight — never the whole route, never a world-sized layer. Under
-  // reduced motion only the current panel exists (true cross-fade).
+  // in flight. Under flat mode only the current panel exists (true
+  // cross-fade).
   const mounted = useMemo(() => {
     const set = new Set<number>();
-    if (reduced) {
+    if (flat) {
       set.add(current);
     } else {
       for (const c of [fromIdx, current]) {
@@ -256,7 +237,7 @@ export default function Flight({
       }
     }
     return set;
-  }, [reduced, fromIdx, current]);
+  }, [flat, fromIdx, current]);
 
   return (
     <LazyMotion features={domAnimation} strict>
@@ -269,37 +250,32 @@ export default function Flight({
       ) : (
         <>
           <div className="stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-            <Stars t={t} path={path} flip={flip} mobile={mobile} reduced={reduced} onAdvance={advance} />
+            {/* The voyage. Decorative sky doubling as the click-anywhere-to-
+                advance surface: aria-hidden, no role — a redundant affordance
+                over the visible buttons and documented keys. */}
+            <div className="absolute inset-0" aria-hidden="true" onClick={advance}>
+              {webgl && (
+                <Scene3D t={t} kick={kick} vel={vel} n={N} reduced={reduced} vw={vw} />
+              )}
+            </div>
             {stations.map((s, i) => {
-              const pos = positions[i];
-              if (!mounted.has(i) || !pos) return null;
+              if (!mounted.has(i)) return null;
               return (
                 <StationPanel
                   key={s.id}
                   station={s}
                   index={i}
-                  pos={pos}
                   t={t}
-                  path={path}
-                  flip={flip}
-                  reduced={reduced}
+                  axis={mobile ? 'y' : 'x'}
+                  flat={flat}
                   active={i === current}
                   onRegister={registerPanel}
                 />
               );
             })}
-            <Rocket
-              anchor={mobile ? { left: '50%', top: '12%' } : { left: '27%', top: '46%' }}
-              size={mobile ? 76 : 116}
-              rotate={reduced ? rotateRaw : rotateSpring}
-              kickX={kickX}
-              kickY={kickY}
-              flameScaleX={flameScaleX}
-              flameOpacity={flameOpacity}
-              flareKey={flareKey}
-              reduced={reduced}
-            />
           </div>
+
+          {webgl && <BootSequence />}
 
           <div className="hudbar">
             <div className="mr-2 hidden items-center gap-1.5 lg:flex" aria-hidden="true">
