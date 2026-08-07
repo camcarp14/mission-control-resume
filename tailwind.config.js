@@ -17,10 +17,21 @@ export default {
 
         accent: '#ff5c37',
         'accent-dim': 'rgba(255,92,55,0.14)',
+
+        // The flight-deck HUD family. The chrome that reads as "instrument
+        // glass" — telemetry, rails, hero flourishes — speaks cyan; the
+        // original ember accent stays reserved for CTAs and fire.
+        hud: '#9adcff',
+        cyan: '#4cc9f0',
+        'cyan-bright': '#7df9ff',
       },
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
         sans: ['Inter var', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        // Display face for the hero identity + in-scene labels only — vendored
+        // OFL font (public/fonts/), fetched lazily on first use post-gate so
+        // the entry chunk's FCP budget never pays for it.
+        display: ['Space Grotesk', 'Inter var', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         // Dense by design. Generous space BETWEEN blocks, not inside them.

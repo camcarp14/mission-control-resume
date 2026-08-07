@@ -17,6 +17,8 @@
  *     slot. The brackets are deliberate: they make unfinished copy easy to
  *     grep for (`grep -n '\[' src/content/stations.js`) and impossible to
  *     mistake for the real thing in review.
+ *   - The hero identity (name / role / status chip) is the `pilot` export
+ *     just below — edit it in place; the hero renders whatever is here.
  *
  * The schema, in prose:
  *   id      — stable machine key, lowercase, never changes once shipped.
@@ -57,6 +59,14 @@
  *  @property {string[]} bullets 2–3 outcome bullets, metric-led
  *  @property {StationArtifact} artifact
  */
+
+/** The pilot identity shown on the hero. EDIT ME — same single-source rule as the stations. */
+export const pilot = {
+  name: 'CAM CARP', // hero headline — huge display type; edit to your full name
+  role: 'SOLUTIONS CONSULTANT · ADTECH',
+  status: 'OPEN TO NEW MISSIONS',
+  callsign: 'CC-01',
+};
 
 /** @type {Station[]} */
 export const stations = [

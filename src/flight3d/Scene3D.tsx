@@ -3,9 +3,11 @@ import { Canvas, useFrame, useThree, invalidate } from '@react-three/fiber';
 import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
-import { fovAt, legInto, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT } from '../engine';
+import { fovAt, legInto, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT, STEP } from '../engine';
 import { SpaceEnvironment } from './SpaceEnvironment';
 import { SolarBodies } from './SolarBodies';
+import { StationLabels } from './StationLabels';
+import { Meteors } from './Meteors';
 import { Rocket3D } from './Rocket3D';
 import { Dressing } from './Dressing';
 import { Effects } from './Effects';
@@ -249,6 +251,12 @@ export function Scene3D({
         <Environment files="/hdri/dikhololo_night_1k.hdr" />
         <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 3200 : 6400} />
         <SolarBodies waypoints={points} reduced={reduced} />
+        {/* Floating section labels beside each body — the "ABOUT ME in space"
+            read. Static world objects, so they render on every rung. */}
+        <StationLabels waypoints={points} reduced={reduced} />
+        {/* Comet streaks + velocity warp lines are pure motion — absent
+            entirely under reduced. */}
+        {!reduced && <Meteors vel={vel} extent={(n - 1) * STEP + 60} />}
         <Dressing waypoints={points} reduced={reduced} />
         <Rig
           t={t}

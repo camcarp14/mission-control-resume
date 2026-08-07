@@ -12,6 +12,8 @@ import { stations } from '../content/stations.js';
 import { Scene3D, webglAvailable } from '../flight3d/Scene3D';
 import { BootSequence } from '../flight3d/BootSequence';
 import { HUD } from './HUD';
+import { Hero } from './Hero';
+import { Telemetry } from './Telemetry';
 import { Rail } from './Rail';
 import { StationPanel } from './StationPanel';
 import { StaticMode } from './StaticMode';
@@ -323,6 +325,16 @@ export default function Flight({
             })}
             <div className={`veil${veil ? ' on' : ''}`} aria-hidden="true" />
           </div>
+
+          {/* The identity moment: pilot name + status over the opening frame,
+              receding as the voyage begins. Decorative — every fact on it
+              lives in the stations. Mounted OUTSIDE .stage so its fixed
+              overlay stacks above the panels without owning any pointer. */}
+          <Hero t={t} mobile={mobile} />
+          {/* Right-edge instrument column: progress rail + live ALT/VEL/SEC
+              readouts derived from the same MotionValue that flies the
+              camera. Desktop only; decorative twin of the real rail below. */}
+          <Telemetry t={t} vel={vel} n={N} current={current} />
 
           {webgl && <BootSequence />}
 

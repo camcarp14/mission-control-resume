@@ -2,8 +2,10 @@ import { stations } from '../content/stations.js';
 
 /**
  * The progress rail: real buttons, real focus order, ≥42px hit areas around
- * 7px dots (the padding is the tap target). Clickable jumps mean nobody is
- * ever trapped in the linear sequence — the rail is the map, not decoration.
+ * 7px diamonds (the padding is the tap target — the .dot span is now a
+ * rotated-45° instrument diamond, styled entirely in polish.css). Clickable
+ * jumps mean nobody is ever trapped in the linear sequence — the rail is
+ * the map, not decoration.
  */
 export function Rail({
   current,

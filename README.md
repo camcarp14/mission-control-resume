@@ -135,6 +135,11 @@ visit's own progress row, so replay is harmless by construction.
 - **HDRI lighting** — "Dikhololo Night" from [Poly Haven](https://polyhaven.com)
   (CC0), used for image-based lighting only, never as a backdrop. Vendored
   under `public/hdri/`.
+- **Display typeface** — [Space Grotesk](https://github.com/floriankarsten/space-grotesk)
+  by Florian Karsten, licensed under the
+  [SIL Open Font License 1.1](https://openfontlicense.org). Vendored under
+  `public/fonts/` and loaded lazily after the gate — the entry chunk stays on
+  the system stack.
 - Everything else on screen — the crew shuttle, asteroid fields, nebula, relay
   outpost, star cluster, dust, HUD — is generated procedurally in this repo's
   code.

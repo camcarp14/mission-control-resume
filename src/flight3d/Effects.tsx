@@ -13,10 +13,12 @@ import { ToneMappingMode, type BloomEffect } from 'postprocessing';
 
 // Threshold sits above anything a lit grey material can reach, so only
 // deliberately emissive surfaces bloom — a glowing planet would break the
-// near-black restraint the whole palette is built on.
-const BLOOM_THRESHOLD = 0.9;
+// near-black restraint the whole palette is built on. (Eased from 0.9 when
+// the exhaust went teal: the plume/trail shaders peak lower than the old
+// emissive cones, and the reference look leans on visible glow.)
+const BLOOM_THRESHOLD = 0.85;
 const BLOOM_SMOOTHING = 0.12;
-const BLOOM_BASE = 0.7;
+const BLOOM_BASE = 0.8;
 // Full sun approach nearly quadruples the glow — the finale should feel hot.
 const BLOOM_BOOST = 1.8;
 const VIGNETTE_DARKNESS = 0.25;

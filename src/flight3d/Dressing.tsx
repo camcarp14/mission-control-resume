@@ -15,15 +15,17 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
+import { useGLTF, useTexture } from '@react-three/drei';
 import { mulberry32 } from '../engine';
-import type { Waypoint } from '../engine';
+import type { Vec3, Waypoint } from '../engine';
 
 const ASTRONAUT_URL = '/models/astronaut.glb';
 const SPACESHIP_URL = '/models/spaceship.glb';
+const MOON_TEXTURE_URL = '/textures/2k_moon.webp'; // same vendored map SolarBodies uses
 
 useGLTF.preload(ASTRONAUT_URL);
 useGLTF.preload(SPACESHIP_URL);
+useTexture.preload(MOON_TEXTURE_URL);
 
 /* ---- tunables ----------------------------------------------------------- */
 
@@ -76,6 +78,47 @@ const ROCK_SCALE_MAX = 1.9;
 const ROCK_COLOR = '#7d8187'; // greyscale per the palette contract
 
 const ENV_MAP_INTENSITY = 0.55; // the single sanctioned GLB material mutation
+
+// Hero neighborhood: the opening frame shows Earth filling the LEFT half and
+// bare sky upper-right — these bodies densify that empty real estate so the
+// first thing a visitor sees is a busy solar neighborhood. Everything sits
+// past z = -55 or wide of the corridor so travel never clips it.
+const HERO_SEED = 0x8e60;
+
+// Earth's moon: orbits the hero Earth, position recomputed each frame from a
+// phase angle; parked at its start position under reduced motion.
+const MOON_RADIUS = 4.2;
+const MOON_START: Vec3 = [16, 18, -66]; // upper-right of the hero frame
+const MOON_ORBIT_RATE = 0.008; // rad/s around Earth
+const MOON_SPIN = 0.02; // rad/s self-rotation
+const MOON_BUMP = 0.5; // mirrors SolarBodies' moon relief
+const MOON_STILL_YAW = 1.9; // composed still pose for reduced motion
+const EARTH_FALLBACK: Vec3 = [-47, 10.9, -39.6]; // hero Earth bodyPos, should the voyage thin out
+
+// Decor planets: procedural canvas-banded spheres far beyond the corridor.
+const GIANT_POS: Vec3 = [66, -4, -150];
+const GIANT_RADIUS = 9;
+const GIANT_SPIN = 0.015; // rad/s
+const GIANT_TILT: Vec3 = [0.35, 0, 0.45]; // the x tilt opens the ring to the camera
+const GIANT_BANDS = ['#1d3a4f', '#24506b', '#2e6a86', '#1a2f40', '#24506b', '#1d3a4f'] as const;
+const DWARF_POS: Vec3 = [-88, 30, -210];
+const DWARF_RADIUS = 5.5;
+const DWARF_SPIN = 0.01; // rad/s
+const DWARF_TILT: Vec3 = [0, 0, 0.3];
+const DWARF_BANDS = ['#6b4a3a', '#5a3e30', '#6b4a3a', '#4e352a', '#6b4a3a', '#5a3e30'] as const;
+const HERO_GLOW_SCALE = 3.4; // × body radius
+const HERO_GLOW_OPACITY = 0.3;
+
+// Mini-Saturn ring arc on the teal giant.
+const HERO_RING_INNER = 1.5; // × radius
+const HERO_RING_OUTER = 2.1;
+const HERO_RING_OPACITY = 0.5;
+
+// Three extra drifting rocks in the hero frame's upper-right mid-distance.
+const HERO_ROCK_COUNT = 3;
+const HERO_ROCK_SCALE_MIN = 0.8;
+const HERO_ROCK_SCALE_MAX = 1.6;
+const HERO_ROCK_CLEARANCE = 12; // min world units from the camera flight path
 
 /* ---- module-scope temps and shared resources (zero per-frame allocs) ---- */
 
@@ -414,6 +457,370 @@ function RockCluster({ spec, reduced }: { spec: ClusterSpec; reduced: boolean })
   );
 }
 
+/* ---- 5. hero neighborhood ------------------------------------------------ */
+
+/* Deterministic canvas textures for the hero bodies — each drawn once and
+ * cached at module scope, exactly like getGlowTexture above. */
+
+function makeRadialHeroTexture(
+  stops: ReadonlyArray<readonly [number, string]>,
+): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    for (const [at, color] of stops) g.addColorStop(at, color);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** 8x256 vertical strip of soft horizontal bands — canvas y maps to latitude
+ *  on default sphere UVs, so the strip reads as gas-giant banding. Double
+ *  gradient stops per band give plateaus with soft transitions. */
+function makeBandTexture(bands: readonly string[]): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    const n = bands.length;
+    for (let i = 0; i < n; i++) {
+      const band = bands[i];
+      if (!band) continue;
+      g.addColorStop((i + 0.2) / n, band);
+      g.addColorStop((i + 0.8) / n, band);
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 8, 256);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+let giantBandTex: THREE.CanvasTexture | null = null;
+function getGiantBandTexture(): THREE.CanvasTexture {
+  giantBandTex ??= makeBandTexture(GIANT_BANDS);
+  return giantBandTex;
+}
+
+let dwarfBandTex: THREE.CanvasTexture | null = null;
+function getDwarfBandTexture(): THREE.CanvasTexture {
+  dwarfBandTex ??= makeBandTexture(DWARF_BANDS);
+  return dwarfBandTex;
+}
+
+let tealGlowTex: THREE.CanvasTexture | null = null;
+function getTealGlowTexture(): THREE.CanvasTexture {
+  tealGlowTex ??= makeRadialHeroTexture([
+    [0, 'rgba(214,240,248,0.85)'],
+    [0.4, 'rgba(46,106,134,0.4)'],
+    [1, 'rgba(46,106,134,0)'],
+  ]);
+  return tealGlowTex;
+}
+
+let amberGlowTex: THREE.CanvasTexture | null = null;
+function getAmberGlowTexture(): THREE.CanvasTexture {
+  amberGlowTex ??= makeRadialHeroTexture([
+    [0, 'rgba(255,232,204,0.85)'],
+    [0.4, 'rgba(198,138,88,0.38)'],
+    [1, 'rgba(198,138,88,0)'],
+  ]);
+  return amberGlowTex;
+}
+
+let heroRingTex: THREE.CanvasTexture | null = null;
+/** Concentric alpha bands for the ring arc. RingGeometry ships planar UVs
+ *  normalized by outerRadius (outer edge lands at UV radius 0.5), so a radial
+ *  gradient centred on the canvas lines up with the annulus by construction —
+ *  band stops live between innerR/outerR (~0.71) and 1 of the gradient. */
+function getHeroRingTexture(): THREE.CanvasTexture {
+  heroRingTex ??= makeRadialHeroTexture([
+    [0, 'rgba(0,0,0,0)'],
+    [0.7, 'rgba(0,0,0,0)'],
+    [0.735, 'rgba(196,220,232,0.85)'],
+    [0.78, 'rgba(150,180,200,0.2)'],
+    [0.83, 'rgba(196,220,232,0.75)'],
+    [0.88, 'rgba(140,170,190,0.12)'],
+    [0.93, 'rgba(186,212,226,0.55)'],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
+  return heroRingTex;
+}
+
+/* Earth's moon, sharing the hero frame with Earth itself. */
+
+function HeroMoon({ earthPos, reduced }: { earthPos: Vec3; reduced: boolean }) {
+  const tex = useTexture(MOON_TEXTURE_URL);
+  // Mirror SolarBodies' surface-texture prep (anisotropy + sRGB) without
+  // importing from it — drei caches one texture per url, so this mutation
+  // during render is idempotent.
+  if (tex.anisotropy !== 8 || tex.colorSpace !== THREE.SRGBColorSpace) {
+    tex.anisotropy = 8;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+  }
+  const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  // Orbit parameters derive from the prescribed start position, so the moon
+  // begins exactly in the hero frame's upper-right, then swings around Earth.
+  const orbit = useMemo(() => {
+    const dx = MOON_START[0] - earthPos[0];
+    const dz = MOON_START[2] - earthPos[2];
+    return { radius: Math.hypot(dx, dz), phase: Math.atan2(dz, dx) };
+  }, [earthPos]);
+
+  // Reduced motion parks the moon at its start position in the still pose —
+  // including when the preference flips mid-orbit.
+  useEffect(() => {
+    if (!reduced) return;
+    groupRef.current?.position.set(MOON_START[0], MOON_START[1], MOON_START[2]);
+    if (meshRef.current) meshRef.current.rotation.y = MOON_STILL_YAW;
+  }, [reduced]);
+
+  useFrame((state, delta) => {
+    if (reduced) return;
+    const g = groupRef.current;
+    if (g) {
+      // Negative phase direction: the moon sweeps up and away from the
+      // corridor's near pinch (the +x bend of the station-0→1 leg) instead
+      // of into it.
+      const a = orbit.phase - state.clock.elapsedTime * MOON_ORBIT_RATE;
+      g.position.set(
+        earthPos[0] + Math.cos(a) * orbit.radius,
+        MOON_START[1],
+        earthPos[2] + Math.sin(a) * orbit.radius,
+      );
+    }
+    if (meshRef.current) meshRef.current.rotation.y += MOON_SPIN * delta;
+  });
+
+  return (
+    <group ref={groupRef} position={MOON_START}>
+      <mesh ref={meshRef} rotation={[0, MOON_STILL_YAW, 0]}>
+        <sphereGeometry args={[MOON_RADIUS, 48, 36]} />
+        <meshStandardMaterial
+          map={tex}
+          bumpMap={tex}
+          bumpScale={MOON_BUMP}
+          roughness={0.95}
+          metalness={0}
+          envMapIntensity={ENV_MAP_INTENSITY}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/* Decor planets: cheap procedural spheres that fill the deep background. */
+
+function HeroRing({ radius }: { radius: number }) {
+  const geometry = useMemo(
+    () => new THREE.RingGeometry(radius * HERO_RING_INNER, radius * HERO_RING_OUTER, 64, 1),
+    [radius],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <mesh geometry={geometry} rotation={[Math.PI / 2, 0, 0]}>
+      <meshBasicMaterial
+        map={getHeroRingTexture()}
+        transparent
+        opacity={HERO_RING_OPACITY}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+type DecorPlanetProps = {
+  position: Vec3;
+  tilt: Vec3;
+  radius: number;
+  spin: number;
+  map: THREE.Texture;
+  glowMap: THREE.Texture;
+  withRing?: boolean;
+  reduced: boolean;
+};
+
+function DecorPlanet({
+  position,
+  tilt,
+  radius,
+  spin,
+  map,
+  glowMap,
+  withRing = false,
+  reduced,
+}: DecorPlanetProps) {
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  useFrame((_, delta) => {
+    if (reduced) return;
+    if (meshRef.current) meshRef.current.rotation.y += spin * delta;
+  });
+
+  return (
+    <group position={position} rotation={tilt}>
+      {/* Soft additive halo — depth-tested against the sphere so only the
+          limb glow survives, a cheap stand-in for the fresnel atmosphere the
+          station planets get. */}
+      <sprite scale={[radius * HERO_GLOW_SCALE, radius * HERO_GLOW_SCALE, 1]}>
+        <spriteMaterial
+          map={glowMap}
+          transparent
+          opacity={HERO_GLOW_OPACITY}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </sprite>
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[radius, 40, 28]} />
+        <meshStandardMaterial
+          map={map}
+          roughness={0.9}
+          metalness={0}
+          envMapIntensity={ENV_MAP_INTENSITY}
+        />
+      </mesh>
+      {withRing ? <HeroRing radius={radius} /> : null}
+    </group>
+  );
+}
+
+/* Hero rocks: three loners in the opening frame's upper-right mid-distance. */
+
+type HeroRockSpec = {
+  p: Vec3;
+  r: Vec3;
+  s: number;
+  spin: [number, number];
+};
+
+/** Min distance from a point to the engine's camera flight path
+ *  (camPos = [38·sin(2.4i), 13·sin(1.7i + 1), -95i]), sampled across the legs
+ *  the hero rocks share z-range with. */
+function flightPathClearance(p: Vec3): number {
+  let best = Infinity;
+  for (let i = 0.5; i <= 1.6; i += 0.05) {
+    const dx = p[0] - 38 * Math.sin(i * 2.4);
+    const dy = p[1] - 13 * Math.sin(i * 1.7 + 1);
+    const dz = p[2] + 95 * i;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+function buildHeroRocks(): HeroRockSpec[] {
+  const rng = mulberry32(HERO_SEED);
+  const out: HeroRockSpec[] = [];
+  for (let i = 0; i < HERO_ROCK_COUNT; i++) {
+    // The prescribed box (x 24-40, y 6-20, z -80..-120) overlaps the
+    // station-1 leg of the camera path, so seeded rejection sampling keeps
+    // every rock clear of the flight line; the fallbacks are hand-checked
+    // clear. Draw counts vary per rock but stay deterministic — one seed,
+    // one sequence.
+    let p: Vec3 = [34, 16, -100 - i * 10];
+    for (let tries = 0; tries < 20; tries++) {
+      const cand: Vec3 = [24 + rng() * 16, 6 + rng() * 14, -80 - rng() * 40];
+      if (flightPathClearance(cand) >= HERO_ROCK_CLEARANCE) {
+        p = cand;
+        break;
+      }
+    }
+    out.push({
+      p,
+      r: [rng() * Math.PI * 2, rng() * Math.PI * 2, rng() * Math.PI * 2],
+      s: HERO_ROCK_SCALE_MIN + rng() * (HERO_ROCK_SCALE_MAX - HERO_ROCK_SCALE_MIN),
+      spin: [0.03 + rng() * 0.05, 0.02 + rng() * 0.04],
+    });
+  }
+  return out;
+}
+
+function HeroRocks({ reduced }: { reduced: boolean }) {
+  const specs = useMemo(buildHeroRocks, []);
+  const refs = useRef<Array<THREE.Mesh | null>>([]);
+
+  useFrame((_, delta) => {
+    if (reduced) return;
+    for (let i = 0; i < specs.length; i++) {
+      const mesh = refs.current[i];
+      const spec = specs[i];
+      if (!mesh || !spec) continue;
+      mesh.rotation.x += delta * spec.spin[0];
+      mesh.rotation.y += delta * spec.spin[1];
+    }
+  });
+
+  return (
+    <group>
+      {specs.map((spec, i) => (
+        <mesh
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          geometry={ROCK_GEOMETRY}
+          material={ROCK_MATERIAL}
+          position={spec.p}
+          rotation={spec.r}
+          scale={spec.s}
+        />
+      ))}
+    </group>
+  );
+}
+
+function HeroNeighborhood({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boolean }) {
+  const earthPos = useMemo<Vec3>(() => {
+    const earth = waypoints.find((w) => w.kind === 'earth');
+    return earth ? earth.bodyPos : EARTH_FALLBACK;
+  }, [waypoints]);
+
+  return (
+    <group>
+      <DecorPlanet
+        position={GIANT_POS}
+        tilt={GIANT_TILT}
+        radius={GIANT_RADIUS}
+        spin={GIANT_SPIN}
+        map={getGiantBandTexture()}
+        glowMap={getTealGlowTexture()}
+        withRing
+        reduced={reduced}
+      />
+      <DecorPlanet
+        position={DWARF_POS}
+        tilt={DWARF_TILT}
+        radius={DWARF_RADIUS}
+        spin={DWARF_SPIN}
+        map={getDwarfBandTexture()}
+        glowMap={getAmberGlowTexture()}
+        reduced={reduced}
+      />
+      <HeroRocks reduced={reduced} />
+      {/* useTexture suspends on first load; the procedural bodies above must
+          not wait on the network. */}
+      <Suspense fallback={null}>
+        <HeroMoon earthPos={earthPos} reduced={reduced} />
+      </Suspense>
+    </group>
+  );
+}
+
 /* ---- public surface ------------------------------------------------------ */
 
 export function Dressing({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boolean }) {
@@ -428,6 +835,7 @@ export function Dressing({ waypoints, reduced }: { waypoints: Waypoint[]; reduce
       {clusters.map((spec) => (
         <RockCluster key={spec.key} spec={spec} reduced={reduced} />
       ))}
+      <HeroNeighborhood waypoints={waypoints} reduced={reduced} />
       {/* GLBs suspend while loading; the dust and rocks above must not wait
           on the network, so the model props get their own boundary. */}
       <Suspense fallback={null}>

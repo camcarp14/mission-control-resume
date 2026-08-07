@@ -1,245 +1,494 @@
-/* ==== ROCKET 3D — the crew shuttle ==========================================
+/* ==== ROCKET 3D — the hero prop ==============================================
  *
- * A crewed landing shuttle built entirely from primitives — no imported
- * meshes, everything shaped in code. The silhouette contract: STUBBY (a
- * lifting body, not a pencil), LEGGED (four always-deployed landing legs
- * whose feet are the aft-most geometry, so the finale can set it down
- * tail-first and it visibly stands), and CANOPIED (a wraparound cockpit
- * band plus portholes — people ride this thing).
+ * A friendly cartoon spacecraft built entirely from primitives and canvas
+ * textures: chunky white lathe hull with painted livery, glossy black ogive
+ * nose, one big porthole, three strapped side boosters, three swept bulbous
+ * fins it lands on, and a teal exhaust — shader plume + nozzle glow + a
+ * long world-space particle trail that arcs along the flight path.
  *
- * The component renders at local origin, nose along local -Z, spanning
- * z in [-2.2, +2.2] (nose tip to landing-foot soles) — the PARENT owns
- * position and orientation every frame. The ship only knows how hard it is
- * burning (thrustRef) and whether motion is allowed (reduced).
- *
- * Palette contract: warm-white hull greys; the single accent #ff5c37 appears
- * only where fire is allowed — one stripe, two fin flashes, the engine
- * flames, and the ember trail. Cockpit glass glows faint cool cyan.
+ * Contract (unchanged from the shuttle it replaces): renders at local origin,
+ * nose along local -Z, envelope z in [-2.2, +2.2]; the PARENT drives
+ * position/quaternion/scale and for the finale stands the craft tail-down on
+ * the three fin feet, whose soles are the aft-most geometry at exactly
+ * z = +2.2. thrustRef is 0..1 (may spike ~1.2); `reduced` gates every
+ * continuous animation — value-tracking state (flame length, glow intensity)
+ * still follows thrust.
  * ========================================================================= */
 
 import * as THREE from 'three';
 import { forwardRef, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { mulberry32 } from '../engine';
 
-const ACCENT = '#ff5c37';
+const TEAL = '#4cc9f0';
+const TEAL_BRIGHT = '#7df9ff';
+const VIOLET = '#7c3aed';
+const BEACON = '#ff5c37';
 const TAU = Math.PI * 2;
-
-/* ---- hull profile ----------------------------------------------------------
- * A body of revolution: elliptically rounded nose, widening mid-hull, gentle
- * boat-tail. One radius function drives the lathe AND every surface-mounted
- * part (portholes, stripe, belly panel), so nothing ever floats or sinks.
- * d is distance aft of the nose tip; local z = NOSE_TIP_Z + d.
- */
-const NOSE_TIP_Z = -2.2;
-const HULL_LEN = 3.55; // nose tip to stern shoulder
-const STERN_RECESS = 0.07; // tiny inward step that closes the tail
-const NOSE_ROUND = 0.95; // length of the elliptical nose cap
-const R_NOSE = 0.6; // radius where the nose cap meets the mid-hull
-const R_MAX = 0.92; // the stubby waistline
-const WIDE_AT = 2.35; // where the waistline peaks
-const R_STERN = 0.7;
 
 function smooth01(x: number): number {
   const c = Math.min(1, Math.max(0, x));
   return c * c * (3 - 2 * c);
 }
 
-function hullRadius(d: number): number {
-  if (d <= NOSE_ROUND) {
-    const u = (NOSE_ROUND - d) / NOSE_ROUND;
-    return R_NOSE * Math.sqrt(Math.max(0, 1 - u * u));
+/* ---- hull profile ----------------------------------------------------------
+ * One body-of-revolution radius function drives the hull lathe, the nose
+ * cone lathe AND every surface-mounted part, so nothing floats or sinks.
+ * d = distance aft of the ogive tip; local z = TIP_Z + d.
+ * The ogive tip sits at -1.98, not -2.2 — the antenna spike + beacon carry
+ * the silhouette out to the -2.2 envelope edge.
+ */
+const TIP_Z = -1.98;
+const PROFILE_LEN = 3.48; // tip -> skirt trailing edge (z = +1.5)
+const R_MAX = 0.85; // chunky waistline, peaks near z = +0.4
+const OGIVE_LEN = 2.38; // tip to max radius
+const WAIST_D = 2.98; // gentle waist at z = +1.0
+const R_WAIST = 0.76;
+const R_SKIRT = 0.88; // flared base skirt
+
+function profileRadius(d: number): number {
+  if (d <= OGIVE_LEN) {
+    const u = Math.max(0, d) / OGIVE_LEN;
+    // pow < 1 blunts the tip — rounded and friendly, nothing missile-sharp.
+    return R_MAX * Math.pow(Math.sin((u * Math.PI) / 2), 0.72);
   }
-  if (d <= WIDE_AT) return R_NOSE + (R_MAX - R_NOSE) * smooth01((d - NOSE_ROUND) / (WIDE_AT - NOSE_ROUND));
-  return R_MAX + (R_STERN - R_MAX) * smooth01((d - WIDE_AT) / (HULL_LEN - WIDE_AT));
+  if (d <= WAIST_D) return R_MAX + (R_WAIST - R_MAX) * smooth01((d - OGIVE_LEN) / (WAIST_D - OGIVE_LEN));
+  return R_WAIST + (R_SKIRT - R_WAIST) * smooth01((d - WAIST_D) / (PROFILE_LEN - WAIST_D));
 }
 
+/* Nose cone: separate lathe over d in [0, NOSE_END_D], fractionally proud so
+ * the seam reads as a paint break, never a gap. */
+const NOSE_END_D = 1.26; // seam at z = -0.72
+function makeNoseGeometry(): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [];
+  const N = 26;
+  for (let i = 0; i <= N; i++) {
+    const d = (i / N) * NOSE_END_D;
+    pts.push(new THREE.Vector2(profileRadius(d) * 1.012 + 0.004, d));
+  }
+  return new THREE.LatheGeometry(pts, 48);
+}
+const NOSE_GEO = makeNoseGeometry();
+
+/* Hull: starts slightly under the nose edge (overlap, no gap), runs to the
+ * skirt, then steps inward to a recessed base plate the engine hides. */
+const HULL_D0 = 1.18;
+const HULL_STEPS = 36;
+const HULL_EXTRA = 3; // stern-closure points appended after the profile
 function makeHullGeometry(): THREE.LatheGeometry {
   const pts: THREE.Vector2[] = [];
-  const N = 30;
-  for (let i = 0; i <= N; i++) {
-    const d = (i / N) * HULL_LEN;
-    pts.push(new THREE.Vector2(hullRadius(d), d));
+  for (let i = 0; i <= HULL_STEPS; i++) {
+    const d = HULL_D0 + (i / HULL_STEPS) * (PROFILE_LEN - HULL_D0);
+    pts.push(new THREE.Vector2(profileRadius(d), d));
   }
-  // Close the stern with a small recessed step — the engine plate hides it.
-  pts.push(new THREE.Vector2(R_STERN * 0.8, HULL_LEN + STERN_RECESS));
-  pts.push(new THREE.Vector2(0, HULL_LEN + STERN_RECESS));
-  return new THREE.LatheGeometry(pts, 48);
+  pts.push(new THREE.Vector2(R_SKIRT * 0.8, 3.56));
+  pts.push(new THREE.Vector2(0.3, 3.58));
+  pts.push(new THREE.Vector2(0, 3.58));
+  return new THREE.LatheGeometry(pts, 64);
 }
 const HULL_GEO = makeHullGeometry();
 
-// Darker belly panel: a partial lathe of the SAME profile, fractionally proud,
-// so it hugs the hull curvature exactly. Lathe phi=0 lands on local -Y after
-// the mesh's +90° X rotation — i.e. the belly — so a centered arc needs no
-// extra phasing.
-const BELLY_D0 = 1.35;
-const BELLY_D1 = 3.35;
-const BELLY_HALF_ARC = 0.62;
-function makeBellyGeometry(): THREE.LatheGeometry {
-  const pts: THREE.Vector2[] = [];
-  const N = 14;
-  for (let i = 0; i <= N; i++) {
-    const d = BELLY_D0 + (i / N) * (BELLY_D1 - BELLY_D0);
-    pts.push(new THREE.Vector2(hullRadius(d) * 1.02 + 0.006, d));
-  }
-  return new THREE.LatheGeometry(pts, 20, -BELLY_HALF_ARC, BELLY_HALF_ARC * 2);
+/* ---- livery texture --------------------------------------------------------
+ * Lathe UVs: u wraps the axis (canvas x), v runs point-index-wise along the
+ * profile (canvas y, flipped). Horizontal canvas bands therefore become
+ * rings. v(d) accounts for the 3 stern-closure points sharing the v range.
+ */
+const LIVERY_SIZE = 1024;
+function dToCanvasY(d: number): number {
+  const v = ((d - HULL_D0) / (PROFILE_LEN - HULL_D0)) * (HULL_STEPS / (HULL_STEPS + HULL_EXTRA));
+  return Math.round(LIVERY_SIZE * (1 - v));
 }
-const BELLY_GEO = makeBellyGeometry();
 
-/* ---- canopy + portholes -------------------------------------------------- */
-const CANOPY_Z = -1.35; // band centre — right where the nose cap blends in
-const CANOPY_ARC = 4.2; // ~241°, wrapped around the top, gap at the belly
-const CANOPY_GLASS_GEO = new THREE.TorusGeometry(0.52, 0.115, 10, 40, CANOPY_ARC);
-const CANOPY_FRAME_GEO = new THREE.TorusGeometry(0.52, 0.135, 8, 40, CANOPY_ARC);
-// Torus arcs sweep from +X toward +Y; this recenters the arc on +Y (dorsal).
-const CANOPY_ROT_Z = Math.PI / 2 - CANOPY_ARC / 2;
+let liveryCache: THREE.CanvasTexture | null = null;
+function liveryTexture(): THREE.CanvasTexture {
+  if (liveryCache) return liveryCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = LIVERY_SIZE;
+  canvas.height = LIVERY_SIZE;
+  // 2d context only fails where WebGL could not have rendered either.
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-const PORTHOLE_ZS = [-0.35, 0.1, 0.55]; // three cabins down the flank
-const PORTHOLE_TILT = -0.28; // radians below the horizontal flank line
-const PORTHOLE_RIM_GEO = new THREE.TorusGeometry(0.085, 0.02, 8, 20);
-const PORTHOLE_GLASS_GEO = new THREE.CircleGeometry(0.07, 18);
+  // Warm-white base coat.
+  ctx.fillStyle = '#f2f3f7';
+  ctx.fillRect(0, 0, LIVERY_SIZE, LIVERY_SIZE);
 
-/* ---- stripe, canards, fins ------------------------------------------------ */
-const STRIPE_Z = -0.6; // the one paint band, just behind the canopy
-const STRIPE_GEO = new THREE.TorusGeometry(hullRadius(STRIPE_Z - NOSE_TIP_Z) + 0.012, 0.03, 8, 44);
+  // Faint vertical panel seams (lines of constant u = along the hull axis).
+  ctx.strokeStyle = 'rgba(30, 36, 52, 0.09)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const x = i * 128 + 64;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, LIVERY_SIZE);
+    ctx.stroke();
+  }
+  // Two faint ring seams on the lower hull.
+  for (const d of [2.62, 3.18]) {
+    const y = dToCanvasY(d);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(LIVERY_SIZE, y);
+    ctx.stroke();
+  }
+  // Rivet dots flanking the seams along two rings.
+  ctx.fillStyle = 'rgba(30, 36, 52, 0.14)';
+  for (const d of [2.56, 3.24]) {
+    const y = dToCanvasY(d);
+    for (let i = 0; i < 32; i++) {
+      ctx.beginPath();
+      ctx.arc(i * 32 + 16, y, 2.4, 0, TAU);
+      ctx.fill();
+    }
+  }
 
-// Stub canards: a flattened capsule reads as a small rounded winglet for one
-// draw call each. Local axes before rotation: Y = span, X = thickness, Z = chord.
-const CANARD_GEO = new THREE.CapsuleGeometry(0.07, 0.42, 4, 12);
-const CANARD_POS_X = 0.76;
-const CANARD_Z = -0.85;
-const CANARD_SCALE: [number, number, number] = [0.4, 1, 2.2];
+  // The bold teal band ringing the upper hull, violet pinstripe just aft.
+  const bandTop = dToCanvasY(1.86);
+  const bandBot = dToCanvasY(1.52);
+  ctx.fillStyle = TEAL;
+  ctx.fillRect(0, bandTop, LIVERY_SIZE, bandBot - bandTop);
+  ctx.fillStyle = VIOLET;
+  ctx.fillRect(0, dToCanvasY(2.0), LIVERY_SIZE, 7);
 
-// Aft delta fins: swept, ROUND-tipped (quadratic edges — nothing missile-sharp).
-// Shape x = outboard span, y = toward the nose; extruded thin then laid flat.
-const FIN_T = 0.07;
+  // Callsign twice, opposite flanks. Drawn rotated 180° so it reads upright
+  // when the craft stands tail-down on the pad (v increases AFT).
+  for (const cx of [256, 768]) {
+    ctx.save();
+    ctx.translate(cx, dToCanvasY(2.38));
+    ctx.rotate(Math.PI);
+    ctx.fillStyle = '#1a1e2b';
+    ctx.font = "700 88px ui-monospace, 'Space Grotesk', Menlo, monospace";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('CC-01', 0, 0);
+    ctx.restore();
+
+    // Rotated-diamond gradient mark "below" the callsign (aft when standing).
+    ctx.save();
+    ctx.translate(cx, dToCanvasY(2.78));
+    ctx.rotate(Math.PI / 4);
+    const g = ctx.createLinearGradient(-26, -26, 26, 26);
+    g.addColorStop(0, TEAL);
+    g.addColorStop(1, VIOLET);
+    ctx.fillStyle = g;
+    ctx.fillRect(-26, -26, 52, 52);
+    ctx.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  liveryCache = tex;
+  return tex;
+}
+
+/* Radial glow sprite texture: white-hot core through cyan to nothing. */
+let glowCache: THREE.CanvasTexture | null = null;
+function glowTexture(): THREE.CanvasTexture {
+  if (glowCache) return glowCache;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.25, 'rgba(125,249,255,0.6)');
+  g.addColorStop(0.6, 'rgba(76,201,240,0.2)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  glowCache = tex;
+  return tex;
+}
+
+/* ---- antenna + beacon ------------------------------------------------------ */
+const ANTENNA_GEO = new THREE.CylinderGeometry(0.03, 0.012, 0.22, 8); // thin end forward after rotation
+const BEACON_GEO = new THREE.SphereGeometry(0.05, 14, 10);
+const BEACON_Z = -2.15; // forward face at -2.2: the envelope edge
+
+/* ---- portholes ------------------------------------------------------------- */
+const PORT_Z = -0.12;
+const PORT_R = profileRadius(PORT_Z - TIP_Z); // hull radius at the big window
+const PORT_RIM_GEO = new THREE.TorusGeometry(0.3, 0.05, 12, 36);
+// Slightly-domed glass: a spherical cap (base radius ≈ rim inner radius).
+const PORT_GLASS_GEO = new THREE.SphereGeometry(0.62, 28, 12, 0, TAU, 0, 0.51);
+const PORT_GLASS_OFFSET = 0.01 - 0.62 * Math.cos(0.51); // cap base flush with the rim
+const SMALL_PORTS: ReadonlyArray<readonly [number, number]> = [
+  [0.45, profileRadius(0.45 - TIP_Z) - 0.006],
+  [0.95, profileRadius(0.95 - TIP_Z) - 0.006],
+];
+const SMALL_RIM_GEO = new THREE.TorusGeometry(0.095, 0.022, 8, 22);
+const SMALL_GLASS_GEO = new THREE.CircleGeometry(0.08, 18);
+
+/* ---- side boosters ---------------------------------------------------------
+ * Three capsules strapped at 120° azimuths around the lower hull, offset 60°
+ * from the fins. Each: rounded body, black sphere tip echoing the nose, a
+ * thin teal ring, tiny nozzle, two strut stubs into the hull.
+ */
+const BOOSTER_ANGLES = [Math.PI / 2 + Math.PI / 3, Math.PI / 2 + Math.PI, Math.PI / 2 + (5 * Math.PI) / 3];
+const BOOSTER_R = 1.0; // radial stand-off of the capsule axis
+const BOOSTER_Z = 0.78;
+const BOOSTER_BODY_GEO = new THREE.CapsuleGeometry(0.22, 0.68, 6, 16);
+const BOOSTER_TIP_GEO = new THREE.SphereGeometry(0.15, 16, 12);
+const BOOSTER_RING_GEO = new THREE.TorusGeometry(0.228, 0.02, 8, 26);
+const BOOSTER_NOZZLE_GEO = new THREE.CylinderGeometry(0.09, 0.13, 0.14, 12, 1, true);
+const BOOSTER_STRUT_GEO = new THREE.BoxGeometry(0.3, 0.05, 0.05);
+
+/* ---- fins ------------------------------------------------------------------
+ * Three swept, slightly bulbous fins (extruded with bevel, ~0.07 thick) at
+ * the azimuths between the boosters, rooted in the skirt and sweeping
+ * outboard + AFT. The fin tips flatten toward small landing pads whose sole
+ * plane is exactly z = +2.2 — the aft-most geometry on the craft.
+ * Shape coords: x = outboard, y = aft; extrude depth = tangential thickness.
+ */
+const FIN_ANGLES = [Math.PI / 2, Math.PI / 2 + TAU / 3, Math.PI / 2 + (2 * TAU) / 3];
+const FIN_ROOT_X = 0.55; // root plane buried inside the hull — no gap, ever
+const FIN_ROOT_Z = 1.0;
 function makeFinGeometry(): THREE.ExtrudeGeometry {
   const s = new THREE.Shape();
-  s.moveTo(0, 0.95); // root, leading
-  s.lineTo(0, -0.55); // root, trailing
-  s.quadraticCurveTo(0.6, -0.52, 0.98, -0.28); // trailing edge sweeps out
-  s.quadraticCurveTo(1.16, -0.16, 1.06, 0.06); // rounded tip
-  s.quadraticCurveTo(0.6, 0.5, 0, 0.95); // swept leading edge home
-  const g = new THREE.ExtrudeGeometry(s, { depth: FIN_T, bevelEnabled: false });
-  g.translate(0, 0, -FIN_T / 2);
+  s.moveTo(0, -0.78); // root, leading (z = 0.22 — inside the skirt shoulder)
+  s.quadraticCurveTo(0.5, -0.5, 0.78, 0.1); // leading edge sweeps out and aft
+  s.quadraticCurveTo(1.02, 0.62, 0.94, 1.0); // bulbous outboard belly
+  s.quadraticCurveTo(0.9, 1.11, 0.78, 1.13); // flattening toward the foot
+  s.lineTo(0.62, 1.13); // foot underside (z = 2.13, pad takes over below)
+  s.quadraticCurveTo(0.3, 0.9, 0.02, 0.55); // inner trailing edge home
+  s.lineTo(0, -0.78);
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: 0.046,
+    bevelEnabled: true,
+    bevelThickness: 0.012,
+    bevelSize: 0.014,
+    bevelSegments: 2,
+  });
+  g.translate(0, 0, -0.035); // center the thickness
   return g;
 }
 const FIN_GEO = makeFinGeometry();
-const FIN_POS: [number, number, number] = [0.7, 0, 0.72];
-const FLASH_GEO = new THREE.BoxGeometry(0.3, 0.02, 0.14); // tiny accent chip on the fin
+// Teal leading-edge stripe: a thin box laid along the leading edge, a hair
+// thicker than the fin so it wraps the edge from both sides.
+const FIN_STRIPE_GEO = new THREE.BoxGeometry(1.1, 0.084, 0.12);
+const FIN_STRIPE_POS: [number, number, number] = [FIN_ROOT_X + 0.445, 0, FIN_ROOT_Z - 0.42];
+const FIN_STRIPE_YAW = -Math.atan2(0.88, 0.78);
+// Foot pad: squat cylinder under the fin tip, sole at exactly +2.2.
+const PAD_GEO = new THREE.CylinderGeometry(0.16, 0.19, 0.08, 16);
+const PAD_POS: [number, number, number] = [FIN_ROOT_X + 0.78, 0, 2.16];
 
-/* ---- landing legs ----------------------------------------------------------
- * Four legs at the diagonal azimuths (clear of fins, belly panel, and bells),
- * each a main strut + drag brace + foot pad, splaying outward and AFT. The
- * pad soles sit at exactly z = +2.2 — the aft-most geometry on the craft, so
- * a tail-down landing visibly stands on them.
+/* ---- main engine ----------------------------------------------------------- */
+const BELL_PTS = [
+  new THREE.Vector2(0.3, 0),
+  new THREE.Vector2(0.19, 0.1),
+  new THREE.Vector2(0.17, 0.16),
+  new THREE.Vector2(0.22, 0.24),
+  new THREE.Vector2(0.33, 0.33),
+  new THREE.Vector2(0.42, 0.4),
+];
+const BELL_GEO = new THREE.LatheGeometry(BELL_PTS, 32);
+const BELL_Z = 1.45; // lip at 1.85 — well inboard of the fin soles at 2.2
+
+/* ---- plume -----------------------------------------------------------------
+ * Teardrop lathe, nozzle at local 0, tip at +1 before scaling; scale.z maps
+ * thrust to length. v (uv.y) IS the tail coordinate the shader colors by.
  */
-const LEG_ANGLES = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
-// Main strut: hull (0.72, z 0.8) -> foot (1.28, z 2.02).
-const STRUT_MAIN_GEO = new THREE.CylinderGeometry(0.058, 0.048, 1.42, 10);
-const STRUT_MAIN_MID: [number, number, number] = [1.0, 0, 1.41];
-const STRUT_MAIN_TILT = Math.atan2(0.56, 1.22);
-// Drag brace: stern shoulder (0.55, z 1.32) -> same foot.
-const STRUT_BRACE_GEO = new THREE.CylinderGeometry(0.028, 0.028, 1.06, 8);
-const STRUT_BRACE_MID: [number, number, number] = [0.915, 0, 1.67];
-const STRUT_BRACE_TILT = Math.atan2(0.73, 0.7);
-const PAD_GEO = new THREE.CylinderGeometry(0.17, 0.17, 0.08, 14);
-const PAD_POS: [number, number, number] = [1.28, 0, 2.16]; // sole at z = +2.2
+function makePlumeGeometry(): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [];
+  const N = 24;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const r = t <= 0.22 ? 0.16 + 0.2 * smooth01(t / 0.22) : 0.36 * Math.pow(1 - (t - 0.22) / 0.78, 0.8);
+    pts.push(new THREE.Vector2(Math.max(0, r), t));
+  }
+  return new THREE.LatheGeometry(pts, 28);
+}
+const PLUME_GEO = makePlumeGeometry();
+const PLUME_Z = 1.7;
 
-/* ---- engine cluster --------------------------------------------------------
- * Three bells in a triangle on a stern mount plate, three independent flames.
- * Flame groups have unit-height cone pairs so thrust maps to one scale.z
- * write per flame per frame.
- */
-const PLATE_GEO = new THREE.CylinderGeometry(0.58, 0.62, 0.16, 24);
-const PLATE_Z = 1.36;
-const BELL_GEO = new THREE.CylinderGeometry(0.24, 0.12, 0.42, 20, 1, true);
-const BELL_Z = 1.52; // lip at 1.73 — well clear of the leg soles at 2.2
-const BELL_RADIAL = 0.3;
-const BELL_XY: [number, number][] = [Math.PI / 2, Math.PI / 2 + TAU / 3, Math.PI / 2 + (2 * TAU) / 3].map(
-  (a) => [BELL_RADIAL * Math.cos(a), BELL_RADIAL * Math.sin(a)],
-);
+const PLUME_VERT = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+varying float vFres;
+void main() {
+  vUv = uv;
+  float tail = uv.y;
+  // Wobble: the sheath breathes sideways, more toward the tail.
+  float w = sin(uv.x * 18.8 + uTime * 9.0 + tail * 8.0) * 0.05 * tail;
+  vec3 p = position + normal * w;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  vec3 n = normalize(normalMatrix * normal);
+  vec3 vdir = normalize(-mv.xyz);
+  vFres = pow(abs(dot(n, vdir)), 1.3);
+  gl_Position = projectionMatrix * mv;
+}`;
 
-const FLAME_ROOT_Z = 1.68; // tucked just inside the bell lips
-const FLAME_BASE_LEN = 0.45;
-const FLAME_THRUST_GAIN = 2.1;
-const FLAME_SHEATH_GEO = new THREE.ConeGeometry(0.2, 1, 18, 1, true);
-const FLAME_CORE_GEO = new THREE.ConeGeometry(0.1, 0.72, 12, 1, true);
-// Two detuned sines inside the 9-13 Hz band; per-bell phase offsets so the
-// three flames never wobble in lockstep.
+const PLUME_FRAG = /* glsl */ `
+uniform float uTime;
+uniform float uThrust;
+varying vec2 vUv;
+varying float vFres;
+void main() {
+  float tail = vUv.y;
+  vec3 col = mix(vec3(1.0), vec3(0.49, 0.976, 1.0), smoothstep(0.0, 0.45, tail)); // white-hot -> #7df9ff
+  col = mix(col, vec3(0.486, 0.227, 0.929), smoothstep(0.35, 0.95, tail));         // -> #7c3aed edge
+  float flicker = 0.82 + 0.18 * sin(uTime * 21.0 + vUv.x * 12.6) * sin(uTime * 15.0 - tail * 10.0);
+  float a = (1.0 - smoothstep(0.1, 1.0, tail)) * vFres * flicker * clamp(uThrust, 0.0, 1.0);
+  gl_FragColor = vec4(col * (1.35 + 1.1 * (1.0 - tail)), a);
+}`;
+
+// Plume length flicker: two detuned sines in the 9-13 Hz band.
 const FLICKER_HZ_A = 12.3;
 const FLICKER_HZ_B = 9.7;
 const FLICKER_AMP_A = 0.08;
 const FLICKER_AMP_B = 0.055;
-const FLAME_PHASE = [0, 2.1, 4.2];
 
-/* ---- RCS puffs -------------------------------------------------------------
- * Two faint white nose jets that only light while the mains are near-idle —
- * attitude control while docked or settling onto the legs. One shared
- * material, so the per-frame cost is a single opacity write.
- */
+/* ---- RCS puffs ------------------------------------------------------------- */
 const RCS_GEO = new THREE.ConeGeometry(0.055, 0.36, 10, 1, true);
-const RCS_AZIMUTH = 0.75; // radians off dorsal, one jet each side of the nose
+const RCS_AZIMUTH = 0.75;
 const RCS_THRUST_MAX = 0.25;
-const RCS_OPACITY_GAIN = 0.8;
 
-/* ---- exhaust trail ---------------------------------------------------------
- * Ring buffer of points recycled in place — zero allocation per frame.
- * Period x count leaves headroom over particle life so a slot is always dead
- * before it is reused. Spawn cycles across the three bells.
+/* ---- world-space trail -----------------------------------------------------
+ * The signature. Points live in SCENE space (portal), so the exhaust arcs
+ * along the flight path instead of swinging rigidly with the ship. Ring
+ * buffer recycled in place — zero allocation per frame. Shader adapted from
+ * the author's own River-Racer spray system: real-metre projected sizing via
+ * uH, and a screen-space smear along travel RELATIVE to the camera.
  */
-const TRAIL_COUNT = 80;
-const TRAIL_LIFE = 0.8;
-const TRAIL_EMIT_PERIOD = 0.013; // ~77 particles/s at full burn, ~62 alive max
-const TRAIL_THRUST_MIN = 0.12;
-const TRAIL_ROOT_Z = 1.7;
+const T_COUNT = 240;
+const T_LIFE = 2.0;
+const T_RATE = 90; // particles/s at full thrust
+const T_THRUST_MIN = 0.1;
 
-// Seeded spawn jitter and drift — the only randomness the ship is allowed,
-// so the exhaust is identical every visit.
-const TRAIL_SPAWN = new Float32Array(TRAIL_COUNT * 2);
-const TRAIL_VEL = new Float32Array(TRAIL_COUNT * 3);
+// Seeded per-slot randomness — identical exhaust every visit.
+const T_SPEED = new Float32Array(T_COUNT);
+const T_SCAT = new Float32Array(T_COUNT * 3);
+const T_SIZE = new Float32Array(T_COUNT);
+const T_SOFT = new Float32Array(T_COUNT);
+const T_SEED = new Float32Array(T_COUNT);
 {
-  const rand = mulberry32(0xc0ffee);
-  for (let i = 0; i < TRAIL_COUNT; i++) {
-    const bell = BELL_XY[i % 3] ?? [0, 0];
-    TRAIL_SPAWN[i * 2] = (bell[0] ?? 0) + (rand() - 0.5) * 0.18;
-    TRAIL_SPAWN[i * 2 + 1] = (bell[1] ?? 0) + (rand() - 0.5) * 0.18;
-    TRAIL_VEL[i * 3] = (rand() - 0.5) * 1.1; // sideways scatter
-    TRAIL_VEL[i * 3 + 1] = (rand() - 0.5) * 1.1;
-    TRAIL_VEL[i * 3 + 2] = 2.8 + rand() * 1.6; // always drifting aft (+Z)
+  const rand = mulberry32(0x7df9ff);
+  for (let i = 0; i < T_COUNT; i++) {
+    T_SPEED[i] = 3.2 + rand() * 1.8;
+    T_SCAT[i * 3] = (rand() - 0.5) * 1.6; // ±0.8 lateral scatter
+    T_SCAT[i * 3 + 1] = (rand() - 0.5) * 1.6;
+    T_SCAT[i * 3 + 2] = (rand() - 0.5) * 1.6;
+    T_SIZE[i] = 0.13 + rand() * 0.2;
+    T_SOFT[i] = 0.22 + rand() * 0.36;
+    T_SEED[i] = rand() * 6.283;
   }
 }
 
+const TRAIL_VERT = /* glsl */ `
+uniform float uH;
+uniform float uAspect;
+uniform vec3 uCamVel;
+attribute vec4 aDrop; // [diameter, alpha, softness, seed]
+attribute vec3 aVel;  // world velocity, for the motion smear
+varying float vA;
+varying float vLife;
+varying float vCore;
+varying float vRot;
+varying float vStretch;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mv;
+  float depth = max(0.05, -mv.z);
+  // Projected pixel diameter from real world size (uH = render target height).
+  float px = aDrop.x * projectionMatrix[1][1] * 0.5 * uH / depth;
+  // Smear along motion RELATIVE to the lens — a particle pacing the camera
+  // stays round however fast the world says it is going.
+  vec4 cp2 = projectionMatrix * (mv + modelViewMatrix * vec4((aVel - uCamVel) * 0.02, 0.0));
+  vec2 s1 = gl_Position.xy / max(1e-4, gl_Position.w);
+  vec2 s2 = cp2.xy / max(1e-4, cp2.w);
+  vec2 d = (s2 - s1) * vec2(uAspect, 1.0) * uH * 0.5;
+  float dl = length(d);
+  vStretch = clamp(dl / max(px, 1.5), 1.0, 2.6);
+  vRot = dl > 0.75 ? atan(d.y, d.x) : aDrop.w;
+  vCore = aDrop.z;
+  vLife = clamp(aDrop.y * 2.0, 0.0, 1.0); // alpha peaks 0.5 at birth -> 1..0 life proxy
+  // Fade anything about to swallow the lens rather than splatting a disc.
+  // Floor near zero: at 0.15 the residual still read as pale ovals drifting
+  // across the landing shot (screenshot finding).
+  vA = aDrop.y * smoothstep(0.4, 1.6, depth) * mix(1.0, 0.04, smoothstep(22.0, 60.0, px));
+  gl_PointSize = clamp(px * vStretch, 1.0, 40.0);
+}`;
+
+const TRAIL_FRAG = /* glsl */ `
+varying float vA;
+varying float vLife;
+varying float vCore;
+varying float vRot;
+varying float vStretch;
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  float ca = cos(vRot), sa = sin(vRot);
+  vec2 q = vec2(d.x * ca + d.y * sa, d.y * ca - d.x * sa);
+  q.y *= vStretch; // long axis along travel, thin across it
+  float r = length(q) * 2.0;
+  float a = vA * (1.0 - smoothstep(vCore, 1.0, r));
+  if (a < 0.004) discard;
+  // White-hot at birth through #7df9ff, dying to a faint violet.
+  vec3 col = mix(vec3(0.42, 0.25, 0.8), vec3(0.49, 0.976, 1.0), smoothstep(0.1, 0.65, vLife));
+  col = mix(col, vec3(1.6, 1.6, 1.5), smoothstep(0.8, 1.0, vLife));
+  gl_FragColor = vec4(col, a);
+}`;
+
+// Module-scope scratch — no per-frame allocation, ever.
+const SCRATCH_POS = new THREE.Vector3();
+const SCRATCH_DIR = new THREE.Vector3();
+const SCRATCH_QUAT = new THREE.Quaternion();
+const BELL_LOCAL = new THREE.Vector3(0, 0, 1.9);
+
 type TrailState = {
-  positions: Float32Array;
-  colors: Float32Array;
+  pos: Float32Array;
+  drop: Float32Array;
+  vel: Float32Array;
   ages: Float32Array;
   posAttr: THREE.BufferAttribute;
-  colAttr: THREE.BufferAttribute;
+  dropAttr: THREE.BufferAttribute;
+  velAttr: THREE.BufferAttribute;
   geo: THREE.BufferGeometry;
   cursor: number;
   accum: number;
+  camPrev: THREE.Vector3;
+  camInit: boolean;
 };
 
 function makeTrailState(): TrailState {
-  const positions = new Float32Array(TRAIL_COUNT * 3);
-  const colors = new Float32Array(TRAIL_COUNT * 3);
-  // Born dead: every slot starts past its life so nothing flashes on mount.
-  const ages = new Float32Array(TRAIL_COUNT).fill(TRAIL_LIFE);
-  const posAttr = new THREE.BufferAttribute(positions, 3);
-  const colAttr = new THREE.BufferAttribute(colors, 3);
+  const pos = new Float32Array(T_COUNT * 3);
+  const drop = new Float32Array(T_COUNT * 4);
+  const vel = new Float32Array(T_COUNT * 3);
+  const ages = new Float32Array(T_COUNT).fill(T_LIFE); // born dead — no mount flash
+  const posAttr = new THREE.BufferAttribute(pos, 3);
+  const dropAttr = new THREE.BufferAttribute(drop, 4);
+  const velAttr = new THREE.BufferAttribute(vel, 3);
   posAttr.setUsage(THREE.DynamicDrawUsage);
-  colAttr.setUsage(THREE.DynamicDrawUsage);
+  dropAttr.setUsage(THREE.DynamicDrawUsage);
+  velAttr.setUsage(THREE.DynamicDrawUsage);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', posAttr);
-  geo.setAttribute('color', colAttr);
-  return { positions, colors, ages, posAttr, colAttr, geo, cursor: 0, accum: 0 };
+  geo.setAttribute('aDrop', dropAttr);
+  geo.setAttribute('aVel', velAttr);
+  return {
+    pos,
+    drop,
+    vel,
+    ages,
+    posAttr,
+    dropAttr,
+    velAttr,
+    geo,
+    cursor: 0,
+    accum: 0,
+    camPrev: new THREE.Vector3(),
+    camInit: false,
+  };
 }
 
 type Rocket3DProps = {
-  /** 0..1 burn intensity, written by the parent every frame — read, never set. */
+  /** 0..1 burn intensity (may spike ~1.2), written by the parent each frame. */
   thrustRef: { current: number };
-  /** True freezes flicker and removes trail + RCS; flame length still tracks thrust. */
+  /** True gates ALL continuous animation; value-tracking state still follows thrust. */
   reduced: boolean;
 };
 
@@ -247,278 +496,398 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
   { thrustRef, reduced },
   ref,
 ) {
-  const flameRefs = useRef<(THREE.Group | null)[]>([null, null, null]);
+  const scene = useThree((s) => s.scene);
+  const groupRef = useRef<THREE.Group | null>(null);
+  const plumeRef = useRef<THREE.Group | null>(null);
+  const glowARef = useRef<THREE.Sprite | null>(null);
+  const glowBRef = useRef<THREE.Sprite | null>(null);
+  const lightRef = useRef<THREE.PointLight | null>(null);
   const trail = useMemo(makeTrailState, []);
 
-  // Every material shared across its meshes — one canopy/porthole glass, one
-  // hull, one dark metal for legs + bells + plate — keeps the craft's state
-  // small and lets the parent's HDRI environment light everything alike.
-  const mats = useMemo(
-    () => ({
-      hull: new THREE.MeshStandardMaterial({ color: '#dfe0e2', roughness: 0.45, metalness: 0.18 }),
-      belly: new THREE.MeshStandardMaterial({
-        color: '#8b8d91',
-        roughness: 0.6,
-        metalness: 0.22,
-        side: THREE.DoubleSide,
-      }),
-      frame: new THREE.MeshStandardMaterial({ color: '#a7a9ad', roughness: 0.5, metalness: 0.35 }),
-      metal: new THREE.MeshStandardMaterial({ color: '#4a4c50', roughness: 0.42, metalness: 0.65, side: THREE.DoubleSide }),
-      glass: new THREE.MeshStandardMaterial({
-        color: '#05080b',
-        emissive: '#173a4d',
-        emissiveIntensity: 0.5,
-        roughness: 0.18,
-        metalness: 0.1,
-      }),
-      accent: new THREE.MeshStandardMaterial({ color: ACCENT, roughness: 0.5, metalness: 0.1 }),
-      flameSheath: new THREE.MeshStandardMaterial({
-        color: '#000000',
-        emissive: ACCENT,
-        emissiveIntensity: 2.6,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      flameCore: new THREE.MeshStandardMaterial({
-        color: '#000000',
-        emissive: '#fff3e4',
-        emissiveIntensity: 3.6,
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-      rcs: new THREE.MeshBasicMaterial({
-        color: '#e8f2f8',
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-      trail: new THREE.PointsMaterial({
-        size: 0.085,
-        sizeAttenuation: true,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-      }),
-    }),
-    [],
-  );
+  const { mats, plumeU, trailU } = useMemo(() => {
+    const plumeUniforms = { uTime: { value: 0 }, uThrust: { value: 0 } };
+    const trailUniforms = {
+      uH: { value: 720 },
+      uAspect: { value: 16 / 9 },
+      uCamVel: { value: new THREE.Vector3() },
+    };
+    return {
+      plumeU: plumeUniforms,
+      trailU: trailUniforms,
+      mats: {
+        hull: new THREE.MeshStandardMaterial({
+          map: liveryTexture(),
+          color: '#ffffff',
+          roughness: 0.35,
+          metalness: 0.05,
+          envMapIntensity: 0.8,
+        }),
+        white: new THREE.MeshStandardMaterial({
+          color: '#f2f3f7',
+          roughness: 0.4,
+          metalness: 0.05,
+          envMapIntensity: 0.8,
+        }),
+        nose: new THREE.MeshStandardMaterial({
+          color: '#14161f',
+          roughness: 0.22,
+          metalness: 0.3,
+          envMapIntensity: 1.1,
+        }),
+        silver: new THREE.MeshStandardMaterial({ color: '#c9ccd4', roughness: 0.25, metalness: 0.8 }),
+        metal: new THREE.MeshStandardMaterial({
+          color: '#33363e',
+          roughness: 0.4,
+          metalness: 0.7,
+          side: THREE.DoubleSide,
+        }),
+        teal: new THREE.MeshStandardMaterial({ color: TEAL, roughness: 0.4, metalness: 0.1 }),
+        glass: new THREE.MeshStandardMaterial({
+          color: '#04070c',
+          emissive: '#1b4a5c',
+          emissiveIntensity: 0.8,
+          roughness: 0.15,
+          metalness: 0.1,
+        }),
+        beacon: new THREE.MeshStandardMaterial({
+          color: '#2a1410',
+          emissive: BEACON,
+          emissiveIntensity: 1.4,
+        }),
+        bellInner: new THREE.MeshStandardMaterial({
+          color: '#050505',
+          emissive: '#ff8a50',
+          emissiveIntensity: 1.4,
+          side: THREE.BackSide,
+        }),
+        plume: new THREE.ShaderMaterial({
+          uniforms: plumeUniforms,
+          vertexShader: PLUME_VERT,
+          fragmentShader: PLUME_FRAG,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+        glowA: new THREE.SpriteMaterial({
+          map: glowTexture(),
+          color: '#bffcff',
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+        glowB: new THREE.SpriteMaterial({
+          map: glowTexture(),
+          color: '#ffffff',
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+        rcs: new THREE.MeshBasicMaterial({
+          color: '#e8f2f8',
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          toneMapped: false,
+        }),
+        trail: new THREE.ShaderMaterial({
+          uniforms: trailUniforms,
+          vertexShader: TRAIL_VERT,
+          fragmentShader: TRAIL_FRAG,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      },
+    };
+  }, []);
 
   useFrame((state, rawDt) => {
-    // Clamp dt so a backgrounded tab does not dump a giant step into the
-    // emitter loop or teleport the embers on return.
+    // Clamp dt: a backgrounded tab must not dump a giant step into the sim.
     const dt = Math.min(rawDt, 0.05);
     const thrust = thrustRef.current;
     const t = state.clock.elapsedTime;
 
-    // Flame length always tracks thrust — that is state, not animation — but
-    // the flicker is motion, so it is gated behind reduced.
-    for (let i = 0; i < 3; i++) {
-      const flame = flameRefs.current[i];
-      if (!flame) continue;
-      let flicker = 1;
+    // ---- plume: length/swell track thrust (state, allowed under reduced);
+    // the shader time + length flicker are motion, gated off.
+    plumeU.uThrust.value = Math.min(Math.max(thrust, 0), 1.2);
+    plumeU.uTime.value = reduced ? 0 : t;
+    const plume = plumeRef.current;
+    if (plume) {
+      let flick = 1;
       if (!reduced) {
-        const p = FLAME_PHASE[i] ?? 0;
-        flicker =
+        flick =
           1 +
-          FLICKER_AMP_A * Math.sin(t * FLICKER_HZ_A * TAU + p) +
-          FLICKER_AMP_B * Math.sin(t * FLICKER_HZ_B * TAU + p * 1.7 + 0.9);
+          FLICKER_AMP_A * Math.sin(t * FLICKER_HZ_A * TAU) +
+          FLICKER_AMP_B * Math.sin(t * FLICKER_HZ_B * TAU + 0.9);
       }
-      flame.scale.z = (FLAME_BASE_LEN + thrust * FLAME_THRUST_GAIN) * flicker;
+      const swell = 1 + thrust * 0.25;
+      plume.scale.set(swell, swell, (0.5 + thrust * 2.6) * flick);
     }
+
+    // ---- nozzle glow sprites + exhaust light: value-tracking state.
+    const ga = glowARef.current;
+    if (ga) {
+      const s = 0.7 + thrust * 1.7;
+      ga.scale.set(s, s, 1);
+    }
+    const gb = glowBRef.current;
+    if (gb) {
+      const s = 0.35 + thrust * 0.9;
+      gb.scale.set(s, s, 1);
+    }
+    mats.glowA.opacity = Math.min(1, thrust * 0.85);
+    mats.glowB.opacity = Math.min(1, thrust * 1.1);
+    const light = lightRef.current;
+    if (light) light.intensity = thrust * 26;
+
+    // ---- beacon: gentle 1.2 Hz pulse; steady glow under reduced.
+    mats.beacon.emissiveIntensity = reduced ? 1.4 : 1.1 + 0.7 * Math.sin(t * 1.2 * TAU);
 
     // Everything past here is pure motion — under reduced neither the RCS
-    // jets nor the trail are even rendered, so nothing to simulate either.
+    // jets nor the trail even render, so there is nothing to simulate.
     if (reduced) return;
 
-    // RCS lights up only near idle: docked/landing attitude control.
-    mats.rcs.opacity = thrust < RCS_THRUST_MAX ? (RCS_THRUST_MAX - thrust) * RCS_OPACITY_GAIN : 0;
+    // ---- RCS: attitude puffs only near idle thrust.
+    mats.rcs.opacity = thrust < RCS_THRUST_MAX ? (RCS_THRUST_MAX - thrust) * 0.8 : 0;
 
-    const { positions, colors, ages } = trail;
+    // ---- trail: camera velocity for the screen-space smear.
+    const cam = state.camera;
+    const camVel = trailU.uCamVel.value;
+    if (trail.camInit && dt > 5e-4) {
+      camVel.copy(cam.position).sub(trail.camPrev).divideScalar(dt);
+      const m = camVel.length();
+      if (m > 60) camVel.multiplyScalar(60 / m); // a camera snap must not smear the world
+    }
+    trail.camPrev.copy(cam.position);
+    trail.camInit = true;
 
-    // Age, drift, and fade every live particle in place. Dead slots get their
-    // color zeroed, which with additive blending makes them invisible.
-    for (let i = 0; i < TRAIL_COUNT; i++) {
-      const age = (ages[i] ?? TRAIL_LIFE) + dt;
+    const { pos, drop, vel, ages } = trail;
+
+    // Age, integrate and fade every live particle in place.
+    for (let i = 0; i < T_COUNT; i++) {
+      const age = (ages[i] ?? T_LIFE) + dt;
       ages[i] = age;
-      const k = i * 3;
-      if (age >= TRAIL_LIFE) {
-        colors[k] = 0;
-        colors[k + 1] = 0;
-        colors[k + 2] = 0;
+      const q = i * 4;
+      if (age >= T_LIFE) {
+        drop[q + 1] = 0;
         continue;
       }
-      positions[k] = (positions[k] ?? 0) + (TRAIL_VEL[k] ?? 0) * dt;
-      positions[k + 1] = (positions[k + 1] ?? 0) + (TRAIL_VEL[k + 1] ?? 0) * dt;
-      positions[k + 2] = (positions[k + 2] ?? 0) + (TRAIL_VEL[k + 2] ?? 0) * dt;
-      // Quadratic fade, whitish at birth cooling to the accent ember colour.
-      const life = 1 - age / TRAIL_LIFE;
-      const f = life * life;
-      const hot = f * life;
-      colors[k] = f;
-      colors[k + 1] = f * (0.36 + 0.5 * hot);
-      colors[k + 2] = f * (0.22 + 0.45 * hot);
+      const k = i * 3;
+      pos[k] = (pos[k] ?? 0) + (vel[k] ?? 0) * dt;
+      pos[k + 1] = (pos[k + 1] ?? 0) + (vel[k + 1] ?? 0) * dt;
+      pos[k + 2] = (pos[k + 2] ?? 0) + (vel[k + 2] ?? 0) * dt;
+      const u = age / T_LIFE;
+      const inv = 1 - u;
+      drop[q] = (T_SIZE[i] ?? 0.2) * (0.65 + u * 1.35); // exhaust expands as it cools
+      drop[q + 1] = 0.5 * inv * inv * Math.min(1, age * 12); // peak ~0.5, quadratic fade
     }
 
-    // Emit on a fixed cadence while burning; the accumulator resets when the
-    // burn stops so a coast does not bank up a burst of embers.
-    if (thrust > TRAIL_THRUST_MIN) {
-      trail.accum += dt;
-      while (trail.accum >= TRAIL_EMIT_PERIOD) {
-        trail.accum -= TRAIL_EMIT_PERIOD;
-        const i = trail.cursor;
-        trail.cursor = (i + 1) % TRAIL_COUNT;
-        ages[i] = 0;
-        const k = i * 3;
-        positions[k] = TRAIL_SPAWN[i * 2] ?? 0;
-        positions[k + 1] = TRAIL_SPAWN[i * 2 + 1] ?? 0;
-        positions[k + 2] = 0; // born at the bell lips, drifts aft from there
+    // Emit from the bell's WORLD position, aft along the ship's WORLD +Z.
+    if (thrust > T_THRUST_MIN) {
+      const g = groupRef.current;
+      if (g) {
+        g.updateWorldMatrix(true, false);
+        g.localToWorld(SCRATCH_POS.copy(BELL_LOCAL));
+        g.getWorldQuaternion(SCRATCH_QUAT);
+        SCRATCH_DIR.set(0, 0, 1).applyQuaternion(SCRATCH_QUAT).normalize();
+        trail.accum += T_RATE * Math.min(thrust, 1.2) * dt;
+        while (trail.accum >= 1) {
+          trail.accum -= 1;
+          const i = trail.cursor;
+          trail.cursor = (i + 1) % T_COUNT;
+          ages[i] = 0;
+          const k = i * 3;
+          const q = i * 4;
+          pos[k] = SCRATCH_POS.x + (T_SCAT[k] ?? 0) * 0.06;
+          pos[k + 1] = SCRATCH_POS.y + (T_SCAT[k + 1] ?? 0) * 0.06;
+          pos[k + 2] = SCRATCH_POS.z + (T_SCAT[k + 2] ?? 0) * 0.06;
+          const spd = T_SPEED[i] ?? 4;
+          vel[k] = SCRATCH_DIR.x * spd + (T_SCAT[k] ?? 0) * 0.8;
+          vel[k + 1] = SCRATCH_DIR.y * spd + (T_SCAT[k + 1] ?? 0) * 0.8;
+          vel[k + 2] = SCRATCH_DIR.z * spd + (T_SCAT[k + 2] ?? 0) * 0.8;
+          drop[q + 2] = T_SOFT[i] ?? 0.3;
+          drop[q + 3] = T_SEED[i] ?? 0;
+        }
       }
     } else {
-      trail.accum = 0;
+      trail.accum = 0; // a coast must not bank up a burst
     }
 
     trail.posAttr.needsUpdate = true;
-    trail.colAttr.needsUpdate = true;
+    trail.dropAttr.needsUpdate = true;
+    trail.velAttr.needsUpdate = true;
   });
 
   return (
-    <group ref={ref}>
-      {/* Hull + belly panel — lathes share the one profile function. The +90°
-          X rotation maps the lathe axis onto local Z, nose tip at NOSE_TIP_Z. */}
-      <mesh geometry={HULL_GEO} material={mats.hull} position={[0, 0, NOSE_TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
-      <mesh geometry={BELLY_GEO} material={mats.belly} position={[0, 0, NOSE_TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
+    <group
+      ref={(g: THREE.Group | null) => {
+        groupRef.current = g;
+        if (typeof ref === 'function') ref(g);
+        else if (ref) ref.current = g;
+      }}
+    >
+      {/* Hull + nose cone — lathes share one profile function; the +90° X
+          rotation maps the lathe axis onto local Z, tip toward -Z. */}
+      <mesh geometry={HULL_GEO} material={mats.hull} position={[0, 0, TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
+      <mesh geometry={NOSE_GEO} material={mats.nose} position={[0, 0, TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
 
-      {/* Crew canopy: frame ring behind, glass band proud of it, wrapped over
-          the top of the nose. Faint cool emissive — a lit flight deck, not a
-          lamp; it must never compete with the flames. */}
-      <group position={[0, 0, CANOPY_Z]} rotation={[0, 0, CANOPY_ROT_Z]}>
-        <mesh geometry={CANOPY_FRAME_GEO} material={mats.frame} scale={[1, 1, 2.5]} />
-        <mesh geometry={CANOPY_GLASS_GEO} material={mats.glass} scale={[1, 1, 2.1]} />
-      </group>
+      {/* Antenna spike + beacon carrying the silhouette to the -2.2 edge. */}
+      <mesh geometry={ANTENNA_GEO} material={mats.silver} position={[0, 0, -2.08]} rotation={[Math.PI / 2, 0, 0]} />
+      <mesh geometry={BEACON_GEO} material={mats.beacon} position={[0, 0, BEACON_Z]} />
 
-      {/* The one paint stripe — matte accent band just behind the canopy. */}
-      <mesh
-        geometry={STRIPE_GEO}
-        material={mats.accent}
-        position={[0, 0, STRIPE_Z]}
-        scale={[1, 1, 1.4]}
-      />
-
-      {/* Three portholes down the starboard flank, just under the shoulder
-          line — cabin windows for the people who live in this thing. */}
-      <group rotation={[0, 0, PORTHOLE_TILT]}>
-        {PORTHOLE_ZS.map((z) => {
-          const r = hullRadius(z - NOSE_TIP_Z);
-          return (
-            <group key={z} position={[r + 0.004, 0, z]} rotation={[0, Math.PI / 2, 0]}>
-              <mesh geometry={PORTHOLE_RIM_GEO} material={mats.frame} />
-              <mesh geometry={PORTHOLE_GLASS_GEO} material={mats.glass} position={[0, 0, 0.006]} />
-            </group>
-          );
-        })}
-      </group>
-
-      {/* Stub canards near the nose — flattened capsules, rounded by nature. */}
-      {[1, -1].map((s) => (
+      {/* The big porthole — polished rim, slightly-domed glass, faint cyan
+          interior. Someone rides this thing. */}
+      <group position={[PORT_R - 0.02, 0, PORT_Z]} rotation={[0, Math.PI / 2, 0]}>
+        <mesh geometry={PORT_RIM_GEO} material={mats.silver} scale={[1, 1, 1.6]} />
         <mesh
-          key={s}
-          geometry={CANARD_GEO}
-          material={mats.frame}
-          position={[s * CANARD_POS_X, 0.02, CANARD_Z]}
-          rotation={[0, 0, (s * Math.PI) / 2]}
-          scale={CANARD_SCALE}
+          geometry={PORT_GLASS_GEO}
+          material={mats.glass}
+          position={[0, 0, PORT_GLASS_OFFSET]}
+          rotation={[Math.PI / 2, 0, 0]}
         />
-      ))}
+      </group>
 
-      {/* Aft delta fins with their tiny accent flashes — the mirror group
-          flips the whole pair to the port side. */}
-      {[0, Math.PI].map((flip) => (
-        <group key={flip} rotation={[0, 0, flip]}>
-          <mesh geometry={FIN_GEO} material={mats.frame} position={FIN_POS} rotation={[-Math.PI / 2, 0, 0]} />
-          <mesh geometry={FLASH_GEO} material={mats.accent} position={[0.95, 0.042, 0.82]} />
+      {/* Two small secondary portholes lower down the same flank. */}
+      <group rotation={[0, 0, -0.3]}>
+        {SMALL_PORTS.map(([z, r]) => (
+          <group key={z} position={[r, 0, z]} rotation={[0, Math.PI / 2, 0]}>
+            <mesh geometry={SMALL_RIM_GEO} material={mats.silver} />
+            <mesh geometry={SMALL_GLASS_GEO} material={mats.glass} position={[0, 0, 0.008]} />
+          </group>
+        ))}
+      </group>
+
+      {/* Three side boosters at 120° azimuths, offset 60° from the fins. */}
+      {BOOSTER_ANGLES.map((a) => (
+        <group key={a} rotation={[0, 0, a]}>
+          <mesh
+            geometry={BOOSTER_BODY_GEO}
+            material={mats.white}
+            position={[BOOSTER_R, 0, BOOSTER_Z]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+          <mesh geometry={BOOSTER_TIP_GEO} material={mats.nose} position={[BOOSTER_R, 0, 0.24]} />
+          <mesh geometry={BOOSTER_RING_GEO} material={mats.teal} position={[BOOSTER_R, 0, 0.6]} />
+          <mesh
+            geometry={BOOSTER_NOZZLE_GEO}
+            material={mats.metal}
+            position={[BOOSTER_R, 0, 1.42]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+          {[0.42, 1.1].map((z) => (
+            <mesh key={z} geometry={BOOSTER_STRUT_GEO} material={mats.silver} position={[0.88, 0, z]} />
+          ))}
         </group>
       ))}
 
-      {/* Four landing legs, always deployed: main strut + drag brace + pad,
-          splayed outward and aft. Pad soles at z = +2.2 — the aft-most
-          geometry, so the tail-down finale stands on them. */}
-      {LEG_ANGLES.map((a) => (
+      {/* Three swept fins + landing pads. Pad soles at exactly z = +2.2 —
+          the aft-most geometry, so the tail-down finale stands on them. */}
+      {FIN_ANGLES.map((a) => (
         <group key={a} rotation={[0, 0, a]}>
-          <group position={STRUT_MAIN_MID} rotation={[0, STRUT_MAIN_TILT, 0]}>
-            <mesh geometry={STRUT_MAIN_GEO} material={mats.metal} rotation={[Math.PI / 2, 0, 0]} />
-          </group>
-          <group position={STRUT_BRACE_MID} rotation={[0, STRUT_BRACE_TILT, 0]}>
-            <mesh geometry={STRUT_BRACE_GEO} material={mats.metal} rotation={[Math.PI / 2, 0, 0]} />
-          </group>
+          <mesh
+            geometry={FIN_GEO}
+            material={mats.white}
+            position={[FIN_ROOT_X, 0, FIN_ROOT_Z]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+          <mesh
+            geometry={FIN_STRIPE_GEO}
+            material={mats.teal}
+            position={FIN_STRIPE_POS}
+            rotation={[0, FIN_STRIPE_YAW, 0]}
+          />
           <mesh geometry={PAD_GEO} material={mats.metal} position={PAD_POS} rotation={[Math.PI / 2, 0, 0]} />
         </group>
       ))}
 
-      {/* Engine cluster: stern mount plate and three bells in a triangle. */}
-      <mesh geometry={PLATE_GEO} material={mats.metal} position={[0, 0, PLATE_Z]} rotation={[Math.PI / 2, 0, 0]} />
-      {BELL_XY.map(([bx, by], i) => (
-        <mesh
-          key={i}
-          geometry={BELL_GEO}
-          material={mats.metal}
-          position={[bx, by, BELL_Z]}
-          rotation={[Math.PI / 2, 0, 0]}
-        />
-      ))}
+      {/* Main engine bell: dark flared shell, warm emissive throat. */}
+      <mesh geometry={BELL_GEO} material={mats.metal} position={[0, 0, BELL_Z]} rotation={[Math.PI / 2, 0, 0]} />
+      <mesh
+        geometry={BELL_GEO}
+        material={mats.bellInner}
+        position={[0, 0, BELL_Z]}
+        rotation={[Math.PI / 2, 0, 0]}
+        scale={[0.92, 1, 0.92]}
+      />
 
-      {/* Three flames — nested unit cones stretched aft by scale.z each frame.
-          Additive, no depth writes, emissive hot enough for bloom; initial
-          scale matches idle thrust so mount does not pop. */}
-      {BELL_XY.map(([bx, by], i) => (
-        <group
-          key={i}
-          position={[bx, by, FLAME_ROOT_Z]}
-          scale={[1, 1, FLAME_BASE_LEN]}
-          ref={(g) => {
-            flameRefs.current[i] = g;
-          }}
-        >
-          <mesh geometry={FLAME_SHEATH_GEO} material={mats.flameSheath} position={[0, 0, 0.5]} rotation={[Math.PI / 2, 0, 0]} />
-          <mesh geometry={FLAME_CORE_GEO} material={mats.flameCore} position={[0, 0, 0.36]} rotation={[Math.PI / 2, 0, 0]} />
-        </group>
-      ))}
+      {/* Shader plume — teardrop stretched aft by one scale write per frame. */}
+      <group
+        position={[0, 0, PLUME_Z]}
+        scale={[1, 1, 0.5]}
+        ref={(g) => {
+          plumeRef.current = g;
+        }}
+      >
+        <mesh geometry={PLUME_GEO} material={mats.plume} rotation={[Math.PI / 2, 0, 0]} frustumCulled={false} />
+      </group>
 
-      {/* RCS nose jets — only visible near idle thrust (opacity driven in the
-          frame loop), and pure motion, so absent entirely under reduced. */}
+      {/* Nozzle glow: two additive sprites + the exhaust light that paints
+          teal onto nearby hull and planets. */}
+      <sprite
+        material={mats.glowA}
+        position={[0, 0, 1.92]}
+        ref={(s) => {
+          glowARef.current = s;
+        }}
+      />
+      <sprite
+        material={mats.glowB}
+        position={[0, 0, 1.86]}
+        ref={(s) => {
+          glowBRef.current = s;
+        }}
+      />
+      <pointLight
+        color={TEAL_BRIGHT}
+        intensity={0}
+        distance={30}
+        decay={2}
+        position={[0, 0, 2.05]}
+        ref={(l) => {
+          lightRef.current = l;
+        }}
+      />
+
+      {/* RCS nose puffs — only near idle (opacity in the frame loop), pure
+          motion, absent entirely under reduced. */}
       {!reduced &&
         [1, -1].map((s) => (
           <group key={s} rotation={[0, 0, s * RCS_AZIMUTH]}>
-            <mesh
-              geometry={RCS_GEO}
-              material={mats.rcs}
-              position={[0, 0.66, -1.87]}
-              rotation={[Math.PI - 0.55, 0, 0]}
-            />
+            <mesh geometry={RCS_GEO} material={mats.rcs} position={[0, 0.46, -1.52]} rotation={[Math.PI - 0.5, 0, 0]} />
           </group>
         ))}
 
-      {/* Ember trail — absent entirely under reduced motion. Culling is off
-          because the buffer's resting bounds are a point at the origin. */}
-      {!reduced && (
-        <points
-          geometry={trail.geo}
-          material={mats.trail}
-          position={[0, 0, TRAIL_ROOT_Z]}
-          frustumCulled={false}
-        />
-      )}
+      {/* World-space trail: portaled to the scene root so particles stay
+          where they were emitted and the exhaust arcs along the flight path.
+          Absent entirely under reduced motion. */}
+      {!reduced &&
+        createPortal(
+          <points
+            geometry={trail.geo}
+            material={mats.trail}
+            frustumCulled={false}
+            ref={(p: THREE.Points | null) => {
+              if (!p) return;
+              // gl_PointSize is device pixels: read the height of whatever
+              // target is being drawn into (bloom renders off-screen).
+              p.onBeforeRender = (renderer) => {
+                const rt = renderer.getRenderTarget();
+                const w = rt ? rt.width : renderer.domElement.width;
+                const h = rt ? rt.height : renderer.domElement.height;
+                trailU.uH.value = h;
+                trailU.uAspect.value = w / Math.max(1, h);
+              };
+            }}
+          />,
+          scene,
+        )}
     </group>
   );
 });

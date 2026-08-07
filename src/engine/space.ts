@@ -63,7 +63,7 @@ const madd3 = (base: Vec3, dir: Vec3, k: number): Vec3 => [
   base[2] + dir[2] * k,
 ];
 
-const STEP = 95; // world units between stations
+export const STEP = 95; // world units between stations — scene layers size to this
 const PHI = 2.399963; // golden angle — non-repeating drift, same as the 2D layout
 
 /**
