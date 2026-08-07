@@ -68,15 +68,22 @@ export function Experience() {
 }
 
 /** Layout-matched skeleton of the splash — never a spinner, gone in well
- *  under the 800ms budget on any sane connection. */
+ *  under the 800ms budget on any sane connection. Keeps the SAME header the
+ *  pre-rendered index.html shell painted, so a returning visitor's headline
+ *  never blinks out while their pass is re-validated. */
 function SplashSkeleton() {
   return (
     <main className="grid min-h-dvh place-items-center px-5 py-12">
       <div className="w-full max-w-lg">
-        <SkLine w="w40" />
-        <div className="sk sk-big" />
-        <SkLine w="w80" />
-        <SkLine w="w60" />
+        <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
+          A résumé you pilot.
+        </h1>
+        <div className="mt-6">
+          <SkLine w="w80" />
+          <SkLine w="w60" />
+          <SkLine w="w40" />
+        </div>
       </div>
     </main>
   );

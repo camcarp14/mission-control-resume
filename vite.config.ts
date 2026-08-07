@@ -12,13 +12,17 @@ export default defineConfig({
       output: {
         // Split the vendor floor out so route chunks stay small and the shell
         // can paint before the rest of the app arrives.
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          supabase: ['@supabase/supabase-js'],
-          // Framer Motion is only imported by the lazy flight chunk; naming it
-          // here keeps the flight chunk itself under the budget and lets the
-          // browser fetch both in parallel after the gate unlocks.
-          motion: ['framer-motion'],
+        // Function form, not object form: object-form manualChunks hoists the
+        // named chunks into the ENTRY's preload graph — measured: an explicit
+        // 'motion' entry made index.html modulepreload 87 kB of Framer Motion
+        // on the gate screen, which the gate never imports. With the function
+        // form, modules stay exactly where the import graph puts them: react
+        // in the entry, framer-motion inside the lazy flight chunk, supabase
+        // in its own lazy chunk.
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('react-router')) return 'react';
+          if (id.includes('@supabase')) return 'supabase';
+          return undefined;
         },
       },
     },

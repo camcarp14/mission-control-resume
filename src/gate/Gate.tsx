@@ -169,9 +169,13 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
 }
 
 function Splash({ children }: { children: React.ReactNode }) {
+  // No pagefade on the wrapper: this header is ALREADY on screen — index.html
+  // pre-renders the identical markup so first paint never waits for JS (and
+  // never fades from opacity 0, which suppresses FCP entirely). Only the form
+  // below staggers in.
   return (
     <main className="grid min-h-dvh place-items-center px-5 py-12">
-      <div className="pagefade w-full max-w-lg">
+      <div className="w-full max-w-lg">
         <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
           A résumé you pilot.

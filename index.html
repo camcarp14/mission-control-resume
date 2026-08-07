@@ -11,18 +11,45 @@
       content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
     />
     <!--
-      Ground colour is painted by the document itself, before any CSS or JS
-      arrives. This is what buys "zero blank frame" on a cold 3G load — the
-      shell is dark from the first paint instead of flashing white.
+      Ground colour AND the gate's headline are painted by the document
+      itself, before any CSS or JS arrives. The pre-rendered shell below is
+      the app's real first contentful paint: without it, the entire page
+      arrives via a fade-from-opacity-0 after ~250 kB of JS, and Lighthouse
+      (correctly) records NO FCP at all. React renders the identical header
+      over this markup, so the swap is invisible.
     -->
     <style>
       html { background: #08090b; color-scheme: dark; }
-      body { margin: 0; background: #08090b; color: #e8e6e1; }
+      body { margin: 0; background: #08090b; color: #e8e6e1;
+             font-family: 'Inter var', ui-sans-serif, system-ui, -apple-system, sans-serif; }
       #root { min-height: 100dvh; }
+      .mc-shell { min-height: 100dvh; display: grid; place-items: center; padding: 48px 20px; }
+      .mc-shell > div { width: 100%; max-width: 32rem; }
+      .mc-eyebrow { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-size: 10px; line-height: 14px; letter-spacing: 0.06em;
+                    text-transform: uppercase; color: #737c88; }
+      .mc-h1 { margin: 12px 0 0; font-size: 24px; font-weight: 600;
+               letter-spacing: -0.025em; text-wrap: balance; color: #e8e6e1; }
+      .mc-intro { margin: 12px 0 0; max-width: 65ch; font-size: 12.5px;
+                  line-height: 1.625; color: #8b929c; }
+      @media (min-width: 768px) { .mc-h1 { font-size: 30px; } }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="mc-shell">
+        <div>
+          <p class="mc-eyebrow">Mission Control</p>
+          <h1 class="mc-h1">A résumé you pilot.</h1>
+          <p class="mc-intro">
+            Eleven stations, one rocket: the real artifacts behind an adtech Solutions
+            Consultant's career, flown deliberately rather than scrolled. Enter your access code
+            to lift off — about four minutes end to end. In a hurry? The PDF is right below, no
+            code needed.
+          </p>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

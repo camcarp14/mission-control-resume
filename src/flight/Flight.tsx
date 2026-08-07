@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LazyMotion,
   domAnimation,
@@ -74,8 +74,11 @@ export default function Flight({
   const [visited, setVisited] = useState(start);
   const [fromIdx, setFromIdx] = useState(start);
   const [flareKey, setFlareKey] = useState(0);
-  const [announce, setAnnounce] = useState('');
   const currentRef = useRef(start);
+  // The live region is written DIRECTLY (textContent), never via state: a
+  // setState here re-renders the whole flight tree inside the arrival window
+  // — measured as a ~55ms task under 4× CPU throttle, for one string.
+  const announceRef = useRef<HTMLDivElement>(null);
 
   const t = useMotionValue(start);
   const kick = useMotionValue(0);
@@ -103,7 +106,9 @@ export default function Flight({
   const focusPanel = useCallback((i: number) => {
     panelRefs.current.get(i)?.focus({ preventScroll: true });
     const s = stations[i];
-    if (s) setAnnounce(`Station ${i + 1} of ${N} — ${s.title}`);
+    if (s && announceRef.current) {
+      announceRef.current.textContent = `Station ${i + 1} of ${N} — ${s.title}`;
+    }
   }, []);
 
   const goTo = useCallback(
@@ -112,32 +117,44 @@ export default function Flight({
       const from = currentRef.current;
       if (c === from) return;
       currentRef.current = c;
-      setFromIdx(from);
-      setCurrent(c);
-      setVisited((v) => Math.max(v, c));
 
       if (reduced) {
         // Reduced motion: an instant reposition and a cross-fade — the flight
         // becomes a slideshow, every control identical.
-        t.set(c);
         setFromIdx(c);
+        setCurrent(c);
+        setVisited((v) => Math.max(v, c));
+        t.set(c);
         return;
       }
 
       const dur = clampN(0.25 + 0.05 * Math.abs(c - from), 0.25, 0.4);
       const dir = c > from ? 1 : -1;
-      setFlareKey((k) => k + 1); // thrust burst on departure
       animate(kick, KICK * dir, { duration: dur * 0.5, ease: 'easeOut' });
       animate(t, c, {
         duration: dur,
         ease: [0.22, 1, 0.36, 1], // the house --ease-out; monotone, no overshoot
         onComplete: () => {
-          setFromIdx(c);
           // The settle: an underdamped spring back to rest overshoots a few
           // px past the dock — the mass the eye expects.
           animate(kick, 0, { type: 'spring', stiffness: 380, damping: 13 });
           focusPanel(c);
+          // Shrinking the panel window unmounts DOM — time-sliced, off the
+          // arrival frame.
+          startTransition(() => setFromIdx(c));
         },
+      });
+      // The React commit (windowing mounts, rail state, flame re-key) is real
+      // work — measured at 50–90ms under 4× CPU throttle. It does NOT belong
+      // in the keydown task: let the first animation frame paint, then commit
+      // as a transition so the mount can't stretch an interaction long task.
+      requestAnimationFrame(() => {
+        startTransition(() => {
+          setFromIdx(from);
+          setCurrent(c);
+          setVisited((v) => Math.max(v, c));
+          setFlareKey((k) => k + 1); // thrust burst on departure
+        });
       });
     },
     [reduced, t, kick, focusPanel],
@@ -245,9 +262,7 @@ export default function Flight({
     <LazyMotion features={domAnimation} strict>
       <HUD mode={mode} current={current} onToggleMode={toggleMode} />
       {/* Screen readers hear each docking; sighted users see the panel. */}
-      <div aria-live="polite" className="sr-only">
-        {announce}
-      </div>
+      <div ref={announceRef} aria-live="polite" className="sr-only" />
 
       {mode === 'static' ? (
         <StaticMode />
@@ -268,7 +283,7 @@ export default function Flight({
                   path={path}
                   flip={flip}
                   reduced={reduced}
-                  isCurrent={i === current}
+                  active={i === current}
                   onRegister={registerPanel}
                 />
               );

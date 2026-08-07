@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { m, useTransform } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import type { FlightPath, Vec } from '../engine';
@@ -18,7 +19,7 @@ export function StationPanel({
   path,
   flip,
   reduced,
-  isCurrent,
+  active,
   onRegister,
 }: {
   station: Station;
@@ -28,9 +29,19 @@ export function StationPanel({
   path: FlightPath;
   flip: number;
   reduced: boolean;
-  isCurrent: boolean;
+  /** True when this is the docked station. Non-active panels are scenery. */
+  active: boolean;
   onRegister: (index: number, el: HTMLElement | null) => void;
 }) {
+  const secRef = useRef<HTMLElement | null>(null);
+
+  // Neighbour panels are a visual preview at 40% opacity — to a screen reader
+  // or the Tab key they must not exist at all. `inert` removes them from both
+  // the a11y tree and focus order in one attribute (aria-hidden alone would
+  // leave focusable links inside — an axe critical).
+  useEffect(() => {
+    if (secRef.current) secRef.current.inert = !active;
+  }, [active]);
   const transform = useTransform(t, (v) => {
     const p = path.posAt(v);
     return `translate3d(${pos.x - p.x}px, ${(pos.y - p.y) * flip}px, 0)`;
@@ -40,18 +51,23 @@ export function StationPanel({
   const opacity = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index), 1) * 0.62);
   const scale = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index), 1) * 0.05);
 
+  // No re-keying, no remount on arrival: rebuilding the content DOM mid-
+  // transition cost 50ms+ under 4× CPU throttle (a measured long task inside
+  // the interaction window). The arrival choreography is carried entirely by
+  // the distance-driven opacity/scale above plus a one-time compositor-only
+  // pagefade when the panel first mounts (off-screen for neighbours, the
+  // liftoff moment for station 1).
   const body = (
     <section
-      ref={(el) => onRegister(index, el)}
+      ref={(el) => {
+        secRef.current = el;
+        onRegister(index, el);
+      }}
       tabIndex={-1}
       aria-label={`Station ${index + 1}: ${station.title}`}
-      className="panel"
+      className={reduced ? 'panel' : 'panel pagefade'}
     >
-      {/* Re-keying on arrival replays the entrance choreography exactly once
-          per visit to the station — content rises as the rocket settles. */}
-      <div key={isCurrent ? 'here' : 'away'} className={isCurrent && !reduced ? 'stagger' : undefined}>
-        <StationContent station={station} />
-      </div>
+      <StationContent station={station} />
     </section>
   );
 

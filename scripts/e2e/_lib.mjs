@@ -43,13 +43,18 @@ export function ensureBuild({ force = false } = {}) {
   }
 }
 
-/** Serve dist-e2e with `vite preview` (SPA fallback included). */
+/** Serve dist-e2e with `vite preview` (SPA fallback included).
+ *  Spawned DETACHED in its own process group and killed by group: an `npx`
+ *  wrapper here once survived its own kill(), orphaning the real vite process
+ *  — which held the shared stdio pipes (scripts hung at exit on the GREEN
+ *  path) and squatted the strict port for the next run. */
 export function serve(port) {
   ensureBuild();
-  const child = spawn('npx', ['vite', 'preview', '--outDir', 'dist-e2e', '--port', String(port), '--strictPort'], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const child = spawn(
+    join(ROOT, 'node_modules', '.bin', 'vite'),
+    ['preview', '--outDir', 'dist-e2e', '--port', String(port), '--strictPort'],
+    { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
+  );
   const url = `http://localhost:${port}`;
   const ready = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('vite preview did not start in 20s')), 20000);
@@ -63,7 +68,14 @@ export function serve(port) {
     child.stderr.on('data', watch);
     child.on('exit', (code) => reject(new Error(`vite preview exited early (${code})`)));
   });
-  return { url, ready, kill: () => child.kill('SIGTERM') };
+  const kill = () => {
+    try {
+      process.kill(-child.pid, 'SIGTERM'); // whole group, wrappers included
+    } catch {
+      child.kill('SIGTERM');
+    }
+  };
+  return { url, ready, kill };
 }
 
 /** Dashboard fixtures the mock serves for the correct passcode. */

@@ -13,7 +13,8 @@ export default {
         'rule-strong': 'rgba(255,255,255,0.14)',
         ink: '#e8e6e1',
         dim: '#8b929c',
-        faint: '#5a616b',
+        faint: '#737c88', // 4.5:1 on panel — informational text, so AA applies
+
         accent: '#ff5c37',
         'accent-dim': 'rgba(255,92,55,0.14)',
       },

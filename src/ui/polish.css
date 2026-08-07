@@ -25,7 +25,10 @@
   --rule-strong: rgba(255, 255, 255, 0.14);
   --ink: #e8e6e1;
   --dim: #8b929c;
-  --faint: #5a616b;
+  /* 4.5:1 on --panel — faint text still carries information (labels, codes),
+     so it must clear WCAG AA, not just look tasteful. #5a616b measured 2.9:1
+     and drew an axe 'serious' on every surface. */
+  --faint: #737c88;
   --accent: #ff5c37;
 }
 
@@ -126,13 +129,20 @@ kbd {
   touch-action: none; /* the stage owns its gestures — advance is deliberate, never scrolled */
   user-select: none;
 }
-.stars { position: absolute; inset: -512px 0 0 -512px; width: calc(100% + 1024px); height: calc(100% + 1024px); will-change: transform; background-repeat: repeat; }
+/* Wrap offsets are (-512, 0] — the tile only ever slides LEFT/UP, so the
+   overdraw belongs on the right/bottom edge only. Sizing +1024 on both axes
+   once cost a third more pixels per composite for coverage nothing used. */
+.stars { position: absolute; inset: 0; width: calc(100% + 512px); height: calc(100% + 512px); will-change: transform; background-repeat: repeat; }
 .panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; will-change: transform; pointer-events: none; padding: 76px 16px calc(96px + env(safe-area-inset-bottom)); }
 .panelwrap > * { pointer-events: auto; }
 .panel {
   width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto;
   background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
   padding: 22px 24px 24px; user-select: text;
+  /* Far neighbours mount off-viewport mid-transition; letting the browser
+     defer their layout/paint keeps that mount out of the interaction budget
+     (a measured borderline-50ms task under 4x CPU throttle). */
+  content-visibility: auto; contain-intrinsic-size: 512px 480px;
 }
 @media (min-width: 768px) { .panelwrap { padding-left: 96px; } .panel { transform: translateX(9vw); } }
 /* The ship rides UNDER the panels (z 1 < 2): at dock it must never sit on
@@ -157,8 +167,11 @@ kbd {
 }
 .rail { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; }
 .rail button {
-  /* a 8px dot with a ≥42px hit area — the padding IS the tap target */
-  padding: 17px 6px; background: none; border: none; cursor: pointer; display: grid; place-items: center;
+  /* a 7px dot with a ≥42px hit area — the padding IS the tap target, and the
+     min-height is the guarantee (17+7+17 alone measured 41px: one pixel of
+     shame a breakpoint check caught) */
+  padding: 17px 6px; min-height: 42px; min-width: 20px;
+  background: none; border: none; cursor: pointer; display: grid; place-items: center;
 }
 .rail button .dot {
   width: 7px; height: 7px; border-radius: 50%;
