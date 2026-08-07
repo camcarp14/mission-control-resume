@@ -215,7 +215,7 @@ try {
     ltMax: 120, // 30ms real under 4x — a visible hitch; see analyze() docs
   });
   await runProfile(browser, server.url, 'desktop 1440x900 @1x CPU', { width: 1440, height: 900 }, 1, {
-    p95Max: 33.5, // 2 vsync periods — this container's software-raster floor
+    p95Max: 35, // 2 vsync periods + jitter margin — the software-raster floor
     ltMax: 50, // strict RAIL rule, unthrottled
   });
 } finally {

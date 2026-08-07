@@ -35,9 +35,14 @@ describe('motion system', () => {
     // Every @keyframes-driven class must be named in the reduce block, or a
     // user who asked the OS for less motion still gets it.
     const reduceBlock = CSS.slice(CSS.indexOf('@media (prefers-reduced-motion: reduce)'));
-    for (const cls of ['pagefade', 'stagger', 'toast', 'sk', 'bob', 'flare', 'xfade']) {
+    for (const cls of ['pagefade', 'stagger', 'toast', 'sk', 'bob', 'flare']) {
       expect(reduceBlock, `${cls} not disabled under reduced motion`).toContain(cls);
     }
+    // .xfade is the PRM-only crossfade — it must NOT be killed by the reduce
+    // block (that would turn the reduced experience into hard cuts), so this
+    // asserts the opposite: the class may appear there only inside comments.
+    const reduceRules = reduceBlock.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(/\.xfade\b/.test(reduceRules), '.xfade must not be disabled by the reduce block').toBe(false);
   });
 
   it('uses no ad-hoc durations outside the tokens', () => {

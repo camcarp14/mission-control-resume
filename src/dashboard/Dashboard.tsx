@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { stations } from '../content/stations.js';
 import { getSupabase, OFFLINE_DEV } from '../lib/supabase';
 import { Empty, ErrorState, fmt } from '../ui/primitives';
 import { InstrumentRow, type MetricSpec } from '../ui/Metric';
@@ -249,8 +250,9 @@ export default function Dashboard() {
                         {c.active ? 'live' : 'off'}
                       </td>
                       <td className="num px-4 py-2.5 font-mono text-xs text-ink">{c.visit_count}</td>
+                      {/* the code label comes from the config, never re-derived */}
                       <td className="num px-4 py-2.5 font-mono text-xs text-dim">
-                        {c.max_station != null ? `STN ${String(c.max_station + 1).padStart(2, '0')}` : '—'}
+                        {c.max_station != null ? (stations[c.max_station]?.code ?? `#${c.max_station + 1}`) : '—'}
                       </td>
                       <td className="num px-4 py-2.5 font-mono text-xs text-faint">
                         {c.last_seen_at ? when(c.last_seen_at) : '—'}

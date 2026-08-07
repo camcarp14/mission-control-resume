@@ -44,9 +44,11 @@ h1, h2, h3 { text-wrap: balance; }
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-/* focus is always visible — keyboard-first means the keyboard can see itself */
+/* focus is always visible — keyboard-first means the keyboard can see itself.
+   2px of --dim, not a 1px hairline: a focus indicator is a UI state and owes
+   WCAG 1.4.11 its 3:1 (the old rgba hairline measured ~1.45:1). */
 :focus-visible {
-  outline: 1px solid var(--rule-strong);
+  outline: 2px solid var(--dim);
   outline-offset: 2px;
 }
 
@@ -192,9 +194,15 @@ kbd {
   .panelwrap { padding-top: 132px; }
 }
 
-/* the mandate: everything above is optional to the user's nervous system */
+/* the mandate: everything above is optional to the user's nervous system.
+   .xfade is deliberately ABSENT from this block: it only ever renders under
+   reduced motion, where it IS the replacement for flight — a one-shot,
+   opacity-only cross-fade (the canonical PRM-safe transition). Disabling it
+   here turned "cross-fades instead of flight" into a hard cut; an
+   adversarial review proved the claim false and this comment is the fix's
+   receipt. */
 @media (prefers-reduced-motion: reduce) {
-  .pagefade, .stagger > *, .toast, .bob, .flare, .xfade { animation: none !important; }
+  .pagefade, .stagger > *, .toast, .bob, .flare { animation: none !important; }
   .expand, .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot { transition: none !important; }
   .sk::after { animation: none; }
   html { scroll-behavior: auto; }

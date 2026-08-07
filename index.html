@@ -16,7 +16,8 @@
       the app's real first contentful paint: without it, the entire page
       arrives via a fade-from-opacity-0 after ~250 kB of JS, and Lighthouse
       (correctly) records NO FCP at all. React renders the identical header
-      over this markup, so the swap is invisible.
+      text over this markup; the shell reserves the gate's approximate height
+      so the swap is position-stable, not just text-stable.
     -->
     <style>
       html { background: #08090b; color-scheme: dark; }
@@ -24,7 +25,11 @@
              font-family: 'Inter var', ui-sans-serif, system-ui, -apple-system, sans-serif; }
       #root { min-height: 100dvh; }
       .mc-shell { min-height: 100dvh; display: grid; place-items: center; padding: 48px 20px; }
-      .mc-shell > div { width: 100%; max-width: 32rem; }
+      /* Reserve roughly the rendered gate's height so the headline paints at
+         (nearly) its final position — without this the centered shell sat
+         ~190px lower than the full gate and the headline visibly hopped when
+         React mounted. CLS can't see that hop (removed+new nodes), eyes can. */
+      .mc-shell > div { width: 100%; max-width: 32rem; min-height: min(544px, calc(100dvh - 96px)); }
       .mc-eyebrow { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                     font-size: 10px; line-height: 14px; letter-spacing: 0.06em;
                     text-transform: uppercase; color: #737c88; }
@@ -42,10 +47,10 @@
           <p class="mc-eyebrow">Mission Control</p>
           <h1 class="mc-h1">A résumé you pilot.</h1>
           <p class="mc-intro">
-            Eleven stations, one rocket: the real artifacts behind an adtech Solutions
-            Consultant's career, flown deliberately rather than scrolled. Enter your access code
-            to lift off — about four minutes end to end. In a hurry? The PDF is right below, no
-            code needed.
+            One rocket, a flight path of real career artifacts: the work behind an adtech
+            Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+            code to lift off — about four minutes end to end. In a hurry? The PDF is right
+            below, no code needed.
           </p>
         </div>
       </main>

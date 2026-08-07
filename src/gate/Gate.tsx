@@ -180,11 +180,13 @@ function Splash({ children }: { children: React.ReactNode }) {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
           A résumé you pilot.
         </h1>
+        {/* Count-free on purpose: stations.js owns how many stations exist,
+            and this copy must match index.html's pre-render byte for byte. */}
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          Eleven stations, one rocket: the real artifacts behind an adtech Solutions
-          Consultant's career, flown deliberately rather than scrolled. Enter your access code
-          to lift off — about four minutes end to end. In a hurry? The PDF is right below, no
-          code needed.
+          One rocket, a flight path of real career artifacts: the work behind an adtech
+          Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+          code to lift off — about four minutes end to end. In a hurry? The PDF is right
+          below, no code needed.
         </p>
         {children}
       </div>

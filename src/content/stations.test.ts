@@ -14,8 +14,12 @@ import { stations } from './stations.js';
 const KINDS = ['link', 'image', 'video', 'none'] as const;
 
 describe('stations content contract', () => {
-  it('has exactly 11 stations', () => {
-    expect(stations).toHaveLength(11);
+  // The count is deliberately NOT pinned: "adding a station edits exactly one
+  // file" is the product's contract, and a `toHaveLength(11)` here would make
+  // this test the second file. (An adversarial review caught exactly that.)
+  // The floor guards against an accidental truncation, nothing more.
+  it('has enough stations to be a flight', () => {
+    expect(stations.length).toBeGreaterThanOrEqual(3);
   });
 
   it('has nonempty, unique ids', () => {

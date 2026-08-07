@@ -79,6 +79,12 @@ function SplashSkeleton() {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
           A résumé you pilot.
         </h1>
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
+          One rocket, a flight path of real career artifacts: the work behind an adtech
+          Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+          code to lift off — about four minutes end to end. In a hurry? The PDF is right
+          below, no code needed.
+        </p>
         <div className="mt-6">
           <SkLine w="w80" />
           <SkLine w="w60" />
