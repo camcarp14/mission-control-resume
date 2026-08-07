@@ -81,16 +81,36 @@ export default function Flight({
   const vel = useVelocity(t);
 
   const panelRefs = useRef(new Map<number, HTMLElement>());
+  // Focus can outrun the panel: the windowing commit is a low-priority
+  // transition, and on a saturated main thread (software-rendered WebGL is
+  // the measured case) it can still be pending when the travel animation
+  // completes. The announcement never waits, and the focus lands the moment
+  // the awaited panel registers — latest request wins.
+  const pendingFocus = useRef<number | null>(null);
+
   const registerPanel = useCallback((i: number, el: HTMLElement | null) => {
-    if (el) panelRefs.current.set(i, el);
-    else panelRefs.current.delete(i);
+    if (el) {
+      panelRefs.current.set(i, el);
+      if (pendingFocus.current === i) {
+        pendingFocus.current = null;
+        el.focus({ preventScroll: true });
+      }
+    } else {
+      panelRefs.current.delete(i);
+    }
   }, []);
 
   const focusPanel = useCallback((i: number) => {
-    panelRefs.current.get(i)?.focus({ preventScroll: true });
     const s = stations[i];
     if (s && announceRef.current) {
       announceRef.current.textContent = `Station ${i + 1} of ${N} — ${s.title}`;
+    }
+    const el = panelRefs.current.get(i);
+    if (el) {
+      pendingFocus.current = null;
+      el.focus({ preventScroll: true });
+    } else {
+      pendingFocus.current = i;
     }
   }, []);
 

@@ -43,10 +43,15 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules/react') || id.includes('react-router')) return 'react';
           if (id.includes('@supabase')) return 'supabase';
-          // The WebGL stack rides its own chunk so the flight code and the
-          // ~200 kB of three.js fetch in parallel — both only ever after a
-          // code redeems (they're reachable solely from the lazy Flight).
-          if (/node_modules\/(three|three-stdlib|@react-three|postprocessing|maath)/.test(id)) return 'gl';
+          // three.js deliberately gets NO named chunk: naming one ('gl') made
+          // Rollup colocate Vite's shared preload-helper into it, which made
+          // the ENTRY statically import the 966 kB chunk and modulepreload it
+          // on the gate — measured FCP 1216ms → 2570ms. Left alone, the whole
+          // WebGL stack rides inside the lazy Flight chunk (like
+          // framer-motion), fetched only after a code redeems. Second time a
+          // named chunk has hoisted into the entry preload graph in this
+          // repo; treat any new manualChunks entry as guilty until the dist
+          // index.html proves otherwise.
           return undefined;
         },
       },
