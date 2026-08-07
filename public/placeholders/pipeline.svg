@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.04)"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="750" fill="#0d0f13"/>
+  <rect width="1200" height="750" fill="url(#dots)"/>
+
+  <!-- Header -->
+  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">MEASUREMENT PIPELINE — EVENT FLOW</text>
+  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">RAW LOGS → GOVERNED METRICS</text>
+
+  <!-- Placeholder chip -->
+  <rect x="792" y="44" width="360" height="32" fill="none" stroke="rgba(255,255,255,0.14)" stroke-dasharray="5 5" rx="3"/>
+  <text x="972" y="64" fill="#e8e6e1" fill-opacity="0.65" font-size="11" text-anchor="middle" letter-spacing="1">REPLACE — export a real screenshot at 1200×750</text>
+
+  <!-- Sources -->
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="48" y="250" width="180" height="64" rx="3"/>
+    <rect x="48" y="420" width="180" height="64" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="138" y="278">PIXEL / SDK</text>
+    <text x="138" y="448">S2S EVENTS</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="138" y="298">impressions · clicks</text>
+    <text x="138" y="468">conversions · CRM</text>
+  </g>
+
+  <!-- Source merge into ingest -->
+  <polyline points="228,282 264,282 264,355 300,355" fill="none" stroke="rgba(255,255,255,0.14)"/>
+  <polyline points="228,452 264,452 264,379 300,379" fill="none" stroke="rgba(255,255,255,0.14)"/>
+
+  <!-- Stages -->
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="300" y="331" width="160" height="72" rx="3"/>
+    <rect x="520" y="331" width="160" height="72" rx="3"/>
+    <rect x="740" y="331" width="160" height="72" rx="3"/>
+    <rect x="960" y="331" width="160" height="72" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="380" y="363">INGEST</text>
+    <text x="600" y="363">VALIDATE</text>
+    <text x="820" y="363">ENRICH</text>
+    <text x="1040" y="363">WAREHOUSE</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="380" y="383">stream · [Kafka]</text>
+    <text x="600" y="383">schema · dedupe</text>
+    <text x="820" y="383">identity join</text>
+    <text x="1040" y="383">marts · BI</text>
+  </g>
+
+  <!-- Critical-path edge — the single accent -->
+  <line x1="460" y1="367" x2="520" y2="367" stroke="#ff5c37" stroke-width="1.5"/>
+  <text x="490" y="352" fill="#ff5c37" font-size="10" letter-spacing="1" text-anchor="middle">[X]B / DAY</text>
+
+  <line x1="680" y1="367" x2="740" y2="367" stroke="rgba(255,255,255,0.14)"/>
+  <text x="710" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">−[X]% DUPES</text>
+
+  <line x1="900" y1="367" x2="960" y2="367" stroke="rgba(255,255,255,0.14)"/>
+  <text x="930" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">MATCH [Y]%</text>
+
+  <!-- Side effects below the path -->
+  <line x1="600" y1="403" x2="600" y2="520" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
+  <line x1="1040" y1="403" x2="1040" y2="520" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
+
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="520" y="520" width="160" height="56" rx="3"/>
+    <rect x="960" y="520" width="160" height="56" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.75" font-size="11" letter-spacing="2" text-anchor="middle">
+    <text x="600" y="546">DLQ · ALERTS</text>
+    <text x="1040" y="546">DASHBOARDS</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="600" y="564">lag &gt; [Y] min pages</text>
+    <text x="1040" y="564">SLA ≤ [X] min</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="48" y="676" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">FRESHNESS SLA — DASHBOARD ≤ [X] MIN FROM EVENT TIME</text>
+  <text x="48" y="716" fill="#e8e6e1" fill-opacity="0.35" font-size="10" letter-spacing="2">PLACEHOLDER ARTIFACT · STN 05</text>
+</svg>

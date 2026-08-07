@@ -1,21 +1,18 @@
 // THE POLISH PRIMITIVES — pairs with polish.css.
 // Adapted from saas-polish-system/assets/primitives.jsx to TypeScript, plus the
-// instrument-specific pieces BUILDOUT needs (Metric, Empty, ErrorState).
+// instrument-specific pieces this app needs (Metric, Empty, ErrorState).
 //
 // One deliberate change from the source: useTween returns a raw float instead of
-// Math.round()-ing. This app displays ratios (delegation 0.34, capex 0.41) where
-// rounding to integer would collapse every value to 0. Rounding is the
-// formatter's job now — see the `f` prop on <Num>.
+// Math.round()-ing. Rounding is the formatter's job — see the `f` prop on <Num> —
+// so fractional metrics (a 0.34 ratio, a 4.5s duration) survive the tween.
 import {
   useState,
   useEffect,
   useRef,
-  useMemo,
   createContext,
   useContext,
   type ReactNode,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 /* ---- numbers count to their value (ease-out cubic). Use on every big metric. ---- */
 export function useTween(target: number | null, dur = 700): number | null {
@@ -207,124 +204,3 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export const useToast = (): PushToast => useContext(ToastCtx) ?? (() => {});
 
-/* ---- ⌘K command palette (navigation + primary actions) ---- */
-export type CommandItem = {
-  label: string;
-  group: string;
-  path?: string;
-  run?: () => void;
-  k?: string[];
-};
-
-export function CommandK({ items = [] }: { items?: CommandItem[] }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const [i, setI] = useState(0);
-  const nav = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const shown = useMemo(() => {
-    const n = q.trim().toLowerCase();
-    if (!n) return items;
-    return items.filter(
-      (x) =>
-        x.label.toLowerCase().includes(n) ||
-        x.group.toLowerCase().includes(n) ||
-        (x.k ?? []).some((w) => w.includes(n)),
-    );
-  }, [q, items]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setOpen((o) => !o);
-        setQ('');
-        setI(0);
-      } else if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 10);
-  }, [open]);
-
-  // scroll lock — a real review miss once
-  useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
-
-  useEffect(() => {
-    setI(0);
-  }, [q]);
-
-  if (!open) return null;
-
-  const go = (item: CommandItem) => {
-    setOpen(false);
-    if (item.run) item.run();
-    else if (item.path) nav(item.path);
-  };
-
-  let lastGroup = '';
-
-  return (
-    <div
-      className="cmdk-wrap"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
-      }}
-    >
-      <div className="cmdk" role="dialog" aria-label="Command palette">
-        <input
-          ref={inputRef}
-          value={q}
-          placeholder="Jump to, or run…"
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              setI((x) => Math.min(x + 1, shown.length - 1));
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setI((x) => Math.max(x - 1, 0));
-            } else if (e.key === 'Enter') {
-              const sel = shown[i];
-              if (sel) go(sel);
-            }
-          }}
-        />
-        <div className="list">
-          {shown.map((item, idx) => {
-            const header = item.group !== lastGroup ? item.group : null;
-            lastGroup = item.group;
-            return (
-              <div key={`${item.group}:${item.label}`}>
-                {header && <div className="group-label">{header}</div>}
-                <div
-                  className={`item${idx === i ? ' on' : ''}`}
-                  onMouseEnter={() => setI(idx)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    go(item);
-                  }}
-                >
-                  <span>{item.label}</span>
-                  <span className="hint">{item.run ? 'action' : item.path}</span>
-                </div>
-              </div>
-            );
-          })}
-          {shown.length === 0 && (
-            <div className="item">Nothing matches “{q}”</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}

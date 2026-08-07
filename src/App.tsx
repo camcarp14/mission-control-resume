@@ -1,70 +1,44 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider, useAuth } from './lib/auth';
-import { ToastProvider, CommandK, type CommandItem } from './ui/primitives';
-import { Shell, SURFACES } from './ui/shell/Shell';
-import { SignIn } from './ui/SignIn';
-import {
-  Control, Capacity, Racks, Moat, Scaling, Fleet, Divergence, Ops,
-} from './routes/surfaces';
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { ToastProvider, SkLine } from './ui/primitives';
+import { Experience } from './gate/Experience';
 
-/** ⌘K reaches every route and every primary action. */
-const COMMANDS: CommandItem[] = [
-  ...SURFACES.map((s) => ({
-    label: s.code,
-    group: 'Go to',
-    path: s.path,
-    k: [s.code.toLowerCase(), s.hint],
-  })),
-  {
-    label: 'Diagnose deployment (env-check)',
-    group: 'Diagnostics',
-    run: () => window.open('/api/env-check', '_blank'),
-    k: ['env', 'debug', 'config'],
-  },
-  {
-    label: 'Diagnose my session (whoami)',
-    group: 'Diagnostics',
-    run: () => window.open('/api/whoami', '_blank'),
-    k: ['auth', 'token', 'session', 'rls'],
-  },
-];
+/**
+ * Two routes, two chunks, one rule: nothing heavy rides in the entry bundle.
+ * `/` is the gated experience (flight code loads only after redemption —
+ * that's part of the gate, see Experience). `/dashboard` is the owner's
+ * passcode-protected logbook, lazy because visitors never open it.
+ */
+const Dashboard = lazy(() => import('./dashboard/Dashboard'));
 
-function Gate() {
-  const { status } = useAuth();
-
-  // No loading branch: the synchronous session peek in AuthProvider decides
-  // shell-vs-signin on the first frame, so there is never a spinner (the single
-  // loudest "tool" tell) and never a blank frame. Data-level loading is drawn
-  // per-surface with layout-matched skeletons instead.
-  if (status === 'anon') return <SignIn />;
-
+function DashboardSkeleton() {
   return (
-    <>
-      <CommandK items={COMMANDS} />
-      <Routes>
-        <Route element={<Shell />}>
-          <Route index element={<Control />} />
-          <Route path="capacity" element={<Capacity />} />
-          <Route path="racks" element={<Racks />} />
-          <Route path="moat" element={<Moat />} />
-          <Route path="scaling" element={<Scaling />} />
-          <Route path="fleet" element={<Fleet />} />
-          <Route path="divergence" element={<Divergence />} />
-          <Route path="ops" element={<Ops />} />
-        </Route>
-      </Routes>
-    </>
+    <main className="mx-auto max-w-5xl px-5 py-10">
+      <SkLine w="w40" />
+      <div className="sk sk-big" />
+      <SkLine w="w80" />
+    </main>
   );
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <Gate />
-        </ToastProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <Routes>
+          <Route path="/" element={<Experience />} />
+          <Route
+            path="/dashboard"
+            element={
+              <Suspense fallback={<DashboardSkeleton />}>
+                <Dashboard />
+              </Suspense>
+            }
+          />
+          {/* No secret routes to stumble into — everything else is the gate. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ToastProvider>
     </BrowserRouter>
   );
 }

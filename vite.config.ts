@@ -15,6 +15,10 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
+          // Framer Motion is only imported by the lazy flight chunk; naming it
+          // here keeps the flight chunk itself under the budget and lets the
+          // browser fetch both in parallel after the gate unlocks.
+          motion: ['framer-motion'],
         },
       },
     },

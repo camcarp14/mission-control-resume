@@ -1,4 +1,4 @@
-import { Num } from '../primitives';
+import { Num } from './primitives';
 
 export type MetricSpec = {
   label: string;
@@ -13,7 +13,7 @@ export type MetricSpec = {
 
 /**
  * One cell of the instrument row. Same component, same size, same meaning on
- * every surface — Artifact Velocity looks identical on CONTROL and on FLEET.
+ * every surface — a metric reads identically on the dashboard and in a station.
  */
 export function Metric({ label, value, format, offTarget, sub, title }: MetricSpec) {
   return (

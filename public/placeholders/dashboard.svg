@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">
+  <rect width="1200" height="750" fill="#0d0f13"/>
+
+  <!-- Header band -->
+  <text x="48" y="72" fill="#e8e6e1" font-size="15" letter-spacing="3">DELIVERY OVERVIEW — [CLIENT]</text>
+  <rect x="1000" y="48" width="152" height="30" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <text x="1076" y="67" fill="#e8e6e1" fill-opacity="0.6" font-size="11" text-anchor="middle" letter-spacing="1">[LAST 7 DAYS] ▾</text>
+  <line x1="48" y1="100" x2="1152" y2="100" stroke="rgba(255,255,255,0.14)"/>
+
+  <!-- KPI tiles -->
+  <g fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.14)">
+    <rect x="48" y="124" width="258" height="104" rx="3"/>
+    <rect x="336" y="124" width="258" height="104" rx="3"/>
+    <rect x="624" y="124" width="258" height="104" rx="3"/>
+    <rect x="912" y="124" width="258" height="104" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.5" font-size="10" letter-spacing="2">
+    <text x="68" y="152">SPEND</text>
+    <text x="356" y="152">eCPA</text>
+    <text x="644" y="152">PACING</text>
+    <text x="932" y="152">VIEWABILITY</text>
+  </g>
+  <g fill="#e8e6e1" font-size="27">
+    <text x="68" y="190">$[XXX]K</text>
+    <text x="356" y="190">$[X.XX]</text>
+    <text x="644" y="190">[XX]%</text>
+    <text x="932" y="190">[XX]%</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1">
+    <text x="68" y="212">▲ [X]% VS PLAN</text>
+    <text x="356" y="212">▼ $[X.XX] VS TARGET</text>
+    <text x="644" y="212">ON PACE · DAY [N]/[M]</text>
+    <text x="932" y="212">MRC VIEWABLE</text>
+  </g>
+
+  <!-- Delivery trend -->
+  <rect x="48" y="256" width="736" height="316" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <text x="68" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">DELIVERED IMPRESSIONS — DAILY</text>
+
+  <g stroke="rgba(255,255,255,0.08)">
+    <line x1="68" y1="316" x2="764" y2="316"/>
+    <line x1="68" y1="370" x2="764" y2="370"/>
+    <line x1="68" y1="424" x2="764" y2="424"/>
+    <line x1="68" y1="478" x2="764" y2="478"/>
+    <line x1="68" y1="532" x2="764" y2="532"/>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.3" font-size="9" letter-spacing="1">
+    <text x="740" y="312">[X]M</text>
+    <text x="740" y="420">[Y]M</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.35" font-size="9" letter-spacing="1" text-anchor="middle">
+    <text x="68" y="552">D1</text>
+    <text x="184" y="552">D2</text>
+    <text x="300" y="552">D3</text>
+    <text x="416" y="552">D4</text>
+    <text x="532" y="552">D5</text>
+    <text x="648" y="552">D6</text>
+    <text x="764" y="552">D7</text>
+  </g>
+
+  <!-- Forecast series -->
+  <polyline points="68,470 184,452 300,430 416,408 532,392 648,372 764,352" fill="none" stroke="#e8e6e1" stroke-opacity="0.35" stroke-dasharray="4 4"/>
+  <text x="756" y="366" fill="#e8e6e1" fill-opacity="0.45" font-size="9" letter-spacing="1" text-anchor="end">FORECAST</text>
+
+  <!-- Delivered series — the single accent -->
+  <polyline points="68,480 184,440 300,452 416,398 532,406 648,352 764,330" fill="none" stroke="#ff5c37" stroke-width="1.5"/>
+  <circle cx="764" cy="330" r="2.5" fill="#ff5c37"/>
+  <text x="756" y="326" fill="#ff5c37" font-size="9" letter-spacing="1" text-anchor="end">DELIVERED</text>
+
+  <!-- Spend by channel -->
+  <rect x="816" y="256" width="336" height="316" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <text x="836" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">SPEND BY CHANNEL</text>
+
+  <g fill="#e8e6e1" fill-opacity="0.55" font-size="10" letter-spacing="1">
+    <text x="836" y="322">CTV</text>
+    <text x="836" y="368">DISPLAY</text>
+    <text x="836" y="414">VIDEO</text>
+    <text x="836" y="460">AUDIO</text>
+    <text x="836" y="506">NATIVE</text>
+  </g>
+  <g fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.14)">
+    <rect x="916" y="311" width="176" height="14"/>
+    <rect x="916" y="357" width="138" height="14"/>
+    <rect x="916" y="403" width="102" height="14"/>
+    <rect x="916" y="449" width="64" height="14"/>
+    <rect x="916" y="495" width="38" height="14"/>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.4" font-size="9" letter-spacing="1">
+    <text x="1100" y="322">[X]%</text>
+    <text x="1062" y="368">[X]%</text>
+    <text x="1026" y="414">[X]%</text>
+    <text x="988" y="460">[X]%</text>
+    <text x="962" y="506">[X]%</text>
+  </g>
+
+  <!-- Line item table -->
+  <rect x="48" y="596" width="1104" height="106" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">
+    <text x="68" y="624">LINE ITEM</text>
+    <text x="560" y="624">IMPS</text>
+    <text x="700" y="624">CLICKS</text>
+    <text x="840" y="624">CTR</text>
+    <text x="960" y="624">eCPA</text>
+    <text x="1080" y="624">PACING</text>
+  </g>
+  <line x1="48" y1="636" x2="1152" y2="636" stroke="rgba(255,255,255,0.14)"/>
+  <g fill="#e8e6e1" fill-opacity="0.75" font-size="11">
+    <text x="68" y="660">[PMP — CTV — DEAL-0001]</text>
+    <text x="560" y="660">[XX.X]M</text>
+    <text x="700" y="660">[XX]K</text>
+    <text x="840" y="660">[X.XX]%</text>
+    <text x="960" y="660">$[X.XX]</text>
+    <text x="1080" y="660">[XX]%</text>
+  </g>
+  <line x1="48" y1="672" x2="1152" y2="672" stroke="rgba(255,255,255,0.08)"/>
+  <g fill="#e8e6e1" fill-opacity="0.75" font-size="11">
+    <text x="68" y="694">[OPEN — DISPLAY — RON]</text>
+    <text x="560" y="694">[XX.X]M</text>
+    <text x="700" y="694">[XX]K</text>
+    <text x="840" y="694">[X.XX]%</text>
+    <text x="960" y="694">$[X.XX]</text>
+    <text x="1080" y="694">[XX]%</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="48" y="734" fill="#e8e6e1" fill-opacity="0.35" font-size="10" letter-spacing="2">PLACEHOLDER ARTIFACT · STN 06</text>
+  <text x="600" y="734" fill="#e8e6e1" fill-opacity="0.55" font-size="11" text-anchor="middle" letter-spacing="1">REPLACE — export a real screenshot at 1200×750</text>
+</svg>

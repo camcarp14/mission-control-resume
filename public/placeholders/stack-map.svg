@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.04)"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="750" fill="#0d0f13"/>
+  <rect width="1200" height="750" fill="url(#dots)"/>
+
+  <!-- Header -->
+  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">THE STACK — PROGRAMMATIC ECOSYSTEM MAP</text>
+  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">MONEY FLOWS LEFT TO RIGHT · DATA FLOWS BOTH WAYS</text>
+
+  <!-- Placeholder chip -->
+  <rect x="792" y="44" width="360" height="32" fill="none" stroke="rgba(255,255,255,0.14)" stroke-dasharray="5 5" rx="3"/>
+  <text x="972" y="64" fill="#e8e6e1" fill-opacity="0.65" font-size="11" text-anchor="middle" letter-spacing="1">REPLACE — export a real screenshot at 1200×750</text>
+
+  <!-- Supply chain spine -->
+  <line x1="225" y1="378" x2="285" y2="378" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="455" y1="378" x2="515" y2="378" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="685" y1="378" x2="745" y2="378" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="915" y1="378" x2="975" y2="378" stroke="rgba(255,255,255,0.14)"/>
+
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="55" y="340" width="170" height="76" rx="3"/>
+    <rect x="285" y="340" width="170" height="76" rx="3"/>
+    <rect x="515" y="340" width="170" height="76" rx="3"/>
+    <rect x="745" y="340" width="170" height="76" rx="3"/>
+    <rect x="975" y="340" width="170" height="76" rx="3"/>
+  </g>
+
+  <g fill="#e8e6e1" font-size="13" letter-spacing="2" text-anchor="middle">
+    <text x="140" y="374">ADVERTISER</text>
+    <text x="370" y="374">DSP</text>
+    <text x="600" y="374">EXCHANGE</text>
+    <text x="830" y="374">SSP</text>
+    <text x="1060" y="374">PUBLISHER</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="140" y="396">brand · budget</text>
+    <text x="370" y="396">bids · audiences</text>
+    <text x="600" y="396">auction · openRTB</text>
+    <text x="830" y="396">yield · deals</text>
+    <text x="1060" y="396">ad server · inventory</text>
+  </g>
+
+  <!-- Data layer above the spine -->
+  <line x1="370" y1="214" x2="370" y2="340" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="830" y1="214" x2="830" y2="340" stroke="rgba(255,255,255,0.14)"/>
+
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="275" y="150" width="190" height="64" rx="3"/>
+    <rect x="735" y="150" width="190" height="64" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="370" y="178">CDP</text>
+    <text x="830" y="178">MEASUREMENT</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="370" y="198">audiences · consent</text>
+    <text x="830" y="198">verification · attribution</text>
+  </g>
+
+  <!-- Collaboration layer below the spine -->
+  <line x1="445" y1="540" x2="380" y2="416" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="525" y1="540" x2="590" y2="416" stroke="rgba(255,255,255,0.14)"/>
+
+  <rect x="370" y="540" width="230" height="64" rx="3" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)"/>
+  <text x="485" y="568" fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">CLEAN ROOM</text>
+  <text x="485" y="588" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">data collab · lift</text>
+
+  <!-- Operating zone — the single accent -->
+  <g stroke="#ff5c37" fill="none">
+    <rect x="250" y="128" width="372" height="502" rx="8" stroke-dasharray="6 6" stroke-opacity="0.9"/>
+  </g>
+  <text x="256" y="656" fill="#ff5c37" font-size="11" letter-spacing="2">WHERE I OPERATE — activation · integration · measurement seam</text>
+
+  <!-- Footer -->
+  <text x="48" y="716" fill="#e8e6e1" fill-opacity="0.35" font-size="10" letter-spacing="2">PLACEHOLDER ARTIFACT · STN 03</text>
+</svg>

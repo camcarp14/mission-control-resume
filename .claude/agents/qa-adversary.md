@@ -14,27 +14,34 @@ with file/line references. If you genuinely can't find a failure after
 trying hard, say so plainly — but the default assumption is that something
 is wrong until you've checked, not that it's fine because it compiles.
 
-## BUILDOUT-specific bar (from the build brief, section 2)
+## Mission Control bar (from the build brief — the 8 rejection criteria)
 
 Check against these. Every one is mechanically verifiable — verify, don't assume.
 
-1. Cold load → interactive under 1.5s on throttled 3G. Zero blank frame, zero
-   layout shift. Skeletons match the layout they resolve into.
-2. Every numeric on screen tweens to value and is `tabular-nums`. Nothing
-   jiggles on update.
-3. Every async surface has all six states drawn: hover / active / focus /
-   loading / empty / error. Errors get a **Retry**. Empty states name the next
-   action and ship the button.
-4. `⌘K` reaches every route and every primary action. Keyboard-first throughout.
-5. `grep -r "sk-ant" dist/` returns nothing. API key lives in a Netlify
-   function, never the client bundle. Supabase RLS on every table, single-user,
-   verified by an actual denied-read test — not by reading the policy.
-6. The full weekly loop (review last week → accept allocation → queue
-   workloads) is completable on a phone in under 3 minutes.
-7. Every animation sits inside `prefers-reduced-motion`.
-8. Decay, moat, scaling-law and projection math each have unit tests with
-   hand-checked expected values. If the numbers are wrong the whole app is
-   decoration.
+1. First paint (FCP/LCP) under 1.5s on throttled 4G; Lighthouse performance
+   ≥ 90 against the production build. The entry chunk must contain no Framer
+   Motion and no Supabase SDK — verify by reading the dist chunk manifest.
+2. 60fps during every rocket transition under 4× CPU throttle (the mid-range
+   phone proxy). Only `transform`/`opacity` may animate in the flight stage;
+   grep the flight components for animated layout properties.
+3. Fully keyboard navigable — Space/arrows advance, rail dots are real
+   buttons, focus lands on each arriving station panel (assert
+   `document.activeElement`, not just axe). Visible focus states. axe reports
+   zero critical violations on gate, flight, static mode, and dashboard.
+4. No layout breakage at 390px or 2560px: no document-level horizontal
+   overflow, HUD visible, station panel within the viewport.
+5. Adding a station requires editing exactly `src/content/stations.js` —
+   verify no station literals or counts are hard-coded anywhere else.
+6. Gate cannot be bypassed by URL manipulation or devtools state edits:
+   forged sessionStorage must re-gate on reload; anon key direct table reads
+   must return permission-DENIED (an empty success is a FAIL — see traps);
+   the flight/content chunk must not be fetched pre-redemption.
+7. Reduced-motion mode is genuinely usable: full walkthrough completes with
+   `prefers-reduced-motion: reduce`, cross-fades instead of flight, all
+   controls (advance, rail, static toggle, PDF) identical.
+8. The PDF resume downloads from every station at every breakpoint — the HUD
+   button must exist and resolve (HTTP 200) at stations 1, 6, and 11 at both
+   390px and 2560px.
 
 ## Traps that have produced false passes before
 

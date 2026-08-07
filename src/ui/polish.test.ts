@@ -3,9 +3,9 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Mechanical checks against section 2 of the build bar. These catch the polish
- * regressions that a build is perfectly happy with — the surface audit has
- * caught every one of these in real projects.
+ * Mechanical checks against the polish system. These catch the regressions a
+ * build is perfectly happy with — the surface audit has caught every one of
+ * these in real projects.
  */
 const CSS = readFileSync(join(process.cwd(), 'src/ui/polish.css'), 'utf8');
 
@@ -35,7 +35,7 @@ describe('motion system', () => {
     // Every @keyframes-driven class must be named in the reduce block, or a
     // user who asked the OS for less motion still gets it.
     const reduceBlock = CSS.slice(CSS.indexOf('@media (prefers-reduced-motion: reduce)'));
-    for (const cls of ['pagefade', 'stagger', 'toast', 'cmdk', 'sk']) {
+    for (const cls of ['pagefade', 'stagger', 'toast', 'sk']) {
       expect(reduceBlock, `${cls} not disabled under reduced motion`).toContain(cls);
     }
   });
@@ -102,19 +102,29 @@ describe('keyboard-first', () => {
   it('draws a visible focus ring', () => {
     expect(CSS).toContain(':focus-visible');
   });
+});
 
-  it('⌘K reaches every surface', () => {
-    const app = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8');
-    const shell = readFileSync(join(process.cwd(), 'src/ui/shell/Shell.tsx'), 'utf8');
-    // Commands are generated from the same SURFACES list the nav renders, so a
-    // new route cannot be added to the nav without also reaching the palette.
-    expect(app).toContain('SURFACES.map');
-    const routeCount = (shell.match(/path: '/g) ?? []).length;
-    expect(routeCount, 'expected all 8 surfaces registered').toBe(8);
+describe('one file owns the stations (the "add a station" contract)', () => {
+  // The flight deck, the rail, and the static page must all derive from
+  // src/content/stations.js — a station literal hard-coded into a component
+  // breaks the "adding a station edits exactly one file" bar silently.
+  it('no station eyebrow literals outside src/content', () => {
+    for (const f of SRC) {
+      if (f.includes(join('src', 'content'))) continue;
+      const src = readFileSync(f, 'utf8');
+      expect(/['"`]STN \d{2}['"`]/.test(src), `${f} hard-codes a station code — read it from stations.js`).toBe(false);
+    }
   });
 
-  it('locks background scroll while the palette is open', () => {
-    const prims = readFileSync(join(process.cwd(), 'src/ui/primitives.tsx'), 'utf8');
-    expect(prims).toContain("document.body.style.overflow");
+  it('flight surfaces map over the stations config once they exist', () => {
+    // Phase-gated but never vacuous: once src/flight exists, its rail and
+    // static mode MUST import the config. (stations.test.ts owns the schema.)
+    const flightDir = join(process.cwd(), 'src', 'flight');
+    if (!existsSync(flightDir)) return; // Phase A: flight not built yet
+    for (const name of ['Rail.tsx', 'StaticMode.tsx']) {
+      const p = join(flightDir, name);
+      expect(existsSync(p), `${name} missing from src/flight`).toBe(true);
+      expect(readFileSync(p, 'utf8')).toMatch(/from '\.\.\/content\/stations/);
+    }
   });
 });
