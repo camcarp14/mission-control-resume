@@ -35,7 +35,7 @@ describe('motion system', () => {
     // Every @keyframes-driven class must be named in the reduce block, or a
     // user who asked the OS for less motion still gets it.
     const reduceBlock = CSS.slice(CSS.indexOf('@media (prefers-reduced-motion: reduce)'));
-    for (const cls of ['pagefade', 'stagger', 'toast', 'sk']) {
+    for (const cls of ['pagefade', 'stagger', 'toast', 'sk', 'bob', 'flare', 'xfade']) {
       expect(reduceBlock, `${cls} not disabled under reduced motion`).toContain(cls);
     }
   });

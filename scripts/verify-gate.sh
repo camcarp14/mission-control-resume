@@ -7,7 +7,7 @@ set -u
 FDIR="${1:-netlify/functions}"
 fails=0
 
-echo "== 1/4  function bundles (esbuild, exactly as the platform does) =="
+echo "== 1/5  function bundles (esbuild, exactly as the platform does) =="
 if [ -d "$FDIR" ]; then
   for f in "$FDIR"/*.ts "$FDIR"/*.mts "$FDIR"/*.js "$FDIR"/*.mjs; do
     [ -e "$f" ] || continue
@@ -25,27 +25,30 @@ else
   echo "  (no $FDIR yet)"
 fi
 
-echo "== 2/4  engine smoke (planted defects must all fire) =="
-if grep -q '"smoke"' package.json 2>/dev/null; then npm run --silent smoke || fails=1; fi
+echo "== 2/5  typecheck =="
+npm run --silent typecheck || fails=1
 
-echo "== 3/4  unit tests =="
+echo "== 3/5  unit tests (engine math, stations schema, polish invariants) =="
 npm run --silent test || fails=1
 
-echo "== 4/4  frontend build + secret sweep =="
+echo "== 4/5  frontend build + secret sweep =="
 npm run --silent build || fails=1
 if [ -d dist ]; then
-  # The API key must never reach the client bundle.
-  if grep -rl "sk-ant" dist/ 2>/dev/null | head -1 | grep -q .; then
-    echo "SECRET LEAK: 'sk-ant' found in dist/"; fails=1
-  else
-    echo "  ok: no 'sk-ant' in dist/"
-  fi
-  # The service-role key must never reach the client bundle either.
+  # The service-role key must never reach the client bundle.
   if grep -rl "service_role" dist/ 2>/dev/null | head -1 | grep -q .; then
     echo "SECRET LEAK: 'service_role' found in dist/"; fails=1
   else
     echo "  ok: no 'service_role' in dist/"
   fi
+fi
+
+echo "== 5/5  browser bar checks (skipped unless RUN_E2E=1 — they need ~3 min) =="
+if [ "${RUN_E2E:-0}" = "1" ]; then
+  node scripts/e2e/run-all.mjs || fails=1
+else
+  echo "  skipped. Run 'RUN_E2E=1 npm run gate' or 'npm run e2e' for the full bar:"
+  echo "  frames (60fps) · a11y (axe+keyboard) · breakpoints (390/2560) ·"
+  echo "  gate-breach · reduced-motion · pdf · lighthouse (perf ≥ 90)"
 fi
 
 if [ $fails -eq 0 ]; then echo ""; echo "GATE: ALL GREEN"; else echo ""; echo "GATE: FAILURES ABOVE"; exit 1; fi

@@ -9,3 +9,4 @@ build/
 *.local
 coverage/
 *.tsbuildinfo
+dist-e2e/
