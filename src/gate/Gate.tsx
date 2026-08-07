@@ -13,6 +13,16 @@ import { ErrorState } from '../ui/primitives';
 
 type Status = 'idle' | 'checking' | 'invalid_code' | 'rate_limited' | 'unreachable';
 
+// ============================================================================
+// TEMPORARY DEV BYPASS — requested for iteration; delete this whole block
+// (the const, the handler below, and the <button> in the JSX) before sharing
+// real codes. It is NOT a security bypass: it still calls the real
+// redeem_access_code RPC with the seeded demo code, so RLS/rate-limiting/
+// logging all still apply — it only saves retyping the form on every visit.
+// Search "TEMPORARY DEV BYPASS" to find every piece.
+const DEV_BYPASS_CODE = 'DEMO-K7M3';
+// ============================================================================
+
 const field =
   'w-full rounded border border-rule bg-panel px-3 py-2.5 text-base text-ink ' +
   'placeholder:text-faint transition-colors focus:border-rule-strong focus:outline-none';
@@ -40,6 +50,25 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
     if (status === 'checking') return;
     setStatus('checking');
     const res = await redeem({ ...f, code: f.code.trim() });
+    if (res.ok) onUnlocked();
+    else setStatus(res.reason);
+  };
+
+  // TEMPORARY DEV BYPASS — see the block near Status above. Builds the fields
+  // inline (not via setF + submit) so it doesn't race React's async state
+  // batching; still goes through the exact same redeem() call as the form.
+  const devQuickStart = async () => {
+    if (status === 'checking') return;
+    const devFields: GateFields = {
+      name: 'Dev Preview',
+      company: 'Internal',
+      role: 'Builder',
+      email: '',
+      code: DEV_BYPASS_CODE,
+    };
+    setF(devFields);
+    setStatus('checking');
+    const res = await redeem(devFields);
     if (res.ok) onUnlocked();
     else setStatus(res.reason);
   };
@@ -161,6 +190,18 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
             {status === 'checking' ? 'Verifying code…' : 'Begin the flight →'}
           </button>
         )}
+
+        {/* TEMPORARY DEV BYPASS — delete this button (and the two pieces
+            flagged above) once you're done iterating. Dashed border + accent
+            color on purpose: it should look unmistakably temporary. */}
+        <button
+          type="button"
+          onClick={devQuickStart}
+          disabled={status === 'checking'}
+          className="btn mt-3 w-full border border-dashed border-accent/50 bg-accent-dim px-4 py-2.5 text-xs text-accent disabled:opacity-60"
+        >
+          ⚡ Dev quick start — skip typing (remove before sharing)
+        </button>
       </form>
 
       <PaperRow />
