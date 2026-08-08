@@ -16,6 +16,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture } from '@react-three/drei';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../engine';
 import type { Vec3, Waypoint } from '../engine';
 
@@ -58,42 +59,51 @@ const GLOW_SCALE = 5.5;
 // This used to be spaceship.glb — a cartoon low-poly rocket ("Spaceship_
 // FinnTheFrog") on a single Phong texture atlas with no PBR channels. No
 // material pass rescues that silhouette; against the photoreal moon it read
-// as clip-art. It is replaced by a procedural satellite built the same way as
-// SolarBodies' relay station (foil bus + deployed arrays + parabolic dish) at
-// roughly a quarter the mass of geometry, and the GLB is no longer loaded at
-// all. Path, timing, bank and reduced-motion parking are unchanged.
+// as clip-art. It is now a COMPACT ISS: a lattice truss spine, two big solar
+// wings on rotary joints and a pressurised module slung underneath — the same
+// craft language as SolarBodies' outpost, so the two read as one universe.
+// Path, timing, bank and reduced-motion parking are unchanged.
 const FLYBY_CROSS_S = 90; // seconds to cross
 const FLYBY_REST_S = 46; // unseen pause before it loops
 const FLYBY_PERIOD_S = FLYBY_CROSS_S + FLYBY_REST_S;
 const FLYBY_BANK = 0.42; // rad of roll along its direction
 const FLYBY_PARK = 0.4; // reduced-motion park fraction along the path
-// Array tip-to-tip span in world units. The old GLB was fitted to a 4-unit
-// max dimension; a satellite is a smaller class of object, and at ~80 units of
-// lateral standoff this still resolves as a recognisable craft rather than a
-// speck. Every other dimension below is a fraction of the half-span.
+// Craft span in world units. The old GLB was fitted to a 4-unit max dimension;
+// a satellite is a smaller class of object, and at ~80 units of lateral
+// standoff this still resolves as a recognisable craft rather than a speck.
+// Every dimension below is a fraction of the half-span.
 const FLYBY_SPAN = 2.6;
 const FSAT = {
-  busW: 0.5, // × half-span, across the boom axis
-  busH: 0.6,
-  busD: 0.44,
-  boomLen: 0.17,
-  boomR: 0.026,
-  wingLen: 0.84,
-  wingH: 0.34,
-  wingT: 0.014,
-  wingSegs: 2, // cell-map repeats → two deployed panel segments per wing
-  mastH: 0.2,
-  mastR: 0.03,
-  dishR: 0.3,
-  dishDepth: 0.1,
-  whipLen: 0.5,
-  whipR: 0.012,
+  /* truss: one bay geometry, instanced along ±X */
+  bays: 5,
+  bayLen: 0.31, // × half-span
+  trussR: 0.1,
+  memberT: 0.02,
+  /* two array wings on a rotary joint, extending ±Z from the truss */
+  jointX: 0.5, // × half-span, inboard of the truss tips
+  wingLen: 0.8,
+  wingW: 0.42,
+  wingT: 0.016,
+  wingRoot: 0.16,
+  wingSegs: 2, // cell-map repeats → two blanket bays per wing
+  sarjR: 0.09,
+  sarjL: 0.2,
+  mastT: 0.03,
+  /* the pressurised module, slung under the spine and crosswise to it */
+  modY: -0.34,
+  modR: 0.16,
+  modLen: 0.62,
+  nodeR: 0.13,
+  nodeLen: 0.3,
+  dishR: 0.24,
+  dishDepth: 0.09,
   beaconR: 0.036,
 } as const;
-// A fixed presentation pose inside the flight quaternion: the craft crosses
-// nose-first with its arrays raked toward the lens, so the panels catch the
-// key light instead of edging on to it.
-const FLYBY_POSE: Vec3 = [0.28, 0.34, 0.1];
+// A fixed presentation pose inside the flight quaternion. The x tilt is
+// load-bearing: the array normal is local +Y, so a level craft shows the
+// visitor two wings EDGE-ON. Raking the whole station ~54° puts the blankets
+// broadside to the key light and to the lens.
+const FLYBY_POSE: Vec3 = [-0.95, 0.34, 0.1];
 const FLYBY_MLI_SEED = 0x7a21;
 
 // Rock clusters: seeded 30% chance per mid-voyage leg, always 25-40 units off
@@ -529,7 +539,9 @@ function getCellTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(FSAT.wingSegs, 1); // the wings are this map's only consumer
+  // Repeat runs along V, not U: a BoxGeometry's ±Y faces map U across the
+  // wing's WIDTH and V along its LENGTH, and blanket bays step down the length.
+  tex.repeat.set(1, FSAT.wingSegs); // the wings are this map's only consumer
   tex.anisotropy = 8;
   cellTexture = tex;
   return tex;
@@ -681,137 +693,324 @@ function makeDishGeometry(radius: number, depth: number): THREE.LatheGeometry {
     // Never exactly zero: a degenerate lathe pole yields NaN normals.
     pts.push(new THREE.Vector2(Math.max(radius * t, radius * 1e-3), depth * t * t));
   }
-  return new THREE.LatheGeometry(pts, 32);
+  return new THREE.LatheGeometry(pts, 24);
 }
 
-/** The flyby craft: a foil-wrapped bus, two deployed solar arrays on short
- *  booms, a gimballed parabolic dish and a pair of whip antennas — twelve
- *  meshes against four shared materials. Built in half-span units and scaled
- *  once by the group, so FLYBY_SPAN is the only size knob. */
+/* ---- merge helpers ---------------------------------------------------------
+ * Bake each primitive's transform into its vertices, then collapse the batch
+ * into ONE buffer — the same trick SolarBodies uses for the outpost and
+ * Rocket3D for the shuttle. mergeGeometries refuses a mixed indexed /
+ * non-indexed batch, so everything is normalised on the way in, and sources
+ * are disposed as they are consumed (they never reach the GPU).
+ */
+const _bakeV = new THREE.Vector3();
+const _bakeQ = new THREE.Quaternion();
+const _bakeE = new THREE.Euler();
+const _bakeS = new THREE.Vector3();
+
+function bakeTrs(
+  px: number,
+  py: number,
+  pz: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+  sx = 1,
+  sy = 1,
+  sz = 1,
+): THREE.Matrix4 {
+  return new THREE.Matrix4().compose(
+    _bakeV.set(px, py, pz),
+    _bakeQ.setFromEuler(_bakeE.set(rx, ry, rz)),
+    _bakeS.set(sx, sy, sz),
+  );
+}
+
+function bakePart(out: THREE.BufferGeometry[], geo: THREE.BufferGeometry, m?: THREE.Matrix4): void {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  if (m) g.applyMatrix4(m);
+  geo.dispose();
+  out.push(g);
+}
+
+function bakeMerge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged: THREE.BufferGeometry | null = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  return merged ?? new THREE.BufferGeometry();
+}
+
+const FLY_HALF_PI = Math.PI / 2;
+
+/** One lattice truss bay: four longerons, a closing end frame and a zig-zag
+ *  diagonal on every face. Instanced FSAT.bays times, this single buffer is
+ *  the whole spine — and the spine is what makes a handful of boxes read as
+ *  the ISS instead of as a generic satellite. */
+function makeFlybyBay(h: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const len = h * FSAT.bayLen;
+  const w = h * FSAT.trussR;
+  const t = h * FSAT.memberT;
+  for (const sy of [1, -1]) {
+    for (const sz of [1, -1]) {
+      bakePart(parts, new THREE.BoxGeometry(len, t, t), bakeTrs(0, sy * w, sz * w));
+    }
+  }
+  const x0 = -len / 2 + t * 0.5;
+  for (const sy of [1, -1]) {
+    bakePart(parts, new THREE.BoxGeometry(t, t, w * 2), bakeTrs(x0, sy * w, 0));
+  }
+  for (const sz of [1, -1]) {
+    bakePart(parts, new THREE.BoxGeometry(t, w * 2, t), bakeTrs(x0, 0, sz * w));
+  }
+  const span = Math.hypot(len, w * 2);
+  const ang = Math.atan2(w * 2, len);
+  const d = t * 0.82;
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, w, 0, 0, -ang, 0));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, -w, 0, 0, ang, 0));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, 0, w, 0, 0, ang));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, 0, -w, 0, 0, -ang));
+  return bakeMerge(parts);
+}
+
+type FlybyBuild = {
+  bay: THREE.BufferGeometry;
+  hull: THREE.BufferGeometry;
+  foil: THREE.BufferGeometry;
+  alloy: THREE.BufferGeometry;
+  wing: THREE.BufferGeometry;
+  trussAt: [number, number, number][];
+  wingAt: [number, number, number][];
+  beaconAt: [number, number, number];
+};
+
+/** Assemble the craft once. Everything is in half-span units, so FLYBY_SPAN
+ *  stays the single size knob. */
+function buildFlyby(h: number): FlybyBuild {
+  const F = FSAT;
+  const trussHalf = (F.bays * F.bayLen * h) / 2;
+  const hullParts: THREE.BufferGeometry[] = [];
+  const foilParts: THREE.BufferGeometry[] = [];
+  const alloyParts: THREE.BufferGeometry[] = [];
+  const trussAt: [number, number, number][] = [];
+  const wingAt: [number, number, number][] = [];
+
+  for (let i = 0; i < F.bays; i++) {
+    trussAt.push([(i - (F.bays - 1) / 2) * F.bayLen * h, 0, 0]);
+  }
+  // Blanketed pallets capping the spine.
+  for (const sx of [1, -1]) {
+    bakePart(
+      foilParts,
+      new THREE.BoxGeometry(h * 0.14, h * 0.17, h * 0.17),
+      bakeTrs(sx * (trussHalf - h * 0.07), 0, 0),
+    );
+  }
+
+  // Rotary joint, beta gimbals, folding masts, wings.
+  const wingMid = (F.wingRoot + F.wingLen / 2) * h;
+  for (const sx of [1, -1]) {
+    const jx = sx * F.jointX * h;
+    bakePart(
+      alloyParts,
+      new THREE.CylinderGeometry(F.sarjR * h, F.sarjR * h, F.sarjL * h, 12),
+      bakeTrs(jx, 0, 0, 0, 0, FLY_HALF_PI),
+    );
+  }
+  for (const sz of [1, -1]) {
+    bakePart(
+      alloyParts,
+      new THREE.CylinderGeometry(F.sarjR * h * 0.5, F.sarjR * h * 0.5, F.wingRoot * h * 1.6, 10),
+      bakeTrs(0, 0, sz * F.wingRoot * h * 0.55, FLY_HALF_PI, 0, 0),
+    );
+    bakePart(
+      alloyParts,
+      new THREE.BoxGeometry(F.mastT * h, F.mastT * h, F.wingLen * h * 0.98),
+      bakeTrs(0, -(F.wingT / 2 + F.mastT * 0.6) * h, sz * wingMid),
+    );
+    wingAt.push([0, 0, sz * wingMid]);
+  }
+
+  // Pressurised module under the spine, plus a crosswise node.
+  const my = F.modY * h;
+  bakePart(
+    hullParts,
+    new THREE.CylinderGeometry(F.modR * h, F.modR * h, F.modLen * h, 14),
+    bakeTrs(0, my, 0.1 * h, FLY_HALF_PI, 0, 0),
+  );
+  bakePart(
+    hullParts,
+    new THREE.CylinderGeometry(F.nodeR * h, F.nodeR * h, F.nodeLen * h, 12),
+    bakeTrs(0, my, -0.28 * h, 0, 0, FLY_HALF_PI),
+  );
+  bakePart(
+    foilParts,
+    new THREE.CylinderGeometry(F.modR * h * 1.03, F.modR * h * 1.03, h * 0.16, 14, 1, true),
+    bakeTrs(0, my, 0.3 * h, FLY_HALF_PI, 0, 0),
+  );
+  // Struts tying the module up to the spine — without them it floats.
+  const strutTop = -F.trussR * h;
+  const strutBot = my + F.modR * h * 0.6;
+  for (const sz of [1, -1]) {
+    bakePart(
+      alloyParts,
+      new THREE.BoxGeometry(h * 0.026, strutTop - strutBot, h * 0.026),
+      bakeTrs(0, (strutTop + strutBot) / 2, sz * h * 0.18),
+    );
+  }
+
+  // High-gain dish on a stub boom. One of only two curved surfaces on the
+  // craft, so it carries the "this is kit, not a box" read on its own.
+  const dishGeo = makeDishGeometry(h * F.dishR, h * F.dishDepth);
+  bakePart(hullParts, dishGeo, bakeTrs(-0.2 * h, F.trussR * h + h * 0.16, 0.06 * h, -0.6, 0.4, 0));
+  bakePart(
+    alloyParts,
+    new THREE.CylinderGeometry(h * 0.022, h * 0.022, h * 0.14, 8),
+    bakeTrs(-0.2 * h, F.trussR * h + h * 0.07, 0.06 * h),
+  );
+
+  return {
+    bay: makeFlybyBay(h),
+    hull: bakeMerge(hullParts),
+    foil: bakeMerge(foilParts),
+    alloy: bakeMerge(alloyParts),
+    wing: new THREE.BoxGeometry(F.wingW * h, F.wingT * h, F.wingLen * h),
+    trussAt,
+    wingAt,
+    beaconAt: [trussHalf - h * 0.05, F.trussR * h * 1.7, 0],
+  };
+}
+
+/** The flyby craft: a compact ISS — lattice truss spine, two big solar wings
+ *  on a rotary joint, a pressurised module slung underneath and a high-gain
+ *  dish. SIX draw calls against four shared materials (the old bus-and-booms
+ *  bird spent fifteen). */
 function SmallSatellite() {
   const h = FLYBY_SPAN / 2;
   const mli = getMliTexture();
   const cells = getCellTexture();
+  const trussRef = useRef<THREE.InstancedMesh>(null);
+  const wingRef = useRef<THREE.InstancedMesh>(null);
 
-  const dishGeo = useMemo(() => makeDishGeometry(h * FSAT.dishR, h * FSAT.dishDepth), [h]);
+  const build = useMemo(() => buildFlyby(h), [h]);
 
+  /* Materials match SolarBodies' station exactly in spirit: grey albedos, high
+   * roughness, emissives that are a floor-fill (so no face goes to void-black
+   * against the night HDRI) rather than a glow, and NO toneMapped:false
+   * anywhere. Nothing on this craft is a light source except the nav lamp. */
   const mats = useMemo(() => {
-    // Each material carries a small emissive: the scene's key is one
-    // directional and the env map is a night HDRI, so an unlit metal at this
-    // distance photographs as a hole rather than a craft.
     const foil = new THREE.MeshStandardMaterial({
       map: mli,
       bumpMap: mli,
       bumpScale: 0.25,
+      // The MLI map is authored bright gold; multiplying it down keeps the
+      // blanket under the scene's 0.85 bloom threshold.
+      color: '#9a9a9a',
       emissiveMap: mli,
-      emissive: '#ffd489',
-      emissiveIntensity: 0.15,
-      metalness: 0.72,
-      roughness: 0.38,
-      envMapIntensity: 1.1,
+      emissive: '#6b5320',
+      emissiveIntensity: 0.09,
+      metalness: 0.6,
+      roughness: 0.55,
+      envMapIntensity: 0.6,
     });
     const cellFace = new THREE.MeshStandardMaterial({
       map: cells,
       emissiveMap: cells,
-      emissive: '#3d4a96',
-      emissiveIntensity: 0.18,
-      metalness: 0.34,
-      roughness: 0.22,
-      envMapIntensity: 0.95,
+      emissive: '#1e2452',
+      emissiveIntensity: 0.09,
+      // Roughness raised from 0.22: a mirror-smooth blanket threw a specular
+      // hotspot that clipped and then bloomed.
+      metalness: 0.28,
+      roughness: 0.46,
+      envMapIntensity: 0.5,
     });
     const alloy = new THREE.MeshStandardMaterial({
-      color: '#b9bec6',
-      emissive: '#43494f',
-      emissiveIntensity: 0.22,
-      metalness: 0.85,
-      roughness: 0.42,
+      color: '#8f959d',
+      emissive: '#2c3238',
+      emissiveIntensity: 0.18,
+      metalness: 0.78,
+      roughness: 0.55,
       envMapIntensity: ENV_MAP_INTENSITY,
     });
-    const paint = new THREE.MeshStandardMaterial({
-      color: '#eef1f5',
-      emissive: '#93a4b6',
-      emissiveIntensity: 0.16,
+    const hull = new THREE.MeshStandardMaterial({
+      // Real station modules photograph as light GREY, never paper white —
+      // #eef1f5 at roughness 0.55 clipped and bloomed into a smear.
+      color: '#b9bec6',
+      emissive: '#39414c',
+      emissiveIntensity: 0.12,
       metalness: 0.05,
-      roughness: 0.55,
+      roughness: 0.75,
       side: THREE.DoubleSide, // the dish is a shell: both faces must light
-      envMapIntensity: 0.9,
+      envMapIntensity: 0.5,
     });
-    return { foil, cellFace, alloy, paint };
+    return { foil, cellFace, alloy, hull };
   }, [mli, cells]);
 
-  // R3F auto-disposes JSX-created geometry; the memoized lathe and the shared
-  // materials clean up after themselves.
+  useLayoutEffect(() => {
+    const truss = trussRef.current;
+    if (truss) {
+      let i = 0;
+      for (const p of build.trussAt) {
+        _dummy.position.set(p[0], p[1], p[2]);
+        _dummy.rotation.set(0, 0, 0);
+        _dummy.scale.setScalar(1);
+        _dummy.updateMatrix();
+        truss.setMatrixAt(i++, _dummy.matrix);
+      }
+      truss.instanceMatrix.needsUpdate = true;
+    }
+    const wing = wingRef.current;
+    if (wing) {
+      let i = 0;
+      for (const p of build.wingAt) {
+        _dummy.position.set(p[0], p[1], p[2]);
+        _dummy.rotation.set(0, 0, 0);
+        _dummy.scale.setScalar(1);
+        _dummy.updateMatrix();
+        wing.setMatrixAt(i++, _dummy.matrix);
+      }
+      wing.instanceMatrix.needsUpdate = true;
+    }
+  }, [build]);
+
   useEffect(
     () => () => {
-      dishGeo.dispose();
-      for (const m of Object.values(mats)) m.dispose();
+      build.bay.dispose();
+      build.hull.dispose();
+      build.foil.dispose();
+      build.alloy.dispose();
+      build.wing.dispose();
     },
-    [dishGeo, mats],
+    [build],
   );
 
-  const boomX = h * (FSAT.busW / 2 + FSAT.boomLen / 2);
-  const wingX = h * (FSAT.busW / 2 + FSAT.boomLen + FSAT.wingLen / 2);
+  useEffect(
+    () => () => {
+      for (const m of Object.values(mats)) m.dispose();
+    },
+    [mats],
+  );
 
   return (
     <group rotation={FLYBY_POSE}>
-      <mesh material={mats.foil}>
-        <boxGeometry args={[h * FSAT.busW, h * FSAT.busH, h * FSAT.busD]} />
-      </mesh>
-      {[1, -1].map((side) => (
-        <group key={side}>
-          <mesh material={mats.alloy} position={[side * boomX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[h * FSAT.boomR, h * FSAT.boomR, h * FSAT.boomLen, 8]} />
-          </mesh>
-          {/* Array normal is +Z — the same axis the dish looks down. */}
-          <mesh material={mats.cellFace} position={[side * wingX, 0, 0]}>
-            <boxGeometry args={[h * FSAT.wingLen, h * FSAT.wingH, h * FSAT.wingT]} />
-          </mesh>
-          <mesh material={mats.alloy} position={[side * wingX, 0, -h * FSAT.wingT * 1.5]}>
-            <boxGeometry args={[h * FSAT.wingLen, h * FSAT.wingH * 0.07, h * FSAT.wingT * 1.6]} />
-          </mesh>
-        </group>
-      ))}
-      {/* Gimballed high-gain dish. rotation.x = π/2 turns the lathe's +Y
-          opening onto +Z; the extra tilt keeps the bowl three-dimensional on
-          camera instead of presenting as a flat white circle. */}
-      <mesh material={mats.foil} position={[0, h * (FSAT.busH / 2 + FSAT.mastH / 2), 0]}>
-        <cylinderGeometry args={[h * FSAT.mastR, h * FSAT.mastR * 1.3, h * FSAT.mastH, 10]} />
-      </mesh>
-      <group
-        position={[0, h * (FSAT.busH / 2 + FSAT.mastH + FSAT.dishR * 0.2), 0]}
-        rotation={[Math.PI / 2 - 0.3, 0.24, 0]}
-      >
-        <mesh geometry={dishGeo} material={mats.paint} />
-        <mesh
-          material={mats.alloy}
-          position={[0, h * FSAT.dishDepth, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
-        >
-          <torusGeometry args={[h * FSAT.dishR, h * FSAT.dishR * 0.03, 6, 28]} />
-        </mesh>
-        {/* Prime-focus feed: a stub mast with a horn on the end. A bare strut
-            across the bowl photographs as a scratch on the paint. */}
-        <mesh material={mats.alloy} position={[0, h * FSAT.dishR * 0.24, 0]}>
-          <cylinderGeometry args={[h * 0.022, h * 0.022, h * FSAT.dishR * 0.48, 6]} />
-        </mesh>
-        <mesh material={mats.paint} position={[0, h * FSAT.dishR * 0.52, 0]} rotation={[Math.PI, 0, 0]}>
-          <coneGeometry args={[h * FSAT.dishR * 0.17, h * FSAT.dishR * 0.2, 12, 1, true]} />
-        </mesh>
-      </group>
-      {/* Two splayed whip omnis — never a symmetric pair of pins. The tilt
-          lives on a GROUP so each whip pivots at the bus; rotating the mesh
-          itself would swing it about its own midpoint and float the root. */}
-      {[0.44, -0.5].map((tilt, i) => (
-        <group key={i} rotation={[0, 0, tilt]}>
-          <mesh material={mats.alloy} position={[0, h * (FSAT.busH / 2 + FSAT.whipLen / 2), 0]}>
-            <cylinderGeometry args={[h * FSAT.whipR * 0.5, h * FSAT.whipR, h * FSAT.whipLen, 6]} />
-          </mesh>
-        </group>
-      ))}
+      {/* The spine: one lattice bay instanced end to end. Culling is off
+          because the instances spread past the bay's own bounding sphere. */}
+      <instancedMesh
+        ref={trussRef}
+        args={[build.bay, mats.alloy, build.trussAt.length]}
+        frustumCulled={false}
+      />
+      <mesh geometry={build.hull} material={mats.hull} />
+      <mesh geometry={build.foil} material={mats.foil} />
+      <mesh geometry={build.alloy} material={mats.alloy} />
+      <instancedMesh
+        ref={wingRef}
+        args={[build.wing, mats.cellFace, build.wingAt.length]}
+        frustumCulled={false}
+      />
       {/* Nav beacon: unlit emissive, no useFrame — this craft is 80+ units
           out, where a blink would read as a flicker artefact, and a steady
-          lamp needs no reduced-motion gate. */}
-      <mesh position={[0, -h * (FSAT.busH / 2 + FSAT.beaconR * 0.8), h * FSAT.busD * 0.3]}>
+          lamp needs no reduced-motion gate. The only light source on it. */}
+      <mesh position={build.beaconAt}>
         <sphereGeometry args={[h * FSAT.beaconR, 10, 8]} />
         <meshStandardMaterial color="#111111" emissive="#ffffff" emissiveIntensity={1.6} />
       </mesh>

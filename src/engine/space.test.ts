@@ -20,13 +20,41 @@ describe('voyage layout', () => {
     const landing = w[10]!;
     expect(landing.bodyPos).toEqual(home.bodyPos);
     expect(landing.bodyRadius).toBe(home.bodyRadius);
-    // Landing approach is CLOSE — well inside the outbound framing distance.
-    const d = Math.hypot(
-      landing.camPos[0] - landing.bodyPos[0],
-      landing.camPos[1] - landing.bodyPos[1],
-      landing.camPos[2] - landing.bodyPos[2],
+
+    // The landing camera is at GROUND LEVEL. Distance from the planet's
+    // centre is the wrong metric for that — widening the shot along the
+    // surface inflates it exactly like climbing does, which is how this
+    // assertion came to fail on a change that moved the camera sideways,
+    // not up. What "landed" actually means is ALTITUDE: the component of
+    // (camera - pad) along the pad's surface normal must stay small
+    // against the planet, while the lateral component is free to grow as
+    // the finale framing widens.
+    const site = landing.site!;
+    const nHat = (() => {
+      const v: [number, number, number] = [
+        site[0] - landing.bodyPos[0],
+        site[1] - landing.bodyPos[1],
+        site[2] - landing.bodyPos[2],
+      ];
+      const m = Math.hypot(v[0], v[1], v[2]);
+      return [v[0] / m, v[1] / m, v[2] / m] as const;
+    })();
+    const rel: [number, number, number] = [
+      landing.camPos[0] - site[0],
+      landing.camPos[1] - site[1],
+      landing.camPos[2] - site[2],
+    ];
+    const altitude = rel[0] * nHat[0] + rel[1] * nHat[1] + rel[2] * nHat[2];
+    expect(altitude).toBeGreaterThan(0); // above the pad, never inside the planet
+    expect(altitude).toBeLessThan(landing.bodyRadius * 0.5); // hugging the ground
+    // And the pad itself is on this planet's surface, not floating.
+    const padR = Math.hypot(
+      site[0] - landing.bodyPos[0],
+      site[1] - landing.bodyPos[1],
+      site[2] - landing.bodyPos[2],
     );
-    expect(d).toBeLessThan(landing.bodyRadius * 2.2);
+    expect(padR).toBeGreaterThan(landing.bodyRadius);
+    expect(padR).toBeLessThan(landing.bodyRadius * 1.15);
   });
 
   it('advances the OUTBOUND legs monotonically along -Z with a constant step', () => {

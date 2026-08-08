@@ -122,15 +122,20 @@ export function voyage(n: number): Waypoint[] {
       const nHat = norm3([20, 9, 26]);
       const tHat = norm3(cross3(nHat, [0, 1, 0]));
       const site = madd3(bodyPos, nHat, r + 1.35);
-      // Widened twice on live feedback (12 → 17 → 24 along-surface, fov 48
-      // → 55): the finale is a whole pier and skyline, and the visitor
-      // should see the CITY, ground-level, with the ship in the foreground.
-      const camPos = madd3(madd3(bodyPos, nHat, r + 3.95), tHat, 24);
+      // Widened three times on live feedback (12 → 17 → 24 → 32
+      // along-surface, fov 48 → 55 → 62): the finale is a whole pier and a
+      // ninety-building skyline, and the visitor should see the CITY,
+      // ground-level, with the ship small in the foreground.
+      const camPos = madd3(madd3(bodyPos, nHat, r + 4.6), tHat, 32);
       // Gaze: above the pad (a raised eyeline drops the horizon to the lower
       // third), carried past it along-surface, nudged sideways so the
       // shuttle frames left-of-centre — the panel docks centre-right.
       const bHat = cross3(nHat, tHat);
-      const gaze = madd3(madd3(madd3(site, nHat, 4.2), tHat, -3), bHat, 10);
+      // Eyeline raised with the widening: at fov 62 the bottom of the frame
+      // points steeply down, and a level gaze put the terrain disc's own
+      // edge — and the void past it — on screen. Looking up tips that below
+      // the frame and fills it with skyline instead.
+      const gaze = madd3(madd3(madd3(site, nHat, 9.5), tHat, -4), bHat, 12);
       out.push({
         index: i,
         kind: 'earthReturn',
@@ -138,7 +143,7 @@ export function voyage(n: number): Waypoint[] {
         bodyRadius: r,
         camPos,
         gaze,
-        fov: 55,
+        fov: 62,
         site,
       });
       continue;

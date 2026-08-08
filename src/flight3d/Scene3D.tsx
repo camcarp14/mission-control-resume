@@ -5,7 +5,14 @@ import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
 import { fovAt, legInto, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT, STEP } from '../engine';
 import { SpaceEnvironment } from './SpaceEnvironment';
-import { SolarBodies } from './SolarBodies';
+import {
+  SolarBodies,
+  SUN_LIGHT_COLOR,
+  SUN_LIGHT_CUTOFF,
+  SUN_LIGHT_DECAY,
+  SUN_LIGHT_PULSE,
+  sunLightIntensity,
+} from './SolarBodies';
 import { StationLabels } from './StationLabels';
 import { Meteors } from './Meteors';
 import { Rocket3D } from './Rocket3D';
@@ -76,6 +83,8 @@ function Rig({
   gearRef,
   deepSpaceRef,
   detailRef,
+  sunLightRef,
+  sunLightBase,
   anchors,
   tetherLine,
   tetherDot,
@@ -92,6 +101,8 @@ function Rig({
   gearRef: { current: number };
   deepSpaceRef: { current: THREE.Group | null };
   detailRef: { current: THREE.Group | null };
+  sunLightRef: { current: THREE.PointLight | null };
+  sunLightBase: number;
   anchors?: { current: Map<number, HTMLDivElement> } | undefined;
   tetherLine?: { current: SVGLineElement | null } | undefined;
   tetherDot?: { current: SVGCircleElement | null } | undefined;
@@ -194,11 +205,11 @@ function Rig({
       // pose. Ground always below, horizon arriving last — never through
       // the water plane, never under the deck (both prior live reports).
       // At homeRaw=1 the column pose EQUALS the engine's landing camPos
-      // (site + n̂·2.6 + tHat·24), so the handoff is exact. ====
+      // (site + n̂·3.25 + tHat·32), so the handoff is exact. ====
       if (landing.site && homeRaw > 0.5) {
         tmpTHat.set(-tmpNorm.z, 0, tmpNorm.x).normalize(); // engine tHat
-        const alt = 2.6 + (45 - 2.6) * (1 - smooth(homeRaw, 0.5, 0.97));
-        const side = 16 + 8 * smooth(homeRaw, 0.8, 0.99);
+        const alt = 3.25 + (45 - 3.25) * (1 - smooth(homeRaw, 0.5, 0.97));
+        const side = 18 + 14 * smooth(homeRaw, 0.8, 0.99);
         tmpDescent
           .set(landing.site[0], landing.site[1], landing.site[2])
           .addScaledVector(tmpNorm, alt)
@@ -548,6 +559,14 @@ function Rig({
       const want = ramp < 0.82;
       if (ds.visible !== want) ds.visible = want;
     }
+    // The sun's breath — hoisted out of SolarBodies so the cull never drops
+    // a light. Two slow detuned sines: the furnace inhaling, not a strobe.
+    const sl = sunLightRef.current;
+    if (sl && !reduced) {
+      const e = state.clock.elapsedTime;
+      sl.intensity =
+        sunLightBase * (1 + SUN_LIGHT_PULSE * 0.5 * (Math.sin(e * 0.31) + Math.sin(e * 0.47)));
+    }
   });
 
   return <Rocket3D ref={rocketRef} thrustRef={thrustRef} gearRef={gearRef} reduced={reduced} />;
@@ -557,6 +576,99 @@ function Rig({
  *  whenever the station snaps. */
 function InvalidateOnT({ t }: { t: MotionValue<number> }) {
   useEffect(() => t.on('change', () => invalidate()), [t]);
+  return null;
+}
+
+/**
+ * SHADER WARM-UP — the fix for "the return to chicago lagged... notably the
+ * first time a user is on the site", which is exactly when a recruiter is
+ * watching.
+ *
+ * three compiles a GPU program the first time a material is actually drawn
+ * in a given configuration. Half this app's materials — the landing site,
+ * the city, the fireworks, the ship's landing gear — do not appear until the
+ * final seconds of an eleven-station flight, so their compiles all landed
+ * mid-descent as one long hitch.
+ *
+ * compile() only walks VISIBLE objects, so warming "what is on screen at
+ * boot" misses precisely the things that show up late. This forces every
+ * object in the scene visible, compiles, and restores — so the flight home
+ * draws nothing the GPU has not already seen. It runs a few times across the
+ * boot window because scene content (models, suspended textures) is still
+ * streaming in, and each arrival brings materials of its own.
+ */
+function WarmUp({ gearRef }: { gearRef: { current: number } }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+
+  // ==== THE DRESS REHEARSAL ====================================================
+  // compile() warms programs from a material's declared state, but the only
+  // thing that PROVES a program exists is drawing it. So once, at boot, fly
+  // the whole thing to the landing for a single frame and render it to a
+  // throwaway 32px target: the pier, the city, the fireworks and the deployed
+  // gear all draw for real, off-screen, and the flight home later draws
+  // nothing the GPU has not already seen.
+  //
+  // Gated on the boot overlay still being up. That overlay is opaque and
+  // covers the canvas, so the one on-screen frame that also lands cannot be
+  // seen; if the overlay has already gone (warm cache, instant boot) the
+  // rehearsal is skipped rather than risk a visible flash of the finale.
+  // The rehearsal must never touch the flight itself. An earlier version
+  // posed the scene by writing the real `t` MotionValue for a frame — which
+  // also drives the DOM panels, and a breakpoint check caught a station
+  // panel yanked 167px off the top of a 390px viewport during that window.
+  // Forcing visibility is enough: three draws a material whose opacity is
+  // still 0, so the programs compile all the same.
+  const stage = useRef(0);
+  useFrame(() => {
+    if (stage.current !== 0) return;
+    if (document.querySelector('div.fixed.z-30') === null) return; // overlay gone: skip
+    stage.current = 1;
+    const gearWas = gearRef.current;
+    gearRef.current = 1; // so the gear's own materials draw at least once
+    const saved: [THREE.Object3D, boolean][] = [];
+    scene.traverse((o) => {
+      saved.push([o, o.visible]);
+      o.visible = true;
+    });
+    const rt = new THREE.WebGLRenderTarget(32, 32);
+    const prev = gl.getRenderTarget();
+    gl.setRenderTarget(rt);
+    gl.render(scene, camera);
+    gl.setRenderTarget(prev);
+    rt.dispose();
+    for (const [o, v] of saved) o.visible = v;
+    gearRef.current = gearWas;
+  });
+
+  useEffect(() => {
+    const warm = () => {
+      // The gear is hidden by its own frame loop off gearRef; deploy it for
+      // the warm pass so its materials compile here and not on final
+      // approach. The Rig overwrites this on the next frame.
+      const gearWas = gearRef.current;
+      gearRef.current = 1;
+      const saved: [THREE.Object3D, boolean][] = [];
+      scene.traverse((o) => {
+        saved.push([o, o.visible]);
+        o.visible = true;
+      });
+      gl.compile(scene, camera);
+      for (const [o, v] of saved) o.visible = v;
+      gearRef.current = gearWas;
+    };
+    const raf = requestAnimationFrame(warm);
+    const t1 = window.setTimeout(warm, 1200);
+    const t2 = window.setTimeout(warm, 4000);
+    const t3 = window.setTimeout(warm, 10000);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [gl, scene, camera, gearRef]);
   return null;
 }
 
@@ -596,6 +708,10 @@ function PerfProbe() {
         ms: +(a.ms / a.frames).toFixed(1),
         calls: Math.round(info.calls / a.frames),
         tris: Math.round(info.triangles / a.frames),
+        // The number that proves the warm-up worked: if this climbs during
+        // the flight home, shaders are still compiling mid-descent and the
+        // visitor feels it as a stall.
+        programs: gl.info.programs?.length ?? -1,
       };
       a.frames = 0;
       a.ms = 0;
@@ -637,6 +753,12 @@ export function Scene3D({
   const detailRef = useRef<THREE.Group>(null);
   const points = useMemo(() => voyage(n), [n]);
   const sunPos = (points[n - 1]?.bodyPos ?? [0, 0, 0]) as [number, number, number];
+  // The sun body sits at n-2 (n-1 is the homecoming, which reuses Earth).
+  const sunWp = points[n - 2];
+  const sunLightPos = (sunWp?.bodyPos ?? [0, 0, 0]) as [number, number, number];
+  const sunRadius = sunWp?.bodyRadius ?? 26;
+  const sunLightBase = useMemo(() => sunLightIntensity(sunRadius), [sunRadius]);
+  const sunLightRef = useRef<THREE.PointLight>(null);
 
   return (
     <Canvas
@@ -662,6 +784,18 @@ export function Scene3D({
             were all still drawing behind an opaque scene, which is most of
             why the return "lagged a ton" (verbatim). The starfield stays —
             the dome is deliberately translucent at the zenith. */}
+        {/* The sun's drama light lives OUTSIDE the culled group on purpose:
+            a light that disappears with its group changes the scene's light
+            counts, and three recompiles every shader program the next frame.
+            Hoisted, the light set is constant and the cull costs nothing. */}
+        <pointLight
+          ref={sunLightRef}
+          position={sunLightPos}
+          color={SUN_LIGHT_COLOR}
+          intensity={sunLightBase}
+          decay={SUN_LIGHT_DECAY}
+          distance={sunRadius * SUN_LIGHT_CUTOFF}
+        />
         <group ref={deepSpaceRef}>
           <SolarBodies waypoints={points} reduced={reduced} landingRef={landingRef} />
         </group>
@@ -694,11 +828,14 @@ export function Scene3D({
           gearRef={gearRef}
           deepSpaceRef={deepSpaceRef}
           detailRef={detailRef}
+          sunLightRef={sunLightRef}
+          sunLightBase={sunLightBase}
           anchors={anchors}
           tetherLine={tetherLine}
           tetherDot={tetherDot}
         />
         <Effects reduced={reduced} getBoost={() => boostRef.current} />
+        <WarmUp gearRef={gearRef} />
       </Suspense>
       {reduced && <InvalidateOnT t={t} />}
       {import.meta.env.DEV && <PerfProbe />}

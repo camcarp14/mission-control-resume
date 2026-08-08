@@ -2255,36 +2255,75 @@ export function LandingSite({
   const assets = useMemo(buildAssets, []);
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera);
+  const scene = useThree((s) => s.scene);
 
   // Precompile every landing material and upload the canvas textures at
   // MOUNT, while the boot overlay still covers the canvas. Left to first
   // use, the whole night pipeline would compile at the exact moment the
   // site becomes visible mid-descent — a multi-second stall on software
   // rendering and a visible hitch on real GPUs.
+  //
+  // COMPILE AGAINST THE WHOLE SCENE, never against this group. three derives
+  // a program's light-count defines (NUM_POINT_LIGHTS et al) from the object
+  // it is handed, so compiling the site alone bakes programs for the site's
+  // own three lights — and the first REAL frame, which also carries the
+  // starfield's lights, the sun's point light and the ship's, misses that
+  // cache and recompiles the entire night pipeline mid-descent. That was the
+  // first-visit hitch on the flight home: the warm-up was warming the wrong
+  // shader variants.
   useEffect(() => {
-    const g = groupRef.current;
-    if (!g) return;
-    const wasVisible = g.visible;
-    g.visible = true;
-    gl.compile(g, camera);
-    // …and the OPAQUE variant of every fade-only material too. three bakes
-    // `transparent` into the program (#define OPAQUE), so the flip at full
-    // fade would otherwise compile a second program set at the exact moment
-    // the ship touches down. Warm both, then leave them transparent.
-    for (const m of assets.solid) {
-      m.transparent = false;
-      m.needsUpdate = true;
-    }
-    gl.compile(g, camera);
-    for (const m of assets.solid) {
-      m.transparent = true;
-      m.needsUpdate = true;
-    }
-    gl.compile(g, camera);
-    assets.solidState.opaque = false;
-    for (const tex of assets.textures) gl.initTexture(tex);
-    g.visible = wasVisible;
-  }, [gl, camera, assets]);
+    const warm = () => {
+      const g = groupRef.current;
+      if (!g) return;
+      const wasVisible = g.visible;
+      g.visible = true;
+      gl.compile(scene, camera);
+      // …and the OPAQUE variant of every fade-only material too. three bakes
+      // `transparent` into the program (#define OPAQUE), so the flip at full
+      // fade would otherwise compile a second program set at the exact moment
+      // the ship touches down. Warm both, then leave them transparent.
+      for (const m of assets.solid) {
+        m.transparent = false;
+        m.needsUpdate = true;
+      }
+      gl.compile(scene, camera);
+      // compile() warms a program from declared state; DRAWING is what
+      // proves it exists. Render the site off-screen in the opaque state it
+      // holds at touchdown, then again transparent — the two configurations
+      // the descent actually passes through. 32px target, so this is pure
+      // program/state cost with no fill. This is what turns the first flight
+      // home from a compile storm into an ordinary frame.
+      const rt = new THREE.WebGLRenderTarget(32, 32);
+      const prevTarget = gl.getRenderTarget();
+      gl.setRenderTarget(rt);
+      gl.render(scene, camera);
+      for (const m of assets.solid) {
+        m.transparent = true;
+        m.needsUpdate = true;
+      }
+      gl.render(scene, camera);
+      gl.setRenderTarget(prevTarget);
+      rt.dispose();
+      gl.compile(scene, camera);
+      assets.solidState.opaque = false;
+      for (const tex of assets.textures) gl.initTexture(tex);
+      g.visible = wasVisible;
+    };
+    // Run it THREE times over the boot window, not once at mount. Mount is
+    // too early to be authoritative: sibling scene content (the ship and its
+    // point light, suspended textures, the GLB dressing) is still streaming
+    // in, and each arrival changes the scene's light signature — which is
+    // exactly the input that decides whether a cached program is reused.
+    // Warming after they land is what makes the first flight home hitchless.
+    const raf = requestAnimationFrame(warm);
+    const mid = window.setTimeout(warm, 2500);
+    const late = window.setTimeout(warm, 8000);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(mid);
+      window.clearTimeout(late);
+    };
+  }, [gl, camera, scene, assets]);
 
   // Everything imperative gets disposed imperatively.
   useEffect(

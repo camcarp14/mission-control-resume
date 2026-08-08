@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Waypoint } from '../engine';
 import { mulberry32 } from '../engine';
 
@@ -137,47 +138,105 @@ const CLUSTER_POINT_COUNT = 300;
 const RING_TILT = 0.45;
 const NAV_LIGHT_STEADY = 1.4; // emissive intensity when reduced (never pulses)
 const OUTPOST_TRACK_YAW = 0.02; // rad/s — solar panels crawling sunward
-/* ---- the satellite (BodyKind 'outpost') ----------------------------------
- * Proportions of a real three-axis-stabilised relay bird, every dimension a
- * FRACTION OF wp.bodyRadius so the waypoint contract still owns the station's
- * size. Local frame: +Z is the sun-facing axis (array normal and dish boresight
- * both look down it), +Y is the antenna deck, ±X are the array booms. */
-const SAT = {
-  busW: 0.46, // bus, across the boom axis
-  busH: 0.6, // bus, along the antenna/thruster stack
-  busD: 0.44, // bus, along the sun-facing axis
-  deckT: 0.06, // aft equipment deck slab
-  boomLen: 0.3,
-  boomR: 0.022,
-  yokeR: 0.038, // array hinge barrel
-  wingLen: 1.1, // one wing, tip to root
-  wingH: 0.44,
-  wingT: 0.012,
-  wingSegs: 3, // cell-texture repeats → three hinged panel segments per wing
-  mastR: 0.026,
-  mastH: 0.2,
-  dishR: 0.34,
-  dishDepth: 0.19, // ≈ f/D 0.33 — deep enough that the bowl shades as a bowl
-  dishRimT: 0.017, // a thin rim vanishes; this is what gives the disc an EDGE
-  subR: 0.055, // Cassegrain subreflector, held at the focus
-  whipR: 0.007,
-  whipLen: 0.72,
-  trackerW: 0.11, // star-tracker box
-  nozzleR: 0.036,
-  nozzleH: 0.075,
-  beaconR: 0.03,
+/* ---- the outpost (BodyKind 'outpost') — an ISS-class station ---------------
+ * The SILHOUETTE is the whole job. The International Space Station is
+ * unmistakable for three reasons, in this order: a long lattice TRUSS spine,
+ * an enormous area of solar array hung off its ends as four coplanar wings,
+ * and a knot of white cylinders slung under the middle at right angles to the
+ * spine. Everything below serves that read, and EVERY dimension stays a
+ * fraction of wp.bodyRadius so the waypoint contract still owns the size.
+ *
+ * Local frame: +X runs the truss, ±Z is the extension axis shared by the array
+ * wings and the pressurised stack, +Y is the array normal (zenith).
+ *
+ * Cost is held to ELEVEN draw calls — one instanced lattice bay for the entire
+ * spine, four merged static buffers (hull / foil / alloy / dark), and six small
+ * instanced sets (seams, handrails, wings, radiators, dishes, beacons). The
+ * previous relay bird spent ~25 meshes on a fraction of this detail. */
+const ISS = {
+  /* truss: ONE bay geometry, instanced `bays` times along ±X */
+  bays: 9,
+  bayLen: 0.34, // × r, one lattice bay
+  trussR: 0.115, // × r, half-width of the square lattice section
+  memberT: 0.017, // × r, longeron / batten stock
+  /* solar array wings: four, in symmetric coplanar pairs, deliberately BIG —
+   * the ISS reads as "mostly solar array" and anything smaller loses it */
+  jointX: 1.18, // × r, rotary-joint station along the truss
+  wingLen: 1.34, // × r, root to tip along ±Z
+  wingW: 0.56, // × r, across the wing
+  wingT: 0.014, // × r
+  wingRoot: 0.13, // × r, truss centreline to wing root
+  wingSegs: 4, // cell-map repeats along the LENGTH — one blanket bay each
+  sarjR: 0.1, // × r, solar alpha rotary joint barrel
+  sarjL: 0.26, // × r
+  betaR: 0.048, // × r, beta gimbal barrel at each wing root
+  mastT: 0.026, // × r, folding mast down each wing's spine
+  /* pressurised modules, slung under the truss and crosswise to it */
+  modY: -0.4, // × r, stack centreline below the truss
+  modR: 0.15, // × r
+  labLen: 0.6, // × r
+  hubLen: 0.34, // × r
+  aftLen: 0.68, // × r
+  fwdLen: 0.28, // × r, forward node
+  sideR: 0.11, // × r, crosswise lab
+  sideLen: 0.54, // × r
+  sideX: 0.4, // × r, crosswise lab offset from the stack
+  cupolaR: 0.08, // × r
+  cupolaH: 0.075, // × r
+  railT: 0.013, // × r, handrail stock
+  seamT: 0.014, // × r, ring-seam tube
+  /* thermal radiators: a FAN of narrow slats per side, not one broad sheet.
+   * A single wide white rectangle merges with the modules at distance (it read
+   * as a sail growing out of the stack in the first pass); parallel slats with
+   * gaps between them are unmistakably a radiator, and tilting them out of the
+   * array plane keeps them from reading as a fifth solar wing. */
+  radSlats: 3,
+  radLen: 0.72, // × r
+  radW: 0.15, // × r, one slat
+  radT: 0.013, // × r
+  radX: 0.8, // × r, fan centre along the truss
+  radGap: 0.17, // × r, slat pitch
+  radTilt: 1.05, // rad below the array plane
+  /* antennas and the docked visiting vehicle */
+  dishR: 0.21, // × r
+  dishDepth: 0.095, // × r
+  capR: 0.105, // × r
+  capLen: 0.34, // × r
+  beaconR: 0.026, // × r
 } as const;
 const SAT_MLI_SEED = 0x4d11;
-// A working relay does not tumble — it holds attitude. The old two-axis
+// A crewed station does not tumble — it holds attitude. The old two-axis
 // accumulating spin read as a dead hulk (and swung the arrays away from the
 // sun), so it is replaced by a shallow non-accumulating wander: the deadband
 // of a live attitude-control system.
 const SAT_WANDER_AMP = 0.045; // rad
 const SAT_WANDER_RATE = 0.12; // rad/s
-const SAT_POSE: readonly [number, number, number] = [0.2, 0.6, 0.1];
-const SUN_LIGHT_COLOR = '#ffd9a0';
-const SUN_LIGHT_BASE = 600; // local-drama pointLight, decay 0, at world scale
-const SUN_LIGHT_PULSE = 0.12; // ± fraction, split across two detuned sines
+// Presentation pose. The x tilt is load-bearing: the array normal is local +Y,
+// so a near-level station shows the visitor four wings EDGE-ON — a station made
+// of pencils. Tipping the whole stack ~41° presents the blankets broadside at
+// every phase of the tracking yaw while keeping the truss reading as a spine
+// across the frame.
+const SAT_POSE: readonly [number, number, number] = [-0.72, 0.6, 0.16];
+/* ---- the sun's local drama light ------------------------------------------
+ * This pointLight exists to set the SHIP on fire as it grazes the finale. It
+ * was intensity 600 with decay 0 and a 8×radius window — which is to say no
+ * meaningful falloff at all, so it also poured ~490 units of irradiance onto
+ * the outpost a whole station away and blew the relay to flat white (live
+ * screenshot). The scene's own rig totals ~4; nothing here should ever be two
+ * orders of magnitude over it.
+ *
+ * The fix is honest falloff: decay 2 (inverse-square, so the pool INTENSIFIES
+ * as the ship dives at the sun instead of sitting on a plateau) plus a finite
+ * cutoff that reaches exactly zero inside the ~115-unit gap to the neighbouring
+ * waypoint. Intensity is then DERIVED from the irradiance we want at the ship's
+ * framing distance, so the drama at the sun dock is a stated number rather than
+ * a magic one. */
+export const SUN_LIGHT_COLOR = '#ffd9a0';
+export const SUN_LIGHT_DECAY = 2;
+const SUN_LIGHT_REF_D = 2.6; // × bodyRadius (≈68u) — where the ship sits at the sun dock
+const SUN_LIGHT_AT_REF = 30; // irradiance delivered there: ~7× the base rig — hot, not clipped flat
+export const SUN_LIGHT_CUTOFF = 4.2; // × bodyRadius (≈109u) — hard zero, well short of STN 09 at ~115u
+export const SUN_LIGHT_PULSE = 0.12; // ± fraction, split across two detuned sines
 const CORONA_BREATHE = 0.04; // ± scale fraction on the corona sprites
 const CORONA_ROT = 0.01; // rad/s outer corona drift; inner counter-rotates
 
@@ -208,6 +267,111 @@ const scratchObj = new THREE.Object3D();
 const scratchCol = new THREE.Color();
 const CLUSTER_WHITE = new THREE.Color('#ffffff');
 const CLUSTER_WARM = new THREE.Color('#ffc9a0');
+
+/* ---- three's point-light falloff, evaluated on the CPU --------------------
+ * getDistanceAttenuation() in the shader is
+ *   1/max(d^decay, 0.01) × pow2(saturate(1 − pow4(d / cutoff)))
+ * — an inverse-square term times a window that drives the whole light to zero
+ * at the cutoff. Mirroring it here lets the sun state its drama as "this much
+ * irradiance at this distance" and solve for intensity, instead of shipping a
+ * hand-tuned magic number that nobody can check. */
+function pointLightAttenuation(d: number, cutoff: number, decay: number): number {
+  const w = Math.max(0, 1 - (d / cutoff) ** 4);
+  return (w * w) / Math.max(d ** decay, 0.01);
+}
+
+/** Intensity that lands SUN_LIGHT_AT_REF of irradiance on the ship at the sun
+ *  dock. Both distances scale with the body radius, so the finale looks the
+ *  same whatever radius the voyage contract hands over. */
+export function sunLightIntensity(radius: number): number {
+  const d = SUN_LIGHT_REF_D * radius;
+  return SUN_LIGHT_AT_REF / pointLightAttenuation(d, SUN_LIGHT_CUTOFF * radius, SUN_LIGHT_DECAY);
+}
+
+/* ---- merge helpers (station construction, run once per mount) -------------
+ * Same technique Rocket3D uses for the shuttle: bake each primitive's
+ * transform into its vertices and collapse the batch into ONE buffer, so a
+ * station assembled from seventy boxes still costs a handful of draw calls.
+ * mergeGeometries refuses a mixed indexed/non-indexed batch, so everything is
+ * normalised on the way in. Sources are disposed as they are consumed — they
+ * exist only to feed the merge and never reach the GPU. */
+const _bakeV = new THREE.Vector3();
+const _bakeQ = new THREE.Quaternion();
+const _bakeE = new THREE.Euler();
+const _bakeS = new THREE.Vector3();
+
+function bakeTrs(
+  px: number,
+  py: number,
+  pz: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+  sx = 1,
+  sy = 1,
+  sz = 1,
+): THREE.Matrix4 {
+  return new THREE.Matrix4().compose(
+    _bakeV.set(px, py, pz),
+    _bakeQ.setFromEuler(_bakeE.set(rx, ry, rz)),
+    _bakeS.set(sx, sy, sz),
+  );
+}
+
+function bakePart(
+  out: THREE.BufferGeometry[],
+  geo: THREE.BufferGeometry,
+  m?: THREE.Matrix4,
+): void {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  if (m) g.applyMatrix4(m);
+  geo.dispose();
+  out.push(g);
+}
+
+function bakeMerge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged: THREE.BufferGeometry | null = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  return merged ?? new THREE.BufferGeometry();
+}
+
+/* One instanced placement. All three channels are required rather than
+ * optional: exactOptionalPropertyTypes makes half-filled literals a chore, and
+ * every call site here knows exactly what it is placing. */
+type Placement = {
+  p: readonly [number, number, number];
+  r: readonly [number, number, number];
+  s: readonly [number, number, number];
+};
+
+function place(
+  px: number,
+  py: number,
+  pz: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+  sx = 1,
+  sy = 1,
+  sz = 1,
+): Placement {
+  return { p: [px, py, pz], r: [rx, ry, rz], s: [sx, sy, sz] };
+}
+
+/** Write a placement list into an InstancedMesh. Runs in a layout effect, not
+ *  per frame, so the shared scratch Object3D is safe to reuse. */
+function applyPlacements(mesh: THREE.InstancedMesh | null, list: readonly Placement[]): void {
+  if (!mesh) return;
+  let i = 0;
+  for (const it of list) {
+    scratchObj.position.set(it.p[0], it.p[1], it.p[2]);
+    scratchObj.rotation.set(it.r[0], it.r[1], it.r[2]);
+    scratchObj.scale.set(it.s[0], it.s[1], it.s[2]);
+    scratchObj.updateMatrix();
+    mesh.setMatrixAt(i++, scratchObj.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+}
 
 /* ---- shared texture prep -------------------------------------------------
  * The drei loader caches one texture per url, so mutating during render is
@@ -368,8 +532,8 @@ function mliTexture(): THREE.CanvasTexture {
 let cellTexCache: THREE.CanvasTexture | null = null;
 /** Solar array face: dark blue-violet PV cells on a thin silver grid, two
  *  busbar ribbons per cell, and a hard dark seam down each tile edge. The
- *  wings repeat this SAT.wingSegs times along their length, so the seams read
- *  as the hinge lines between deployed panel segments. */
+ *  wings repeat this ISS.wingSegs times along their length, so the seams read
+ *  as the hinge lines between deployed blanket bays. */
 function solarCellTexture(): THREE.CanvasTexture {
   if (cellTexCache) return cellTexCache;
   const size = 256;
@@ -435,7 +599,10 @@ function solarCellTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(SAT.wingSegs, 1); // the wings are this map's only consumer
+  // Repeat runs along V, not U: a BoxGeometry's ±Y faces map U across the
+  // wing's WIDTH and V along its LENGTH, and the blanket bays of an ISS wing
+  // step down its length.
+  tex.repeat.set(1, ISS.wingSegs); // the wings are this map's only consumer
   tex.anisotropy = 8;
   cellTexCache = tex;
   return tex;
@@ -1475,18 +1642,31 @@ function Nebula({ wp, reduced }: BodyProps) {
   );
 }
 
-/* ==== OUTPOST — the satellite ==============================================
+/* ==== OUTPOST — the station ================================================
  *
- * A believable three-axis-stabilised relay bird, built entirely from
- * primitives + two canvas maps: a foil-wrapped MLI bus, two deployed
- * three-segment solar arrays on booms, a white parabolic high-gain dish on a
- * two-axis gimbal aimed down the sun-facing axis, whip antennas, a star
- * tracker, thruster nozzles and a nav beacon.
+ * An ISS-class station, built entirely from primitives + the two canvas maps
+ * above. What makes the International Space Station instantly recognisable is
+ * a specific stack of features, in this order of legibility:
  *
- * ~26 draws against 6 shared materials and one memoized lathe. The waypoint
- * contract is untouched: position is wp.bodyPos and EVERY dimension is a
- * fraction of wp.bodyRadius, so src/engine/space.ts still owns the size.
+ *   1. a long LATTICE TRUSS spine — one bay geometry, instanced along ±X
+ *   2. FOUR big solar array wings, symmetric coplanar pairs on rotary joints,
+ *      mounted toward the truss ends (the station reads as MOSTLY array)
+ *   3. a cluster of white pressurised cylinders slung under the middle at
+ *      right angles to the spine, with MLI sections, ring seams, handrails
+ *      and a cupola bump
+ *   4. flat white thermal radiators angled well off the array plane
+ *   5. dish antennas and a docked visiting-vehicle capsule
+ *
+ * ELEVEN draw calls against six shared materials: one instanced lattice bay
+ * for the entire spine, four merged static buffers (hull / foil / alloy /
+ * dark), and six small instanced sets (seams, handrails, wings, radiators,
+ * dishes, beacons). The previous relay bird spent ~25 draws on far less
+ * craft. The waypoint contract is untouched: position is wp.bodyPos and EVERY
+ * dimension is a fraction of wp.bodyRadius, so src/engine/space.ts still owns
+ * the size.
  * ======================================================================== */
+
+const HALF_PI = Math.PI / 2;
 
 /** The dish: a true paraboloid of revolution (y = depth·(x/R)²), not a cone.
  *  A cone has a straight profile and photographs as a lampshade; the curved
@@ -1494,87 +1674,488 @@ function Nebula({ wp, reduced }: BodyProps) {
  *  bowl, which is the single tell that says "antenna". */
 function makeDishGeometry(radius: number, depth: number): THREE.LatheGeometry {
   const pts: THREE.Vector2[] = [];
-  const steps = 14;
+  const steps = 12;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     // Never exactly zero: a degenerate lathe pole yields NaN normals.
     pts.push(new THREE.Vector2(Math.max(radius * t, radius * 1e-3), depth * t * t));
   }
-  return new THREE.LatheGeometry(pts, 44);
+  return new THREE.LatheGeometry(pts, 32);
+}
+
+/** ONE lattice bay: four longerons, a closing end frame, and a diagonal on
+ *  every face with alternating sense so the lattice zig-zags instead of
+ *  reading as four parallel bars. Instanced ISS.bays times, this single buffer
+ *  is the whole truss — and the truss is what makes the silhouette read as the
+ *  ISS rather than as a generic satellite. */
+function makeTrussBay(r: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const len = r * ISS.bayLen;
+  const w = r * ISS.trussR;
+  const t = r * ISS.memberT;
+  for (const sy of [1, -1]) {
+    for (const sz of [1, -1]) {
+      bakePart(parts, new THREE.BoxGeometry(len, t, t), bakeTrs(0, sy * w, sz * w));
+    }
+  }
+  const x0 = -len / 2 + t * 0.5;
+  for (const sy of [1, -1]) {
+    bakePart(parts, new THREE.BoxGeometry(t, t, w * 2), bakeTrs(x0, sy * w, 0));
+  }
+  for (const sz of [1, -1]) {
+    bakePart(parts, new THREE.BoxGeometry(t, w * 2, t), bakeTrs(x0, 0, sz * w));
+  }
+  const span = Math.hypot(len, w * 2);
+  const ang = Math.atan2(w * 2, len);
+  const d = t * 0.82;
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, w, 0, 0, -ang, 0));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, -w, 0, 0, ang, 0));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, 0, w, 0, 0, ang));
+  bakePart(parts, new THREE.BoxGeometry(span, d, d), bakeTrs(0, 0, -w, 0, 0, -ang));
+  return bakeMerge(parts);
+}
+
+type StationBuild = {
+  bay: THREE.BufferGeometry;
+  hull: THREE.BufferGeometry;
+  foil: THREE.BufferGeometry;
+  alloy: THREE.BufferGeometry;
+  dark: THREE.BufferGeometry;
+  wing: THREE.BufferGeometry;
+  radiator: THREE.BufferGeometry;
+  dish: THREE.BufferGeometry;
+  seam: THREE.BufferGeometry;
+  greeble: THREE.BufferGeometry;
+  trussAt: Placement[];
+  seamAt: Placement[];
+  greebleAt: Placement[];
+  wingAt: Placement[];
+  radiatorAt: Placement[];
+  dishAt: Placement[];
+  beacon: THREE.BufferGeometry;
+  beaconAt: Placement[];
+};
+
+/** Assemble the whole station once per mount. Nothing in here runs per frame;
+ *  the return value is a bundle of GPU-ready buffers plus the instance tables
+ *  that place them. */
+function buildStation(r: number): StationBuild {
+  const S = ISS;
+  const trussHalf = (S.bays * S.bayLen * r) / 2;
+  const hullParts: THREE.BufferGeometry[] = [];
+  const foilParts: THREE.BufferGeometry[] = [];
+  const alloyParts: THREE.BufferGeometry[] = [];
+  const darkParts: THREE.BufferGeometry[] = [];
+  const trussAt: Placement[] = [];
+  const seamAt: Placement[] = [];
+  const greebleAt: Placement[] = [];
+  const wingAt: Placement[] = [];
+  const radiatorAt: Placement[] = [];
+
+  /* ---- 1. the spine ---------------------------------------------------- */
+  for (let i = 0; i < S.bays; i++) {
+    trussAt.push(place((i - (S.bays - 1) / 2) * S.bayLen * r, 0, 0));
+  }
+  for (const sx of [1, -1]) {
+    // Blanketed equipment pallet capping each end of the spine.
+    bakePart(
+      foilParts,
+      new THREE.BoxGeometry(r * 0.16, r * 0.19, r * 0.19),
+      bakeTrs(sx * (trussHalf - r * 0.08), 0, 0),
+    );
+  }
+
+  /* ---- 2. rotary joints, gimbals, masts, wings -------------------------- */
+  const wingMid = (S.wingRoot + S.wingLen / 2) * r;
+  for (const sx of [1, -1]) {
+    const jx = sx * S.jointX * r;
+    // Solar alpha rotary joint: the barrel the outboard array section turns
+    // on. It lies ALONG the truss, which is what makes it read as a joint
+    // rather than as another equipment can.
+    bakePart(
+      alloyParts,
+      new THREE.CylinderGeometry(S.sarjR * r, S.sarjR * r, S.sarjL * r, 16),
+      bakeTrs(jx, 0, 0, 0, 0, HALF_PI),
+    );
+    bakePart(
+      darkParts,
+      new THREE.CylinderGeometry(S.sarjR * r * 1.07, S.sarjR * r * 1.07, S.sarjL * r * 0.28, 16),
+      bakeTrs(jx, 0, 0, 0, 0, HALF_PI),
+    );
+    for (const sz of [1, -1]) {
+      // Beta gimbal barrel at each wing root — the second axis.
+      bakePart(
+        alloyParts,
+        new THREE.CylinderGeometry(S.betaR * r, S.betaR * r, S.wingRoot * r * 1.5, 12),
+        bakeTrs(jx, 0, sz * S.wingRoot * r * 0.55, HALF_PI, 0, 0),
+      );
+      // Folding mast down the back of the blanket, proud of the -Y face so
+      // the wing has a visible spine from below and clean cells from above.
+      bakePart(
+        alloyParts,
+        new THREE.BoxGeometry(S.mastT * r, S.mastT * r, S.wingLen * r * 0.98),
+        bakeTrs(jx, -(S.wingT / 2 + S.mastT * 0.6) * r, sz * wingMid),
+      );
+      wingAt.push(place(jx, 0, sz * wingMid));
+    }
+  }
+
+  /* ---- 3. thermal radiators -------------------------------------------- */
+  // Rotating about X tips the fan out of the array plane entirely, which is
+  // the whole point: white rectangles parallel to the blue ones would just
+  // read as a fifth wing that lost its cells. Starboard deploys forward,
+  // port aft — the asymmetry is what a real heat-rejection system looks like.
+  const radDrop = -Math.sin(S.radTilt);
+  const radRun = Math.cos(S.radTilt);
+  for (const sx of [1, -1]) {
+    const sz = sx; // starboard fan forward, port fan aft
+    // Beam the slats hang off, running along the truss.
+    bakePart(
+      alloyParts,
+      new THREE.BoxGeometry(S.radGap * (S.radSlats + 0.4) * r, r * 0.04, r * 0.045),
+      bakeTrs(sx * S.radX * r, -S.trussR * r, 0),
+    );
+    for (let k = 0; k < S.radSlats; k++) {
+      const x = sx * S.radX * r + (k - (S.radSlats - 1) / 2) * S.radGap * r;
+      radiatorAt.push(
+        place(
+          x,
+          -S.trussR * r + radDrop * S.radLen * r * 0.5,
+          sz * radRun * S.radLen * r * 0.5,
+          sz > 0 ? S.radTilt : -S.radTilt,
+          sz > 0 ? 0 : Math.PI,
+          0,
+        ),
+      );
+    }
+  }
+
+  /* ---- 4. the pressurised stack ----------------------------------------- */
+  const my = S.modY * r;
+  const seg = 18;
+  // Contiguous end-to-end: aft service module, node with the cupola, lab,
+  // forward node. Each module's seam rings sit on its end faces.
+  const stack = [
+    { rad: S.modR * 0.95, len: S.aftLen, z: 0.64 },
+    { rad: S.modR, len: S.hubLen, z: 0.13 },
+    { rad: S.modR * 0.93, len: S.labLen, z: -0.34 },
+    { rad: S.modR * 0.99, len: S.fwdLen, z: -0.78 },
+  ];
+  for (const m of stack) {
+    bakePart(
+      hullParts,
+      new THREE.CylinderGeometry(m.rad * r, m.rad * r, m.len * r, seg),
+      bakeTrs(0, my, m.z * r, HALF_PI, 0, 0),
+    );
+    const k = m.rad / S.modR;
+    for (const e of [-1, 1]) {
+      seamAt.push(place(0, my, (m.z + (e * m.len) / 2) * r, 0, 0, 0, k, k, k));
+    }
+  }
+  // MLI wraps on the aft service module — the gold that says "Russian segment"
+  // and breaks the white run of cylinders.
+  for (const z of [0.44, 0.84]) {
+    bakePart(
+      foilParts,
+      new THREE.CylinderGeometry(S.modR * r * 0.98, S.modR * r * 0.98, r * 0.14, seg, 1, true),
+      bakeTrs(0, my, z * r, HALF_PI, 0, 0),
+    );
+  }
+  // Crosswise labs off the forward node — the perpendicular pair that stops
+  // the stack reading as one long tube.
+  for (const sx of [1, -1]) {
+    bakePart(
+      hullParts,
+      new THREE.CylinderGeometry(S.sideR * r, S.sideR * r, S.sideLen * r, 14),
+      bakeTrs(sx * S.sideX * r, my, -0.78 * r, 0, 0, HALF_PI),
+    );
+    bakePart(
+      foilParts,
+      new THREE.CylinderGeometry(
+        S.sideR * r * 1.04,
+        S.sideR * r * 1.04,
+        S.sideLen * r * 0.32,
+        14,
+        1,
+        true,
+      ),
+      bakeTrs(sx * (S.sideX + S.sideLen * 0.26) * r, my, -0.78 * r, 0, 0, HALF_PI),
+    );
+    const k = S.sideR / S.modR;
+    seamAt.push(
+      place(sx * (S.sideX + S.sideLen * 0.5) * r, my, -0.78 * r, 0, HALF_PI, 0, k, k, k),
+    );
+  }
+  // Cupola: drum plus a dark glass dome, hanging off the node's nadir face.
+  const cupY = my - S.modR * r - S.cupolaH * r * 0.5;
+  bakePart(
+    hullParts,
+    new THREE.CylinderGeometry(S.cupolaR * r, S.cupolaR * r * 1.15, S.cupolaH * r, 14),
+    bakeTrs(0, cupY, 0.13 * r),
+  );
+  bakePart(
+    darkParts,
+    new THREE.SphereGeometry(S.cupolaR * r * 0.95, 14, 8, 0, Math.PI * 2, 0, HALF_PI),
+    bakeTrs(0, cupY - S.cupolaH * r * 0.5, 0.13 * r, Math.PI, 0, 0),
+  );
+  // Forward docking target.
+  bakePart(
+    darkParts,
+    new THREE.CylinderGeometry(S.modR * r * 0.42, S.modR * r * 0.42, r * 0.03, 14),
+    bakeTrs(0, my, -0.93 * r, HALF_PI, 0, 0),
+  );
+  // Struts tying the stack up to the spine — without them the modules float.
+  const strutTop = -S.trussR * r;
+  const strutBot = my + S.modR * r * 0.6;
+  for (const sx of [1, -1]) {
+    for (const sz of [1, -1]) {
+      bakePart(
+        alloyParts,
+        new THREE.BoxGeometry(r * 0.022, strutTop - strutBot, r * 0.022),
+        bakeTrs(sx * r * 0.17, (strutTop + strutBot) / 2, sz * r * 0.22),
+      );
+    }
+  }
+
+  /* ---- 5. docked visiting vehicle --------------------------------------- */
+  // Narrow end toward the station, ablative shield out — cheap, and it tells
+  // the visitor the place is CREWED.
+  const capZ = 1.15 * r;
+  bakePart(
+    hullParts,
+    new THREE.CylinderGeometry(S.capR * r * 0.72, S.capR * r, S.capLen * r, 16),
+    bakeTrs(0, my, capZ, -HALF_PI, 0, 0),
+  );
+  bakePart(
+    foilParts,
+    new THREE.CylinderGeometry(S.capR * r * 1.03, S.capR * r * 1.03, r * 0.09, 16, 1, true),
+    bakeTrs(0, my, capZ - S.capLen * r * 0.22, HALF_PI, 0, 0),
+  );
+  bakePart(
+    darkParts,
+    new THREE.SphereGeometry(S.capR * r, 16, 8, 0, Math.PI * 2, 0, 1.1),
+    bakeTrs(0, my, capZ + S.capLen * r * 0.5, HALF_PI, 0, 0),
+  );
+
+  /* ---- 6. handrails and truss greebles (one instanced unit box) ---------- */
+  const railR = S.modR * r + S.railT * r * 0.9;
+  for (const a of [-0.72, 0.72, 2.45, -2.45]) {
+    for (const z of [0.62, -0.34]) {
+      greebleAt.push(
+        place(
+          Math.sin(a) * railR,
+          my + Math.cos(a) * railR,
+          z * r,
+          0,
+          0,
+          0,
+          S.railT * r,
+          S.railT * r,
+          r * 0.5,
+        ),
+      );
+    }
+  }
+  for (const sx of [1, -1]) {
+    greebleAt.push(
+      place(
+        sx * S.sideX * r,
+        my + S.sideR * r * 1.1,
+        -0.78 * r,
+        0,
+        HALF_PI,
+        0,
+        S.railT * r,
+        S.railT * r,
+        S.sideLen * r * 0.7,
+      ),
+    );
+    for (const k of [0.34, 0.74]) {
+      greebleAt.push(
+        place(sx * k * r, S.trussR * r * 1.35, 0, 0, 0, 0, r * 0.09, r * 0.07, r * 0.14),
+      );
+    }
+  }
+
+  /* ---- 7. antennas ------------------------------------------------------ */
+  const dishAt: Placement[] = [
+    place(-0.34 * r, S.trussR * r + r * 0.19, 0.16 * r, -0.55, 0.4, 0),
+    place(0.92 * r, -S.trussR * r - r * 0.2, -0.12 * r, 2.4, -0.6, 0),
+  ];
+  bakePart(
+    alloyParts,
+    new THREE.CylinderGeometry(r * 0.018, r * 0.018, r * 0.16, 8),
+    bakeTrs(-0.34 * r, S.trussR * r + r * 0.08, 0.16 * r),
+  );
+  bakePart(
+    alloyParts,
+    new THREE.CylinderGeometry(r * 0.018, r * 0.018, r * 0.16, 8),
+    bakeTrs(0.92 * r, -S.trussR * r - r * 0.08, -0.12 * r),
+  );
+
+  return {
+    bay: makeTrussBay(r),
+    hull: bakeMerge(hullParts),
+    foil: bakeMerge(foilParts),
+    alloy: bakeMerge(alloyParts),
+    dark: bakeMerge(darkParts),
+    wing: new THREE.BoxGeometry(S.wingW * r, S.wingT * r, S.wingLen * r),
+    radiator: new THREE.BoxGeometry(S.radW * r, S.radT * r, S.radLen * r),
+    dish: makeDishGeometry(r * S.dishR, r * S.dishDepth),
+    seam: new THREE.TorusGeometry(S.modR * r, S.seamT * r, 6, 22),
+    greeble: new THREE.BoxGeometry(1, 1, 1),
+    trussAt,
+    seamAt,
+    greebleAt,
+    wingAt,
+    radiatorAt,
+    dishAt,
+    // A nav lamp on BOTH truss tips, instanced into one draw. One lamp was
+    // enough until the tracking yaw swung that tip behind the docked panel and
+    // the station lost its only light — a station with no running light reads
+    // as derelict.
+    beacon: new THREE.SphereGeometry(r * S.beaconR, 10, 8),
+    beaconAt: [
+      place(trussHalf - r * 0.06, S.trussR * r * 1.6, 0),
+      place(-(trussHalf - r * 0.06), S.trussR * r * 1.6, 0),
+    ],
+  };
 }
 
 function Outpost({ wp, reduced }: BodyProps) {
   const r = wp.bodyRadius;
   const trackRef = useRef<THREE.Group>(null);
   const attitudeRef = useRef<THREE.Group>(null);
-  const lampRef = useRef<THREE.MeshStandardMaterial>(null);
+  const trussRef = useRef<THREE.InstancedMesh>(null);
+  const seamRef = useRef<THREE.InstancedMesh>(null);
+  const greebleRef = useRef<THREE.InstancedMesh>(null);
+  const wingRef = useRef<THREE.InstancedMesh>(null);
+  const radiatorRef = useRef<THREE.InstancedMesh>(null);
+  const dishRef = useRef<THREE.InstancedMesh>(null);
+  const beaconRef = useRef<THREE.InstancedMesh>(null);
 
   const mli = mliTexture();
   const cells = solarCellTexture();
 
-  const dishGeo = useMemo(() => makeDishGeometry(r * SAT.dishR, r * SAT.dishDepth), [r]);
+  const build = useMemo(() => buildStation(r), [r]);
 
-  /* Six materials, each shared by every mesh that wears it. Every one carries
-   * a small emissive so no face of the craft ever goes to pure void-black on
-   * the shadow side — the scene's key light is a single directional and the
-   * env map is a night HDRI, so an unlit metal reads as a hole. */
+  /* Six materials, each shared by every mesh that wears it.
+   *
+   * THE BRIGHTNESS CONTRACT: nothing on this craft is a light source except
+   * the nav beacon. The old build wore near-white paint (#eef1f5) and a
+   * glossy 0.22-roughness blanket, both of which clip the moment anything
+   * warm reaches them — and the scene's Bloom keys off 0.85 luminance, so a
+   * clipped face does not just go white, it SMEARS. Albedos here are grey,
+   * roughnesses are high, and every emissive is a floor-fill (so no face goes
+   * to void-black against the night HDRI) rather than a glow. No material on
+   * the station sets toneMapped:false — that flag is what lets a surface
+   * bypass ACES entirely and blow out on its own. */
   const mats = useMemo(() => {
     const foil = new THREE.MeshStandardMaterial({
       map: mli,
       bumpMap: mli,
-      bumpScale: 0.35,
+      bumpScale: 0.3,
+      // The MLI map is authored bright gold; multiplying it down is what keeps
+      // the blanket under the bloom threshold when the key light hits it.
+      color: '#9a9a9a',
       emissiveMap: mli,
-      emissive: '#ffd489',
-      emissiveIntensity: 0.13,
-      metalness: 0.72,
-      roughness: 0.38,
-      envMapIntensity: 1.15,
+      emissive: '#6b5320',
+      emissiveIntensity: 0.09,
+      metalness: 0.6,
+      roughness: 0.55,
+      envMapIntensity: 0.6,
     });
-    const cellFace = new THREE.MeshStandardMaterial({
+    const cell = new THREE.MeshStandardMaterial({
       map: cells,
       emissiveMap: cells,
-      emissive: '#3d4a96',
-      emissiveIntensity: 0.16,
-      // Cover glass is glossy: low roughness is what makes the array flash as
-      // it tracks, which is most of what says "solar panel" at distance.
-      metalness: 0.34,
-      roughness: 0.22,
-      envMapIntensity: 0.95,
+      emissive: '#1e2452',
+      emissiveIntensity: 0.09,
+      // Roughness raised from 0.22: a mirror-smooth blanket threw a specular
+      // hotspot that clipped and then bloomed into a white smear.
+      metalness: 0.28,
+      roughness: 0.46,
+      envMapIntensity: 0.5,
     });
     const alloy = new THREE.MeshStandardMaterial({
-      color: '#b9bec6',
-      emissive: '#43494f',
-      emissiveIntensity: 0.2,
-      metalness: 0.85,
-      roughness: 0.42,
-      envMapIntensity: 1,
-    });
-    const paint = new THREE.MeshStandardMaterial({
-      color: '#eef1f5',
-      emissive: '#93a4b6',
-      emissiveIntensity: 0.07,
-      metalness: 0.05,
+      color: '#8f959d',
+      emissive: '#2c3238',
+      emissiveIntensity: 0.16,
+      metalness: 0.78,
       roughness: 0.55,
+      envMapIntensity: 0.55,
+    });
+    const hull = new THREE.MeshStandardMaterial({
+      // Real ISS modules photograph as light GREY, never paper white.
+      color: '#b9bec6',
+      emissive: '#39414c',
+      emissiveIntensity: 0.1,
+      metalness: 0.05,
+      roughness: 0.75,
       side: THREE.DoubleSide, // the dish is a shell: both faces must light
-      envMapIntensity: 0.9,
+      envMapIntensity: 0.5,
+    });
+    const radiator = new THREE.MeshStandardMaterial({
+      // Cooler and a shade darker than the module hull on purpose: at this
+      // distance an identical grey merges the radiator fan into the pressurised
+      // stack and both stop reading as anything.
+      color: '#98a2ae',
+      emissive: '#2f3742',
+      emissiveIntensity: 0.09,
+      metalness: 0.04,
+      roughness: 0.88,
+      side: THREE.DoubleSide,
+      envMapIntensity: 0.45,
     });
     const dark = new THREE.MeshStandardMaterial({
-      color: '#2b3037',
-      emissive: '#1a1e24',
-      emissiveIntensity: 0.5,
-      metalness: 0.5,
-      roughness: 0.65,
-      envMapIntensity: 0.8,
+      color: '#23282e',
+      emissive: '#161a1f',
+      emissiveIntensity: 0.4,
+      metalness: 0.45,
+      roughness: 0.72,
+      envMapIntensity: 0.5,
     });
-    return { foil, cellFace, alloy, paint, dark };
+    // The nav lamp. Not a ref on a JSX material any more: both truss tips wear
+    // it through one InstancedMesh, so useFrame drives the material directly.
+    const lamp = new THREE.MeshStandardMaterial({
+      color: '#111111',
+      emissive: '#ffffff',
+      emissiveIntensity: NAV_LIGHT_STEADY,
+    });
+    return { foil, cell, alloy, hull, radiator, dark, lamp };
   }, [mli, cells]);
+
+  useLayoutEffect(() => {
+    applyPlacements(trussRef.current, build.trussAt);
+    applyPlacements(seamRef.current, build.seamAt);
+    applyPlacements(greebleRef.current, build.greebleAt);
+    applyPlacements(wingRef.current, build.wingAt);
+    applyPlacements(radiatorRef.current, build.radiatorAt);
+    applyPlacements(dishRef.current, build.dishAt);
+    applyPlacements(beaconRef.current, build.beaconAt);
+  }, [build]);
 
   useEffect(
     () => () => {
-      dishGeo.dispose();
+      build.bay.dispose();
+      build.hull.dispose();
+      build.foil.dispose();
+      build.alloy.dispose();
+      build.dark.dispose();
+      build.wing.dispose();
+      build.radiator.dispose();
+      build.dish.dispose();
+      build.seam.dispose();
+      build.greeble.dispose();
+      build.beacon.dispose();
+    },
+    [build],
+  );
+
+  useEffect(
+    () => () => {
       for (const m of Object.values(mats)) m.dispose();
     },
-    [dishGeo, mats],
+    [mats],
   );
 
   useFrame((state, delta) => {
@@ -1585,8 +2166,8 @@ function Outpost({ wp, reduced }: BodyProps) {
       const track = trackRef.current;
       if (track) track.rotation.y += OUTPOST_TRACK_YAW * delta;
       // Attitude wander: a shallow, NON-accumulating sway around the base
-      // pose. A live relay holds its arrays on the sun and its dish on the
-      // link — it does not tumble — so this is the deadband of a working
+      // pose. A crewed station holds its arrays on the sun and its dishes on
+      // the link — it does not tumble — so this is the deadband of a working
       // control system, not a drift.
       const g = attitudeRef.current;
       if (g) {
@@ -1594,154 +2175,66 @@ function Outpost({ wp, reduced }: BodyProps) {
         g.rotation.z = SAT_POSE[2] + Math.sin(t * SAT_WANDER_RATE * 0.63 + 2.1) * SAT_WANDER_AMP;
       }
     }
-    const lamp = lampRef.current;
-    if (lamp) {
-      // Under reduced motion the nav light holds steady — a pulse is motion.
-      lamp.emissiveIntensity = reduced
-        ? NAV_LIGHT_STEADY
-        : 0.5 + Math.max(0, Math.sin(t * 2.2)) ** 6 * 2.4;
-    }
+    // Under reduced motion the nav light holds steady — a pulse is motion.
+    mats.lamp.emissiveIntensity = reduced
+      ? NAV_LIGHT_STEADY
+      : 0.5 + Math.max(0, Math.sin(t * 2.2)) ** 6 * 2.4;
   });
-
-  const wingX = r * (SAT.busW / 2 + SAT.boomLen + SAT.wingLen / 2);
-  const hingeX = r * (SAT.busW / 2 + SAT.boomLen);
-  const boomX = r * (SAT.busW / 2 + SAT.boomLen / 2);
-  const deckY = -r * (SAT.busH / 2 + SAT.deckT / 2);
-  const mastY = r * (SAT.busH / 2 + SAT.mastH / 2);
-  const gimbalY = r * (SAT.busH / 2 + SAT.mastH);
 
   return (
     <group ref={trackRef} position={wp.bodyPos}>
       <group ref={attitudeRef} rotation={[SAT_POSE[0], SAT_POSE[1], SAT_POSE[2]]}>
-        {/* --- foil-wrapped bus. The MLI map wraps every face and doubles as
-            its own bump, so the crinkle catches the key light. --- */}
-        <mesh material={mats.foil}>
-          <boxGeometry args={[r * SAT.busW, r * SAT.busH, r * SAT.busD]} />
-        </mesh>
-        {/* Aft equipment deck: a darker radiator slab proud of the blanket,
-            which is what breaks the bus out of reading as a plain box. */}
-        <mesh material={mats.dark} position={[0, deckY, 0]}>
-          <boxGeometry args={[r * SAT.busW * 1.06, r * SAT.deckT, r * SAT.busD * 1.06]} />
-        </mesh>
-
-        {/* --- deployed solar arrays --- */}
-        {[1, -1].map((side) => (
-          <group key={side}>
-            {/* Boom out to the array, plus the hinge barrel it pivots on. */}
-            <mesh material={mats.alloy} position={[side * boomX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[r * SAT.boomR, r * SAT.boomR, r * SAT.boomLen, 10]} />
-            </mesh>
-            <mesh material={mats.alloy} position={[side * hingeX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[r * SAT.yokeR, r * SAT.yokeR, r * SAT.yokeR * 1.6, 12]} />
-            </mesh>
-            {/* The wing itself: a thin slab whose face carries the cell grid
-                repeated SAT.wingSegs times, so the seams read as the hinge
-                lines of three deployed panel segments. Normal is +Z — the
-                sun-facing axis the dish also looks down. */}
-            <mesh material={mats.cellFace} position={[side * wingX, 0, 0]}>
-              <boxGeometry args={[r * SAT.wingLen, r * SAT.wingH, r * SAT.wingT]} />
-            </mesh>
-            {/* Spine along the back of the wing — the structural spar. */}
-            <mesh material={mats.alloy} position={[side * wingX, 0, -r * SAT.wingT * 1.4]}>
-              <boxGeometry args={[r * SAT.wingLen * 1.01, r * SAT.wingH * 0.06, r * SAT.wingT * 1.6]} />
-            </mesh>
-          </group>
-        ))}
-
-        {/* --- high-gain dish on a two-axis gimbal ---
-            The gimbal ring and trunnion make the aim read as CHOSEN rather
-            than moulded on. Boresight is +Z, the same axis the arrays face,
-            so it stays pointed sunward as the tracking yaw carries it round. */}
-        <mesh material={mats.foil} position={[0, mastY, 0]}>
-          <cylinderGeometry args={[r * SAT.mastR, r * SAT.mastR * 1.3, r * SAT.mastH, 12]} />
-        </mesh>
-        <mesh material={mats.dark} position={[0, gimbalY, 0]}>
-          <cylinderGeometry args={[r * SAT.mastR * 1.9, r * SAT.mastR * 1.9, r * SAT.mastR * 1.1, 14]} />
-        </mesh>
-        <group position={[0, gimbalY + r * SAT.mastR * 1.6, 0]}>
-          <mesh material={mats.alloy} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[r * SAT.mastR * 0.8, r * SAT.mastR * 0.8, r * SAT.dishR * 0.5, 10]} />
-          </mesh>
-          {/* rotation.x = π/2 turns the lathe's +Y opening onto +Z; the small
-              extra tilt/yaw keeps the bowl three-dimensional on camera
-              instead of presenting as a flat white circle. */}
-          <group rotation={[Math.PI / 2 - 0.52, 0.34, 0]}>
-            <mesh geometry={dishGeo} material={mats.paint} />
-            <mesh material={mats.alloy} position={[0, r * SAT.dishDepth, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[r * SAT.dishR, r * SAT.dishRimT, 6, 40]} />
-            </mesh>
-            {/* Cassegrain subreflector on a central strut, held at the focus. */}
-            <mesh material={mats.alloy} position={[0, r * SAT.dishR * 0.36, 0]}>
-              <cylinderGeometry args={[r * 0.009, r * 0.009, r * SAT.dishR * 0.72, 6]} />
-            </mesh>
-            <mesh material={mats.paint} position={[0, r * SAT.dishR * 0.72, 0]} rotation={[Math.PI, 0, 0]}>
-              <coneGeometry args={[r * SAT.subR, r * SAT.subR * 0.7, 16, 1, true]} />
-            </mesh>
-          </group>
-        </group>
-
-        {/* --- whip antennas: two thin omnis, splayed so they never read as
-            a symmetric pair of pins. --- */}
-        {[
-          [0.42, 0.28],
-          [-0.55, -0.16],
-        ].map(([tilt, yaw], i) => (
-          <group key={i} rotation={[yaw ?? 0, 0, tilt ?? 0]}>
-            <mesh material={mats.alloy} position={[0, r * (SAT.busH / 2 + SAT.whipLen / 2), 0]}>
-              <cylinderGeometry args={[r * SAT.whipR * 0.5, r * SAT.whipR, r * SAT.whipLen, 6]} />
-            </mesh>
-          </group>
-        ))}
-
-        {/* --- star tracker: a shaded box with a dark aperture, the one piece
-            of kit that unmistakably says "this thing knows where it is". --- */}
-        <group position={[r * SAT.busW * 0.26, r * SAT.busH * 0.26, r * (SAT.busD / 2 + SAT.trackerW / 2)]}>
-          <mesh material={mats.dark}>
-            <boxGeometry args={[r * SAT.trackerW, r * SAT.trackerW, r * SAT.trackerW]} />
-          </mesh>
-          <mesh material={mats.alloy} position={[0, 0, r * SAT.trackerW * 0.55]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[r * SAT.trackerW * 0.34, r * SAT.trackerW * 0.34, r * SAT.trackerW * 0.2, 14]} />
-          </mesh>
-        </group>
-
-        {/* --- thruster nozzles on the aft deck. CLOSED cones: the dark
-            material is single-sided, so an open bell would be see-through
-            from below rather than hollow. --- */}
-        {[
-          [0.26, 0.24],
-          [-0.26, 0.24],
-          [0, -0.26],
-        ].map(([kx, kz], i) => (
-          <mesh
-            key={i}
-            material={mats.dark}
-            position={[
-              r * SAT.busW * (kx ?? 0),
-              deckY - r * (SAT.deckT / 2 + SAT.nozzleH / 2),
-              r * SAT.busD * (kz ?? 0),
-            ]}
-          >
-            <coneGeometry args={[r * SAT.nozzleR, r * SAT.nozzleH, 12]} />
-          </mesh>
-        ))}
-
-        {/* --- nav beacon: white, because the accent belongs to fire and sun.
-            Steady under reduced motion, a slow blink otherwise. --- */}
-        <mesh
-          position={[
-            r * SAT.busW * 0.5,
-            deckY,
-            r * (SAT.busD / 2 + SAT.beaconR * 0.6),
-          ]}
-        >
-          <sphereGeometry args={[r * SAT.beaconR, 12, 10]} />
-          <meshStandardMaterial
-            ref={lampRef}
-            color="#111111"
-            emissive="#ffffff"
-            emissiveIntensity={NAV_LIGHT_STEADY}
-          />
-        </mesh>
+        {/* 1 — the spine: one lattice bay, instanced end to end. Culling is
+            off because the instances spread far past the bay's own bounding
+            sphere. */}
+        <instancedMesh
+          ref={trussRef}
+          args={[build.bay, mats.alloy, build.trussAt.length]}
+          frustumCulled={false}
+        />
+        {/* 2-5 — the merged static buffers. Every cylinder, cone and box that
+            wears one material arrives here as a single pre-transformed
+            buffer. */}
+        <mesh geometry={build.hull} material={mats.hull} />
+        <mesh geometry={build.foil} material={mats.foil} />
+        <mesh geometry={build.alloy} material={mats.alloy} />
+        <mesh geometry={build.dark} material={mats.dark} />
+        {/* 6-10 — the repeated kit. */}
+        <instancedMesh
+          ref={seamRef}
+          args={[build.seam, mats.alloy, build.seamAt.length]}
+          frustumCulled={false}
+        />
+        <instancedMesh
+          ref={greebleRef}
+          args={[build.greeble, mats.alloy, build.greebleAt.length]}
+          frustumCulled={false}
+        />
+        <instancedMesh
+          ref={wingRef}
+          args={[build.wing, mats.cell, build.wingAt.length]}
+          frustumCulled={false}
+        />
+        <instancedMesh
+          ref={radiatorRef}
+          args={[build.radiator, mats.radiator, build.radiatorAt.length]}
+          frustumCulled={false}
+        />
+        <instancedMesh
+          ref={dishRef}
+          args={[build.dish, mats.hull, build.dishAt.length]}
+          frustumCulled={false}
+        />
+        {/* 11 — nav beacons: the ONLY thing on this station that is allowed to
+            be a light source. White, because the accent belongs to fire and
+            sun. One at each truss tip so the tracking yaw can never hide the
+            station's only running light. Steady under reduced motion, a slow
+            blink otherwise. */}
+        <instancedMesh
+          ref={beaconRef}
+          args={[build.beacon, mats.lamp, build.beaconAt.length]}
+          frustumCulled={false}
+        />
       </group>
     </group>
   );
@@ -1822,9 +2315,10 @@ function Cluster({ wp }: { wp: Waypoint }) {
 function Sun({ wp, reduced }: BodyProps) {
   const tex = useSurfaceTexture(TEX.sun);
   const ref = useRef<THREE.Mesh>(null);
-  const lightRef = useRef<THREE.PointLight>(null);
   const coronaOuterRef = useRef<THREE.Sprite>(null);
   const coronaInnerRef = useRef<THREE.Sprite>(null);
+  // Solved, not guessed: the intensity that lands SUN_LIGHT_AT_REF on the ship
+  // at the sun dock, given decay 2 and the cutoff window.
 
   useFrame((state, delta) => {
     // Under reduced motion the JSX props already hold the still: base light
@@ -1832,14 +2326,6 @@ function Sun({ wp, reduced }: BodyProps) {
     if (reduced) return;
     if (ref.current) ref.current.rotation.y += SUN_SPIN * delta;
     const t = state.clock.elapsedTime;
-    const light = lightRef.current;
-    if (light) {
-      // Two slow detuned sines sum to a ±SUN_LIGHT_PULSE breath that never
-      // reads as a strobe — the furnace inhaling, not a warning light.
-      light.intensity =
-        SUN_LIGHT_BASE *
-        (1 + SUN_LIGHT_PULSE * 0.5 * (Math.sin(t * 0.31) + Math.sin(t * 0.47)));
-    }
     const outer = coronaOuterRef.current;
     if (outer) {
       const s = wp.bodyRadius * 3.6 * (1 + CORONA_BREATHE * Math.sin(t * 0.23));
@@ -1858,17 +2344,14 @@ function Sun({ wp, reduced }: BodyProps) {
 
   return (
     <group position={wp.bodyPos}>
-      {/* Local drama light: the SpaceEnvironment key light stays authoritative
-          for the scene; this warm pool makes anything that flies NEAR the sun
-          (the ship, the corona-side limb) catch fire. decay 0 with a distance
-          cutoff keeps it a local pool rather than a second global key. */}
-      <pointLight
-        ref={lightRef}
-        color={SUN_LIGHT_COLOR}
-        intensity={SUN_LIGHT_BASE}
-        decay={0}
-        distance={wp.bodyRadius * 8}
-      />
+      {/* The sun's local drama light does NOT live here — Scene3D renders it
+          at this body's position, outside the group it culls during the
+          landing. A light inside a hidden group leaves the scene's light
+          set, three re-derives every program's light-count defines, and the
+          whole pipeline recompiles mid-descent (measured: 41 programs, a
+          visible stall on the first flight home). Keeping the light at scene
+          level makes the light signature constant, which is what lets the
+          cull be free. See SUN_LIGHT_* + sunLightIntensity(), exported. */}
       <mesh ref={ref}>
         <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
         {/* The texture doubles as emissiveMap so granulation survives into
