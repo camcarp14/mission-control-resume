@@ -122,12 +122,16 @@ export function voyage(n: number): Waypoint[] {
       const nHat = norm3([20, 9, 26]);
       const tHat = norm3(cross3(nHat, [0, 1, 0]));
       const site = madd3(bodyPos, nHat, r + 1.35);
-      const camPos = madd3(madd3(bodyPos, nHat, r + 2.6), tHat, 12);
+      // Pulled back and up from the first pass (12 → 17 along-surface,
+      // +1.25 → +1.85 altitude, fov 48 → 52): the finale is a whole pier
+      // and skyline now, and the tight framing cropped the city ("should
+      // be more zoomed out", verbatim).
+      const camPos = madd3(madd3(bodyPos, nHat, r + 3.2), tHat, 17);
       // Gaze: above the pad (a raised eyeline drops the horizon to the lower
       // third), carried past it along-surface, nudged sideways so the
       // shuttle frames left-of-centre — the panel docks centre-right.
       const bHat = cross3(nHat, tHat);
-      const gaze = madd3(madd3(madd3(site, nHat, 3.2), tHat, -3), bHat, 6.5);
+      const gaze = madd3(madd3(madd3(site, nHat, 3.6), tHat, -3), bHat, 8);
       out.push({
         index: i,
         kind: 'earthReturn',
@@ -135,7 +139,7 @@ export function voyage(n: number): Waypoint[] {
         bodyRadius: r,
         camPos,
         gaze,
-        fov: 48,
+        fov: 52,
         site,
       });
       continue;

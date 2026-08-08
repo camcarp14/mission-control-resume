@@ -181,11 +181,11 @@ function Rig({
       // pose. Ground always below, horizon arriving last — never through
       // the water plane, never under the deck (both prior live reports).
       // At homeRaw=1 the column pose EQUALS the engine's landing camPos
-      // (site + n̂·1.25 + tHat·12), so the handoff is exact. ====
+      // (site + n̂·1.85 + tHat·17), so the handoff is exact. ====
       if (landing.site && homeRaw > 0.5) {
         tmpTHat.set(-tmpNorm.z, 0, tmpNorm.x).normalize(); // engine tHat
-        const alt = 1.25 + (45 - 1.25) * (1 - smooth(homeRaw, 0.5, 0.97));
-        const side = 14 - 2 * smooth(homeRaw, 0.85, 0.995);
+        const alt = 1.85 + (45 - 1.85) * (1 - smooth(homeRaw, 0.5, 0.97));
+        const side = 14 + 3 * smooth(homeRaw, 0.85, 0.995);
         tmpDescent
           .set(landing.site[0], landing.site[1], landing.site[2])
           .addScaledVector(tmpNorm, alt)
@@ -385,7 +385,18 @@ function Rig({
       // of frame, holding formation, nose toward the road ahead. At the
       // hero it parks closer still — the opening frame showcases it. ====
       const nearest = Math.round(tv);
-      const dockW = ramp > 0 ? 0 : 1 - Math.min(Math.abs(tv - nearest) / 0.35, 1);
+      let dockW = ramp > 0 ? 0 : 1 - Math.min(Math.abs(tv - nearest) / 0.35, 1);
+      if (ramp === 0) {
+        // The sun approach holds formation from MID-LEG: the spline's bend
+        // at the sun knot is the sharpest on the route, and even a capped
+        // ahead-sample swept the ship around the sun's limb before arrival
+        // (two live reports). Camera-relative from halfway in, it cannot.
+        const sunIdx = n - 2;
+        const wSun =
+          smooth(tv, sunIdx - 0.55, sunIdx - 0.18) *
+          (1 - smooth(tv, sunIdx + 0.18, sunIdx + 0.55));
+        dockW = Math.max(dockW, wSun);
+      }
       if (dockW > 0) {
         const heroW = 1 - Math.min(tv / 0.6, 1);
         const sW = dockW * dockW * (3 - 2 * dockW);

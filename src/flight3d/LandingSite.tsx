@@ -130,6 +130,48 @@ const HEMI_SKY = '#ffc9a0';
 const HEMI_GROUND = '#2a3340';
 const HEMI_INTENSITY = 0.9;
 
+// Fireworks (adapted from the user's river-racer js/world/fireworks.js —
+// "fireworks over Navy Pier at night"): ONE additive Points pool, armed when
+// the ship first touches down (ramp >= FW_ARM_AT), re-armed after flying away
+// and returning (latch resets below FW_DISARM_AT). Launch points sit on the
+// water beside the skyline, clear of the deck. Everything is seeded — shells
+// and spark directions come from mulberry32 tables built once; the useFrame
+// choreography reads state.clock.elapsedTime epochs only.
+const FW_MAX = 600; // pool size: rockets + trails + bursts share it
+const FW_ARM_AT = 0.99; // ramp latch: touched down
+const FW_DISARM_AT = 0.6; // ramp unlatch: flew away — return re-celebrates
+const FW_SALVO = 3; // opening salvo size…
+const FW_SHELL_COUNT = 24; // cyclic seeded shell table
+const FW_SPARK_COUNT = 192; // seeded unit-sphere spark table
+const FW_ASCENT_T = 1.2; // rocket flight time, seconds
+const FW_LAUNCH_Y = WATER_Y + 0.4; // motes rise off the water surface
+const FW_G = 9.0; // gravity on rockets and sparks
+const FW_DRAG = 1.5; // exponential drag on burst sparks
+const FW_LIFT = 1.6; // slight upward bias at burst
+const FW_BIRTH_BRIGHT = 3.2; // >1 at birth so bloom catches the burst
+const FW_ROCKET_BRIGHT = 2.0; // the ascending mote stays hot
+const FW_ROCKET_SIZE = 1.5;
+const FW_TRAIL_STEP = 0.07; // seconds between trail ticks up the ascent
+const FW_TRAIL_LIFE = 0.38;
+const FW_TRAIL_SIZE = 0.7;
+const FW_SEED = 0xf17e0a11; // separate rng: the site's own seed order is sacred
+
+// Shell palette — warm gold, ember, cyan-bright, soft white — routed through
+// THREE.Color so the values land in the linear working space like every other
+// color in the file.
+const FW_PAL: Float32Array = (() => {
+  const hex = [0xffd9a0, 0xff9a5a, 0x7df9ff, 0xfff3d0] as const;
+  const out = new Float32Array(hex.length * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < hex.length; i++) {
+    c.setHex(hex[i] ?? 0xffffff);
+    out[i * 3] = c.r;
+    out[i * 3 + 1] = c.g;
+    out[i * 3 + 2] = c.b;
+  }
+  return out;
+})();
+
 /* ---- module-scope scratch (zero per-frame allocs) ------------------------ */
 
 const _dummy = new THREE.Object3D();
@@ -188,6 +230,34 @@ const DOME_FRAG = /* glsl */ `
     col = mix(col, vec3(0.30, 0.16, 0.24), strips * 0.55);
     float a = 1.0 - smoothstep(0.45, 0.72, h);
     gl_FragColor = vec4(col, a * uOpacity);
+  }
+`;
+
+/* ---- fireworks point shader ----------------------------------------------- */
+
+// Per-particle color AND size (PointsMaterial has no per-point size, and the
+// spec wants sparks that shrink as they fade). uK is the site's master fade:
+// the show dims and dies exactly with the rest of the pier. Additive
+// blending: the frag alpha (soft radial sprite) scales the HDR color into the
+// framebuffer, so birth brightness > 1 survives for bloom.
+const FW_VERT = /* glsl */ `
+  attribute vec3 aColor;
+  attribute float aSize;
+  uniform float uK;
+  varying vec3 vColor;
+  void main() {
+    vColor = aColor * uK;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * (340.0 / max(1.0, -mv.z));
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const FW_FRAG = /* glsl */ `
+  uniform sampler2D uMap;
+  varying vec3 vColor;
+  void main() {
+    float a = texture2D(uMap, gl_PointCoord).a;
+    gl_FragColor = vec4(vColor, a);
   }
 `;
 
@@ -377,6 +447,18 @@ function paintStreak(ctx: CanvasRenderingContext2D, w: number, h: number): void 
   ctx.fillStyle = g;
   ctx.fillRect(-w, -h / 2, w * 2, h);
   ctx.restore();
+}
+
+/** Soft round spark sprite for the fireworks points (the RR fireworks.js
+ *  64px radial: hot white core, feathered edge — only alpha is sampled). */
+function paintSpark(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const c = w / 2;
+  const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.3, 'rgba(255,255,255,0.7)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
 }
 
 /* ---- skyline window atlas (technique adapted from RR city.js nightTile) -- */
@@ -707,6 +789,425 @@ function poseCabins(mesh: THREE.InstancedMesh, spin: number): void {
   mesh.instanceMatrix.needsUpdate = true;
 }
 
+/* ---- fireworks: seeded tables + pool simulation (RR fireworks.js) --------- */
+
+// A seeded "shell": where it launches on the water, how it drifts and how
+// high it climbs, its palette color, burst size, where it starts reading the
+// spark table, and how long after it the NEXT rocket waits.
+type FwShell = {
+  lx: number; // launch x, pier-local [-130, -55] — over the water
+  lz: number; // launch z, ±[12, 60] — clear of the deck (and the wheel)
+  dx: number; // lateral drift during ascent
+  dz: number;
+  ascent: number; // rise height, 26–44 units in ~1.2 s
+  ci: number; // palette index
+  count: number; // burst particles, 40–70
+  off: number; // starting offset into the spark table
+  gap: number; // seconds to the next rocket while docked, 7–9
+  salvoGap: number; // stagger inside the opening salvo, ~0.8
+};
+
+// A seeded spark: unit-sphere direction plus speed / life / brightness / size
+// jitter. Each shell reads `count` consecutive entries from its own offset.
+type FwSpark = {
+  dx: number;
+  dy: number;
+  dz: number;
+  spd: number;
+  life: number; // 1.6–2.4 s
+  jit: number; // per-spark brightness jitter
+  size: number;
+};
+
+// Pool particle (RR's pool-of-structs, allocated once — never per frame).
+// kind: 0 = ascending rocket mote, 1 = burst spark, 2 = trail tick.
+type FwParticle = {
+  kind: number;
+  shell: number; // rocket only: which shell to burst as
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  age: number;
+  life: number;
+  r: number;
+  g: number;
+  b: number;
+  size: number;
+  trail: number; // rocket only: trail-tick accumulator
+};
+
+type FwSim = {
+  geo: THREE.BufferGeometry;
+  mat: THREE.ShaderMaterial;
+  tex: THREE.CanvasTexture;
+  uniforms: { uK: { value: number }; uMap: { value: THREE.Texture } };
+  posAttr: THREE.BufferAttribute;
+  colAttr: THREE.BufferAttribute;
+  sizeAttr: THREE.BufferAttribute;
+  posArr: Float32Array;
+  colArr: Float32Array;
+  sizeArr: Float32Array;
+  pool: FwParticle[];
+  shells: FwShell[];
+  sparks: FwSpark[];
+  // mutable choreography state (the memoized sim object IS the ref)
+  cursor: number;
+  armed: boolean;
+  live: boolean;
+  salvoLeft: number;
+  counter: number;
+  nextLaunch: number; // elapsedTime epoch of the next launch
+  lastE: number; // previous elapsedTime, for dt
+};
+
+/** Seeded tables + pool + ONE Points geometry/material, built once. A
+ *  separate mulberry32 stream so the site's own fixed rng order is
+ *  untouched — the pier looks identical with or without this system. */
+function buildFireworks(): FwSim {
+  const rng = mulberry32(FW_SEED);
+
+  const shells: FwShell[] = [];
+  for (let i = 0; i < FW_SHELL_COUNT; i++) {
+    shells.push({
+      // Closer to the pad and higher into the darker upper sky than the
+      // first pass — bursts at the old range washed out against the bright
+      // horizon band (screenshot finding).
+      lx: -95 + rng() * 55,
+      lz: (rng() < 0.5 ? -1 : 1) * (12 + rng() * 48),
+      dx: (rng() - 0.5) * 3,
+      dz: (rng() - 0.5) * 3,
+      ascent: 34 + rng() * 20,
+      ci: Math.floor(rng() * 4),
+      count: 60 + Math.floor(rng() * 31),
+      off: Math.floor(rng() * FW_SPARK_COUNT),
+      gap: 7 + rng() * 2,
+      salvoGap: 0.7 + rng() * 0.25,
+    });
+  }
+
+  const sparks: FwSpark[] = [];
+  for (let i = 0; i < FW_SPARK_COUNT; i++) {
+    const u = rng() * 2 - 1;
+    const th = rng() * Math.PI * 2;
+    const rr = Math.sqrt(Math.max(0, 1 - u * u));
+    sparks.push({
+      dx: rr * Math.cos(th),
+      dy: u,
+      dz: rr * Math.sin(th),
+      spd: 13 + rng() * 7,
+      life: 1.6 + rng() * 0.8,
+      jit: 0.8 + rng() * 0.5,
+      size: 1.8 + rng() * 1.0,
+    });
+  }
+
+  const pool: FwParticle[] = [];
+  for (let i = 0; i < FW_MAX; i++) {
+    pool.push({
+      kind: 1,
+      shell: 0,
+      x: 0,
+      y: -9999,
+      z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      age: 1,
+      life: 0,
+      r: 0,
+      g: 0,
+      b: 0,
+      size: 0,
+      trail: 0,
+    });
+  }
+
+  const posArr = new Float32Array(FW_MAX * 3);
+  for (let i = 0; i < FW_MAX; i++) posArr[i * 3 + 1] = -9999;
+  const colArr = new Float32Array(FW_MAX * 3);
+  const sizeArr = new Float32Array(FW_MAX);
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(posArr, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  const colAttr = new THREE.BufferAttribute(colArr, 3);
+  colAttr.setUsage(THREE.DynamicDrawUsage);
+  const sizeAttr = new THREE.BufferAttribute(sizeArr, 1);
+  sizeAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('aColor', colAttr);
+  geo.setAttribute('aSize', sizeAttr);
+  geo.setDrawRange(0, 0); // free until the first touchdown arms it
+  // Static generous bounds over the launch water — never recomputed.
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(-92, 20, 0), 200);
+
+  const tex = makeCanvasTexture(64, 64, paintSpark);
+  const uniforms = { uK: { value: 0 }, uMap: { value: tex as THREE.Texture } };
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: FW_VERT,
+    fragmentShader: FW_FRAG,
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  return {
+    geo,
+    mat,
+    tex,
+    uniforms,
+    posAttr,
+    colAttr,
+    sizeAttr,
+    posArr,
+    colArr,
+    sizeArr,
+    pool,
+    shells,
+    sparks,
+    cursor: 0,
+    armed: false,
+    live: false,
+    salvoLeft: 0,
+    counter: 0,
+    nextLaunch: 0,
+    lastE: 0,
+  };
+}
+
+/** Ring-cursor allocation (RR alloc), refusing to cannibalize a rocket that
+ *  is still mid-ascent — losing a spark is invisible, losing a shell is not. */
+function fwAlloc(fw: FwSim): FwParticle | undefined {
+  for (let tries = 0; tries < 4; tries++) {
+    const p = fw.pool[fw.cursor];
+    fw.cursor = (fw.cursor + 1) % FW_MAX;
+    if (!p) continue;
+    if (p.kind === 0 && p.age < p.life) continue;
+    return p;
+  }
+  return undefined;
+}
+
+function fwLaunch(fw: FwSim, sh: FwShell, shellIdx: number): void {
+  const p = fwAlloc(fw);
+  if (!p) return;
+  p.kind = 0;
+  p.shell = shellIdx;
+  p.x = sh.lx;
+  p.y = FW_LAUNCH_Y;
+  p.z = sh.lz;
+  p.vx = sh.dx;
+  p.vz = sh.dz;
+  // vy chosen so the mote rises exactly `ascent` against gravity in ASCENT_T.
+  p.vy = (sh.ascent + 0.5 * FW_G * FW_ASCENT_T * FW_ASCENT_T) / FW_ASCENT_T;
+  p.age = 0;
+  p.life = FW_ASCENT_T;
+  const c = sh.ci * 3;
+  p.r = FW_PAL[c] ?? 1;
+  p.g = FW_PAL[c + 1] ?? 0.9;
+  p.b = FW_PAL[c + 2] ?? 0.7;
+  p.size = FW_ROCKET_SIZE;
+  p.trail = 0;
+}
+
+/** Faint ember tick left behind the ascending mote — pool particles reused
+ *  as the trail, per the spec. */
+function fwTrailTick(fw: FwSim, src: FwParticle): void {
+  const p = fwAlloc(fw);
+  if (!p) return;
+  p.kind = 2;
+  p.shell = 0;
+  p.x = src.x;
+  p.y = src.y;
+  p.z = src.z;
+  p.vx = 0;
+  p.vy = -0.9;
+  p.vz = 0;
+  p.age = 0;
+  p.life = FW_TRAIL_LIFE;
+  p.r = src.r * 0.8; // ember-warm behind the hot mote
+  p.g = src.g * 0.65;
+  p.b = src.b * 0.5;
+  p.size = FW_TRAIL_SIZE;
+  p.trail = 0;
+}
+
+function fwBurst(fw: FwSim, x: number, y: number, z: number, shellIdx: number): void {
+  const sh = fw.shells[shellIdx % fw.shells.length];
+  if (!sh) return;
+  const c = sh.ci * 3;
+  const br = FW_PAL[c] ?? 1;
+  const bg = FW_PAL[c + 1] ?? 0.9;
+  const bb = FW_PAL[c + 2] ?? 0.7;
+  for (let j = 0; j < sh.count; j++) {
+    const sp = fw.sparks[(sh.off + j) % fw.sparks.length];
+    if (!sp) continue;
+    const p = fwAlloc(fw);
+    if (!p) continue;
+    p.kind = 1;
+    p.shell = 0;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.vx = sp.dx * sp.spd;
+    p.vy = sp.dy * sp.spd + FW_LIFT;
+    p.vz = sp.dz * sp.spd;
+    p.age = 0;
+    p.life = sp.life;
+    p.r = br * sp.jit;
+    p.g = bg * sp.jit;
+    p.b = bb * sp.jit;
+    p.size = sp.size;
+    p.trail = 0;
+  }
+}
+
+/** Arm on touchdown: schedule the opening salvo and open the draw range. */
+function fwArm(fw: FwSim, e: number): void {
+  fw.armed = true;
+  fw.live = true;
+  fw.salvoLeft = FW_SALVO;
+  fw.nextLaunch = e + 0.35;
+  fw.geo.setDrawRange(0, FW_MAX);
+}
+
+/** Disarm and clear: kill every particle, hide the buffers, close the draw
+ *  range. Called when the ship flies away (ramp < FW_DISARM_AT) and when
+ *  reduced motion switches on mid-show. */
+function fwKill(fw: FwSim): void {
+  fw.armed = false;
+  fw.live = false;
+  fw.salvoLeft = 0;
+  for (const p of fw.pool) {
+    p.age = 1;
+    p.life = 0;
+  }
+  for (let i = 0; i < FW_MAX; i++) {
+    fw.posArr[i * 3 + 1] = -9999;
+    fw.colArr[i * 3] = fw.colArr[i * 3 + 1] = fw.colArr[i * 3 + 2] = 0;
+    fw.sizeArr[i] = 0;
+  }
+  fw.posAttr.needsUpdate = true;
+  fw.colAttr.needsUpdate = true;
+  fw.sizeAttr.needsUpdate = true;
+  fw.geo.setDrawRange(0, 0);
+}
+
+/** Per-frame choreography + integration (RR F.update, zero allocation).
+ *  e = state.clock.elapsedTime, k = the site's master fade, docked = ramp is
+ *  still at touchdown (new launches happen only while docked; in-flight
+ *  particles finish naturally as the ship pulls away). */
+function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
+  fw.uniforms.uK.value = k;
+  const rawDt = e - fw.lastE;
+  fw.lastE = e;
+  if (!fw.armed && !fw.live) return; // idle: no buffer writes at all
+  const dt = rawDt < 0 ? 0 : rawDt > 0.1 ? 0.1 : rawDt;
+
+  // Launch scheduling: the 3-rocket salvo at ~0.8 s stagger, then one rocket
+  // every 7–9 s from the seeded gap table, all on elapsedTime epochs.
+  if (fw.armed && docked && e >= fw.nextLaunch) {
+    const si = fw.counter % fw.shells.length;
+    const sh = fw.shells[si];
+    if (sh) {
+      fwLaunch(fw, sh, si);
+      fw.counter++;
+      if (fw.salvoLeft > 0) {
+        fw.salvoLeft--;
+        fw.nextLaunch = e + (fw.salvoLeft > 0 ? sh.salvoGap : sh.gap);
+      } else {
+        fw.nextLaunch = e + sh.gap;
+      }
+    }
+  }
+
+  const pos = fw.posArr;
+  const col = fw.colArr;
+  const siz = fw.sizeArr;
+  const dr = Math.exp(-FW_DRAG * dt); // spark drag, once per frame
+  let alive = 0;
+  for (let i = 0; i < FW_MAX; i++) {
+    const p = fw.pool[i];
+    if (!p) continue;
+    if (p.age < p.life) {
+      p.age += dt;
+      if (p.kind === 0) {
+        // Rocket: gravity-decelerated ascent, trail ticks, burst at apex.
+        p.vy -= FW_G * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.trail += dt;
+        while (p.trail >= FW_TRAIL_STEP) {
+          p.trail -= FW_TRAIL_STEP;
+          fwTrailTick(fw, p);
+        }
+        if (p.age >= p.life) {
+          fwBurst(fw, p.x, p.y, p.z, p.shell);
+          pos[i * 3 + 1] = -9999;
+          col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0;
+          siz[i] = 0;
+          continue;
+        }
+        alive++;
+        pos[i * 3] = p.x;
+        pos[i * 3 + 1] = p.y;
+        pos[i * 3 + 2] = p.z;
+        col[i * 3] = p.r * FW_ROCKET_BRIGHT;
+        col[i * 3 + 1] = p.g * FW_ROCKET_BRIGHT;
+        col[i * 3 + 2] = p.b * FW_ROCKET_BRIGHT;
+        siz[i] = p.size;
+      } else if (p.kind === 1) {
+        // Spark: gravity + drag, quadratic alpha fade, shrinking size,
+        // brightness starting over 1.0 so bloom catches the burst.
+        alive++;
+        p.vy -= FW_G * dt;
+        p.vx *= dr;
+        p.vy *= dr;
+        p.vz *= dr;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        const u0 = 1 - p.age / p.life;
+        const u = u0 < 0 ? 0 : u0;
+        const a = u * u;
+        pos[i * 3] = p.x;
+        pos[i * 3 + 1] = p.y;
+        pos[i * 3 + 2] = p.z;
+        col[i * 3] = p.r * FW_BIRTH_BRIGHT * a;
+        col[i * 3 + 1] = p.g * FW_BIRTH_BRIGHT * a;
+        col[i * 3 + 2] = p.b * FW_BIRTH_BRIGHT * a;
+        siz[i] = p.size * (0.35 + 0.65 * u);
+      } else {
+        // Trail tick: sinks slightly, fades fast, shrinks to nothing.
+        alive++;
+        p.y += p.vy * dt;
+        const u0 = 1 - p.age / p.life;
+        const u = u0 < 0 ? 0 : u0;
+        const a = u * u;
+        pos[i * 3] = p.x;
+        pos[i * 3 + 1] = p.y;
+        pos[i * 3 + 2] = p.z;
+        col[i * 3] = p.r * 1.1 * a;
+        col[i * 3 + 1] = p.g * 1.1 * a;
+        col[i * 3 + 2] = p.b * 1.1 * a;
+        siz[i] = p.size * u;
+      }
+    } else {
+      pos[i * 3 + 1] = -9999;
+      col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0;
+      siz[i] = 0;
+    }
+  }
+  fw.posAttr.needsUpdate = true;
+  fw.colAttr.needsUpdate = true;
+  fw.sizeAttr.needsUpdate = true;
+  fw.live = fw.armed || alive > 0;
+}
+
 /* ---- seeded site build ---------------------------------------------------- */
 
 type SiteAssets = {
@@ -744,6 +1245,7 @@ type SiteAssets = {
   gullMat: THREE.MeshBasicMaterial;
   domeUniforms: { uOpacity: { value: number }; uSunDir: { value: THREE.Vector3 } };
   fade: { m: THREE.Material; mul: number }[];
+  fw: FwSim;
 };
 
 /** Everything seeded and built ONCE, drawing from a single rng in a fixed
@@ -1281,7 +1783,14 @@ function buildAssets(): SiteAssets {
     side: THREE.BackSide,
   });
 
-  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, sunTex, streakTex, atlasTex, hazeTex, reflTex];
+  // Fireworks: separate seeded stream, built after every draw from the site
+  // rng above so the pier's fixed seed order is untouched. Its texture,
+  // geometry and material join the shared precompile/dispose lists; its fade
+  // rides the uK uniform (a ShaderMaterial has no meaningful .opacity for the
+  // fade list to drive).
+  const fw = buildFireworks();
+
+  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, sunTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
   const geometries: THREE.BufferGeometry[] = [
     deckGeo,
     padGeo,
@@ -1297,6 +1806,7 @@ function buildAssets(): SiteAssets {
     streakGeo,
     domeGeo,
     gullGeo,
+    fw.geo,
   ];
   const materials: THREE.Material[] = [
     deckMat,
@@ -1314,6 +1824,7 @@ function buildAssets(): SiteAssets {
     sunMat,
     gullMat,
     domeMat,
+    fw.mat,
   ];
 
   // The per-frame fade list: master k times each material's resting opacity.
@@ -1367,6 +1878,7 @@ function buildAssets(): SiteAssets {
     gullMat,
     domeUniforms,
     fade,
+    fw,
   };
 }
 
@@ -1465,14 +1977,16 @@ export function LandingSite({
   }, [assets, frame]);
 
   // Reduced motion parks the wheel, cabins and gulls at their build pose —
-  // including when the preference flips mid-spin.
+  // including when the preference flips mid-spin — and clears the fireworks
+  // outright: the docked finale stays a still.
   useEffect(() => {
     if (!reduced) return;
     if (spinnerRef.current) spinnerRef.current.rotation.z = 0;
     const cab = cabinsRef.current;
     if (cab) poseCabins(cab, 0);
     if (gullsRef.current) gullsRef.current.rotation.y = 0;
-  }, [reduced]);
+    fwKill(assets.fw);
+  }, [reduced, assets]);
 
   // The ramp is STATE (flight position along the homecoming leg) times a
   // camera-distance gate, so it runs every rung — reduced motion included.
@@ -1482,6 +1996,17 @@ export function LandingSite({
     if (!group) return;
     const n = waypoints.length;
     const ramp = legInto(n, n - 1, t.get());
+
+    // Fireworks latch — BEFORE the visibility gate so flying away (ramp
+    // collapsing below FW_DISARM_AT, which is also where the group hides)
+    // resets it, and a return to the pad re-celebrates. Reduced motion never
+    // arms: the whole system stays cold.
+    const fw = assets.fw;
+    if (!reduced) {
+      if (!fw.armed && ramp >= FW_ARM_AT) fwArm(fw, state.clock.elapsedTime);
+      else if (fw.armed && ramp < FW_DISARM_AT) fwKill(fw);
+    }
+
     const visible = ramp > VISIBLE_AT;
     group.visible = visible;
     if (!visible) return;
@@ -1512,6 +2037,9 @@ export function LandingSite({
       const cab = cabinsRef.current;
       if (cab) poseCabins(cab, spin);
       if (gullsRef.current) gullsRef.current.rotation.y = e * GULL_SPEED;
+      // The celebration: launches while docked, integration while anything
+      // is alive, brightness times the master k so it dies with the site.
+      fwUpdate(fw, e, k, ramp >= FW_ARM_AT);
     }
   });
 
@@ -1595,6 +2123,19 @@ export function LandingSite({
         >
           <primitive object={assets.sunMat} attach="material" />
         </sprite>
+
+        {/* 10b. Fireworks over the water beside the skyline (adapted from the
+            user's RR js/world/fireworks.js): ONE additive Points pool, armed
+            at touchdown — salvo of three, then a shell every 7–9 s while
+            docked. Draw range is 0 until armed, so the extra draw call only
+            exists during the show; always mounted so the precompile pass
+            covers its shader. Reduced motion never arms it. */}
+        <points
+          geometry={assets.fw.geo}
+          material={assets.fw.mat}
+          frustumCulled={false}
+          renderOrder={3}
+        />
 
         {/* 11. Gulls: three silhouettes on a slow circle over the water,
             parked under reduced motion. */}

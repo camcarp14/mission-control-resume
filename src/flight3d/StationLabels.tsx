@@ -104,6 +104,27 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   if (!c) return canvas;
   const cx = w / 2;
 
+  // Backing plate: a soft dark HUD chip behind the type. Against the sun's
+  // disc the bare glow text washed out completely ("the title is sort of
+  // hard to read there", verbatim) — the plate guarantees contrast on any
+  // background while staying quiet over dark sky.
+  {
+    const padX = 34;
+    const padY = 22;
+    const plateX = padX;
+    const plateY = PAD_TOP - padY;
+    const plateW = w - padX * 2;
+    const plateH = PAD_TOP + MAIN_BLOCK_H + BAR_GAP + BAR_H + SUB_GAP + SUB_BLOCK_H + padY * 1.5 - plateY;
+    const r = 20;
+    c.beginPath();
+    c.roundRect(plateX, plateY, plateW, plateH, r);
+    c.fillStyle = 'rgba(5, 9, 15, 0.52)';
+    c.fill();
+    c.strokeStyle = 'rgba(154, 220, 255, 0.18)';
+    c.lineWidth = 2;
+    c.stroke();
+  }
+
   // Main line: two glow passes — a wide soft halo, then a tight hot core.
   c.textAlign = 'center';
   c.textBaseline = 'top';
