@@ -332,8 +332,12 @@ kbd {
 }
 
 /* telemetry column: below the top bar; the fill TRACKS t (state, not
-   motion) via direct scaleY writes — legitimate under reduced motion */
-.telemetry { z-index: 6; }
+   motion) via direct scaleY writes — legitimate under reduced motion.
+   The text shadow is invisible against space and earns its keep over the
+   daylight landing sky, where bare hud-cyan washed out (screenshot
+   finding). */
+.telemetry { z-index: 6; text-shadow: 0 1px 4px rgba(4, 8, 12, 0.95), 0 0 12px rgba(4, 8, 12, 0.7); }
+.telemetry span { filter: drop-shadow(0 1px 3px rgba(4, 8, 12, 0.6)); }
 .telemetry-fill {
   background: linear-gradient(180deg, var(--cyan-bright), var(--cyan), #7c3aed);
   box-shadow: 0 0 8px rgba(76,201,240,0.7);

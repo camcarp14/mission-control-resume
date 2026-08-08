@@ -2,12 +2,12 @@
  *
  * The finale's ground truth. The homecoming used to end with a ~4-unit shuttle
  * touching a radius-17 globe — a toy on a marble. This layer fades in over the
- * final approach and turns the touchdown point into a PLACE: a meadow-dark
+ * final approach and turns the touchdown point into a PLACE: a sunlit meadow
  * ground disc running to the horizon, a lit landing pad under the legs, a
- * dusk-band sky dome, silhouette hills breaking the rim, and a few slow
+ * daylight sky dome, green hills breaking the rim, and a few slow
  * clouds. By the time the ship flips for its descent the world is fully
- * planted, so the last frame reads "rocket setting down on a landscape at
- * dusk", not "rocket on a globe".
+ * planted, so the last frame reads "rocket setting down on a bright green
+ * landscape", not "rocket on a globe".
  *
  * Everything is procedural (seeded canvas textures, mulberry32(0xC0FFEE)),
  * one local group oriented to the pad's surface normal, ~12 draw calls. The
@@ -31,10 +31,15 @@ const SEED = 0xc0ffee;
 const GROUND_RADIUS = 90;
 const GROUND_SEGMENTS = 64;
 const GROUND_TEX_SIZE = 1024;
-const GROUND_BASE = '#1c3527'; // night meadow
-const GROUND_PATCHES = ['#244530', '#2e5040', '#16281e'] as const;
+const GROUND_BASE = '#3d7c47'; // sunlit meadow
+const GROUND_PATCHES = ['#4a9155', '#57a25e', '#2f6b3a', '#63ad62'] as const;
 const GROUND_PATCH_COUNT = 140;
-const GROUND_VEIN_COUNT = 4;
+const GROUND_FLECK_COLOR = '#8fc26a'; // sparse yellow-green flecks
+const GROUND_FLECK_COUNT = 60;
+const GROUND_TREE_COLOR = '#274f30'; // soft tree-line blotches, outer third
+const GROUND_TREE_COUNT = 26;
+const GROUND_STREAM_COLOR = '#7fb9c9'; // thin winding paths/streams
+const GROUND_VEIN_COUNT = 3;
 const GROUND_FADE_START = 0.75; // outer 25% of the disc dissolves into haze
 
 // Landing pad, centred at the local origin — directly under the ship.
@@ -47,13 +52,13 @@ const PAD_RING_AT = 0.85; // outer ring radius fraction
 const PAD_DASH_AT = 0.5; // inner dashed circle
 const PAD_LABEL = 'CC-01';
 
-// Sky dome: a dusk band hugging the horizon, transparent navy above.
+// Sky dome: a luminous daylight band hugging the horizon, transparent above.
 const DOME_RADIUS = 130;
-const DOME_ALPHA = 0.75; // band strength at the horizon
+const DOME_ALPHA = 0.9; // band strength at the horizon
 
-// Horizon hills: dark silhouette mounds that break the disc's perfect edge.
+// Horizon hills: lit green mounds that break the disc's perfect edge.
 const HILL_COUNT = 5;
-const HILL_COLOR = '#0d1a14';
+const HILL_COLOR = '#2e6039';
 const HILL_DIST_MIN = 55;
 const HILL_DIST_MAX = 80;
 const HILL_HEIGHT_MIN = 2;
@@ -79,6 +84,14 @@ const GLOW_TEX_SIZE = 128;
 const GLOW_SCALE = 10;
 const GLOW_OPACITY = 0.12;
 
+// Site lights: intensities ramp with the master fade k, so deep space stays
+// pitch-dark until the approach — then the ship and ground read sunlit.
+const HEMI_SKY = '#dff2ff';
+const HEMI_GROUND = '#4d9158';
+const HEMI_INTENSITY = 1.35;
+const SUN_COLOR = '#fff0d0';
+const SUN_INTENSITY = 1.5;
+
 // Ramp: 0 until the homecoming leg begins, 1 at touchdown. The site becomes
 // visible almost immediately and is fully opaque well before the final
 // descent (ramp 0.82+), so the flip and touchdown happen inside a complete
@@ -94,30 +107,40 @@ const _dummy = new THREE.Object3D();
 /* ---- sky dome shader ----------------------------------------------------- */
 
 const DOME_VERT = /* glsl */ `
-  varying float vH;
+  varying vec3 vPos;
   void main() {
-    vH = position.y;
+    vPos = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
-// Height-blended dusk: transparent navy at the top, a glowing #1a3b52 band
-// near the ground with a thin #4cc9f0 line right at the horizon. Alpha peaks
-// at ~DOME_ALPHA at y=0 and is gone by 40% height. uOpacity is the master
-// fade for the whole site.
+// Height-blended daylight: a bright luminous band at the horizon (#a8e8f5
+// mixed with #4cc9f0, alpha up to ~DOME_ALPHA) blending upward into a clear
+// day-blue mid dome, then fading to transparent deep navy by ~75% height so
+// a few stars still peek at the zenith. A warm low-sun lobe is baked into
+// the gradient math (azimuthal cos term, no uniform) on one side. uOpacity
+// is the master fade for the whole site.
 const DOME_FRAG = /* glsl */ `
   uniform float uOpacity;
-  varying float vH;
+  varying vec3 vPos;
   void main() {
-    float h = clamp(vH / ${DOME_RADIUS.toFixed(1)}, 0.0, 1.0);
-    float band = 1.0 - smoothstep(0.0, 0.4, h);
-    vec3 navy = vec3(0.024, 0.039, 0.071);  /* #060a12 */
-    vec3 dusk = vec3(0.102, 0.231, 0.322);  /* #1a3b52 */
-    vec3 line = vec3(0.298, 0.788, 0.941);  /* #4cc9f0 */
-    vec3 col = mix(navy, dusk, band);
-    float horizon = 1.0 - smoothstep(0.0, 0.045, abs(h));
-    col = mix(col, line, horizon * 0.85);
-    gl_FragColor = vec4(col, ${DOME_ALPHA.toFixed(2)} * band * uOpacity);
+    float h = clamp(vPos.y / ${DOME_RADIUS.toFixed(1)}, 0.0, 1.0);
+    vec3 bandLo = vec3(0.659, 0.910, 0.961); /* #a8e8f5 */
+    vec3 bandHi = vec3(0.298, 0.788, 0.941); /* #4cc9f0 */
+    vec3 day    = vec3(0.227, 0.478, 0.698); /* rgb(58,122,178) */
+    vec3 navy   = vec3(0.024, 0.039, 0.071); /* #060a12 */
+    vec3 col = mix(bandLo, bandHi, smoothstep(0.0, 0.16, h));
+    float toDay = smoothstep(0.05, 0.35, h);
+    col = mix(col, day, toDay);
+    float toNavy = smoothstep(0.45, 0.75, h);
+    col = mix(col, navy, toNavy);
+    /* warm glow lobe near the horizon on one side: a low sun, baked. */
+    float azl = max(length(vPos.xz), 1e-3);
+    float sunCos = max(dot(vPos.xz / azl, normalize(vec2(0.85, 0.53))), 0.0);
+    float lobe = sunCos * sunCos * (1.0 - smoothstep(0.0, 0.3, h));
+    col = mix(col, vec3(1.0, 0.88, 0.70), lobe * 0.35);
+    float a = mix(${DOME_ALPHA.toFixed(2)}, 0.75, toDay) * (1.0 - toNavy);
+    gl_FragColor = vec4(col, a * uOpacity);
   }
 `;
 
@@ -141,8 +164,9 @@ function makeCanvasTexture(size: number, paint: (ctx: CanvasRenderingContext2D) 
   return tex;
 }
 
-/** Night-meadow ground: mottled seeded patches over a dark green base, faint
- *  water-ish veins, a darker ring near the rim, and the outer 25% fading to
+/** Sunlit-meadow ground: mottled seeded patches over a vivid green base,
+ *  sparse yellow-green flecks, soft tree-line blotches toward the outer
+ *  third, a few thin winding paths/streams, and the outer 25% fading to
  *  transparent so the disc dissolves into haze instead of ending in an edge.
  *  NO grid lines — this is terrain, not a hologram. */
 function paintGround(ctx: CanvasRenderingContext2D, rng: () => number): void {
@@ -166,11 +190,38 @@ function paintGround(ctx: CanvasRenderingContext2D, rng: () => number): void {
     ctx.fill();
   }
 
-  // Faint darker water-ish veins wandering across the meadow.
-  ctx.strokeStyle = 'rgba(9,20,26,0.22)';
+  // Sparse small yellow-green flecks — sun catching taller grass.
+  for (let i = 0; i < GROUND_FLECK_COUNT; i++) {
+    const x = rng() * S;
+    const y = rng() * S;
+    const r = 1.5 + rng() * 3;
+    ctx.fillStyle = rgba(GROUND_FLECK_COLOR, 0.35 + rng() * 0.3);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Soft darker tree-line blotches toward the outer third of the disc.
+  for (let i = 0; i < GROUND_TREE_COUNT; i++) {
+    const a = rng() * Math.PI * 2;
+    const d = c * (0.55 + rng() * 0.3);
+    const x = c + Math.cos(a) * d;
+    const y = c + Math.sin(a) * d;
+    const r = 20 + rng() * 46;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(GROUND_TREE_COLOR, 0.35 + rng() * 0.2));
+    g.addColorStop(1, rgba(GROUND_TREE_COLOR, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // A few thin, subtle lighter paths/streams wandering across the meadow.
+  ctx.strokeStyle = rgba(GROUND_STREAM_COLOR, 0.3);
   ctx.lineCap = 'round';
   for (let v = 0; v < GROUND_VEIN_COUNT; v++) {
-    ctx.lineWidth = 5 + rng() * 9;
+    ctx.lineWidth = 2 + rng() * 2.5;
     ctx.beginPath();
     let px = rng() * S;
     let py = rng() * S;
@@ -185,11 +236,11 @@ function paintGround(ctx: CanvasRenderingContext2D, rng: () => number): void {
     ctx.stroke();
   }
 
-  // Darker ring near the rim — the land visibly recedes before it dissolves.
+  // Gentle darker ring near the rim — the land recedes before it dissolves.
   const ring = ctx.createRadialGradient(c, c, 0, c, c, c);
-  ring.addColorStop(0.55, 'rgba(10,18,14,0)');
-  ring.addColorStop(0.82, 'rgba(10,18,14,0.28)');
-  ring.addColorStop(1, 'rgba(10,18,14,0.55)');
+  ring.addColorStop(0.55, 'rgba(39,79,48,0)');
+  ring.addColorStop(0.82, 'rgba(39,79,48,0.2)');
+  ring.addColorStop(1, 'rgba(39,79,48,0.42)');
   ctx.fillStyle = ring;
   ctx.fillRect(0, 0, S, S);
 
@@ -213,18 +264,19 @@ function paintPad(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = PAD_ASPHALT;
   ctx.fillRect(0, 0, S, S);
 
-  // Bold outer ring with a slight glow.
+  // Bold outer ring with a slight glow — high contrast so it still reads
+  // against the bright grass around the pad.
   ctx.strokeStyle = PAD_CYAN;
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 12;
   ctx.shadowColor = PAD_CYAN;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 24;
   ctx.beginPath();
   ctx.arc(c, c, R * PAD_RING_AT, 0, Math.PI * 2);
   ctx.stroke();
   ctx.shadowBlur = 0;
 
   // Inner dashed circle.
-  ctx.strokeStyle = rgba(PAD_CYAN, 0.5);
+  ctx.strokeStyle = rgba(PAD_CYAN, 0.65);
   ctx.lineWidth = 5;
   ctx.setLineDash([26, 18]);
   ctx.beginPath();
@@ -233,7 +285,7 @@ function paintPad(ctx: CanvasRenderingContext2D): void {
   ctx.setLineDash([]);
 
   // Four corner tick marks between ring and rim.
-  ctx.strokeStyle = rgba(PAD_CYAN, 0.8);
+  ctx.strokeStyle = rgba(PAD_CYAN, 0.9);
   ctx.lineWidth = 8;
   for (let i = 0; i < 4; i++) {
     const a = Math.PI / 4 + (i * Math.PI) / 2;
@@ -244,7 +296,7 @@ function paintPad(ctx: CanvasRenderingContext2D): void {
   }
 
   // Pad designation, twice, tangent to the edge.
-  ctx.fillStyle = rgba(PAD_CYAN, 0.75);
+  ctx.fillStyle = rgba(PAD_CYAN, 0.85);
   ctx.font = '600 26px ui-monospace, SFMono-Regular, Menlo, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -257,7 +309,8 @@ function paintPad(ctx: CanvasRenderingContext2D): void {
   }
 }
 
-/** Cloud puff: layered soft white blobs with low baked alpha. */
+/** Cloud puff: layered pure-white blobs, alpha baked bright (~0.24) so the
+ *  puffs read as daylight cumulus against the blue. */
 function paintCloud(ctx: CanvasRenderingContext2D, rng: () => number): void {
   const S = CLOUD_TEX_SIZE;
   for (let i = 0; i < 10; i++) {
@@ -266,8 +319,8 @@ function paintCloud(ctx: CanvasRenderingContext2D, rng: () => number): void {
     const y = S * (0.5 + (rng() - 0.5) * 0.3);
     const r = S * (0.1 + rng() * 0.16);
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, 'rgba(255,255,255,0.16)');
-    g.addColorStop(0.6, 'rgba(235,244,248,0.08)');
+    g.addColorStop(0, 'rgba(255,255,255,0.24)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.12)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -387,7 +440,13 @@ export function LandingSite({
   const padMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const hillMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const glowMatRef = useRef<THREE.SpriteMaterial>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const sunRef = useRef<THREE.DirectionalLight>(null);
   const cloudRefs = useRef<Array<THREE.Sprite | null>>([]);
+
+  // The sun light's aim point: parented into the site group at the pad
+  // origin, so the directional light shines down onto the touchdown point.
+  const sunTarget = useMemo(() => new THREE.Object3D(), []);
 
   // The site's local frame: local +Y is the pad's surface normal, origin is
   // the sphere-surface point directly under the pad (the ship's fin soles
@@ -475,6 +534,8 @@ export function LandingSite({
     if (padMatRef.current) padMatRef.current.opacity = k;
     if (hillMatRef.current) hillMatRef.current.opacity = k;
     if (glowMatRef.current) glowMatRef.current.opacity = GLOW_OPACITY * k;
+    if (hemiRef.current) hemiRef.current.intensity = HEMI_INTENSITY * k;
+    if (sunRef.current) sunRef.current.intensity = SUN_INTENSITY * k;
     assets.domeUniforms.uOpacity.value = k;
 
     const e = state.clock.elapsedTime;
@@ -525,15 +586,16 @@ export function LandingSite({
         />
       </mesh>
 
-      {/* 3. Sky dome: dusk band at the horizon, transparent navy above.
-          Drawn after the depth-writing ground/hills so the land occludes it,
-          before the clouds so they read in front of the sky. */}
+      {/* 3. Sky dome: luminous daylight band at the horizon, fading to
+          transparent navy at the zenith. Drawn after the depth-writing
+          ground/hills so the land occludes it, before the clouds so they
+          read in front of the sky. */}
       <mesh renderOrder={1}>
         <sphereGeometry args={[DOME_RADIUS, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
         <primitive object={assets.domeMaterial} attach="material" />
       </mesh>
 
-      {/* 4. Horizon hills: one instanced draw of five silhouette mounds. */}
+      {/* 4. Horizon hills: one instanced draw of five lit green mounds. */}
       <instancedMesh
         ref={hillsRef}
         args={[assets.hillGeometry, undefined, HILL_COUNT]}
@@ -576,6 +638,19 @@ export function LandingSite({
           toneMapped={false}
         />
       </sprite>
+
+      {/* 7. Site lights: sky fill + a warm low sun, intensities ramped with
+          k in useFrame so deep space is untouched until the approach. These
+          are what make the ship and ground read sunlit. No shadows. */}
+      <hemisphereLight ref={hemiRef} args={[HEMI_SKY, HEMI_GROUND, 0]} />
+      <directionalLight
+        ref={sunRef}
+        color={SUN_COLOR}
+        intensity={0}
+        position={[30, 46, 18]}
+        target={sunTarget}
+      />
+      <primitive object={sunTarget} />
     </group>
   );
 }

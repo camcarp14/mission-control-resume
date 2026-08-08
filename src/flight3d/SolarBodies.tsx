@@ -38,6 +38,21 @@ const SUN_SPIN = 0.03;
 const SATURN_SPIN = 0.2;
 const ASTEROID_COUNT = 120;
 const ASTEROID_DRIFT = 0.02; // collective field rotation — slow, but alive
+const ASTEROID_VARIANT_SEEDS = [0xa57e, 0x0f1e, 0x9b0c] as const; // one craggy geometry per seed
+const ASTEROID_DENT_COUNT = 6; // seeded impact dents per geometry variant
+const ASTEROID_DENT_RADIUS = 0.5; // rad — angular reach of each dent
+const ASTEROID_DENT_DEPTH = 0.28; // max inward push at a dent's centre
+const ASTEROID_BOULDER_MIN = 1.5; // base scales above this get the high-detail variant
+const ASTEROID_CLUMP_COUNT = 5; // seeded clump centres inside the belt
+const ASTEROID_CLUMP_CHANCE = 0.72; // rocks that gather at a clump vs. loose belt scatter
+const ASTEROID_CLUMP_SPREAD = 0.2; // clump scatter radius, × field radius
+const ASTEROID_BELT_Y = 0.22; // vertical spread, × lateral spread — a belt, not a swarm
+const ASTEROID_BASE_COLOR = '#57534c'; // palette centre — dark warm grey
+const ASTEROID_PALETTE = ['#46423c', '#514c45', '#5c554b', '#3b3835', '#64584a', '#6b5d4e'] as const;
+const ASTEROID_DUST_COUNT = 140;
+const ASTEROID_DUST_COLOR = '#9a8f80';
+const ASTEROID_DUST_SIZE = 0.5;
+const ASTEROID_DUST_OPACITY = 0.18;
 const NEBULA_PUFF_COUNT = 40;
 const NEBULA_DRIFT_X = 2.8; // per-puff orbit excursion, world units
 const NEBULA_DRIFT_Y = 2.2;
@@ -402,49 +417,230 @@ function Saturn({ wp, reduced }: BodyProps) {
 
 /* ==== ASTEROID FIELD ==== */
 
-function Asteroids({ wp, reduced }: BodyProps) {
-  const ref = useRef<THREE.InstancedMesh>(null);
+/** Craggy rock geometry: an icosahedron whose every vertex is pushed in/out
+ *  along its radial direction by a seeded factor, then hit with a handful of
+ *  seeded "impact" dents. The base polyhedron ships unwelded (non-indexed)
+ *  vertices, so the radial factor is keyed by position — duplicated corners
+ *  displace together and the faceted shell never tears — and
+ *  computeVertexNormals on the non-indexed result yields per-face normals:
+ *  fractured rock, not candy. (Dressing carries the same approach for its
+ *  clusters; the two files deliberately do not import each other's internals.) */
+function makeAsteroidGeometry(seed: number, detail: number): THREE.BufferGeometry {
+  const rand = mulberry32(seed);
+  const geo = new THREE.IcosahedronGeometry(1, detail);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
 
-  // Instance matrices are written once — a static field only needs its
-  // collective drift, never per-rock updates.
-  useLayoutEffect(() => {
-    const mesh = ref.current;
-    if (!mesh) return;
-    const rand = mulberry32(wp.index * 7919 + 3);
-    for (let i = 0; i < ASTEROID_COUNT; i++) {
-      const ang = rand() * Math.PI * 2;
-      // sqrt keeps the disc density uniform instead of center-clumped.
-      const r = Math.sqrt(rand()) * wp.bodyRadius;
-      scratchObj.position.set(
-        Math.cos(ang) * r,
-        (rand() - 0.5) * wp.bodyRadius * 0.28, // flattened — a belt, not a swarm
-        Math.sin(ang) * r,
-      );
-      scratchObj.rotation.set(rand() * Math.PI * 2, rand() * Math.PI * 2, rand() * Math.PI * 2);
-      scratchObj.scale.setScalar(0.3 + rand() * 1.3);
-      scratchObj.updateMatrix();
-      mesh.setMatrixAt(i, scratchObj.matrix);
+  const dentDirs: THREE.Vector3[] = [];
+  const dentDepths: number[] = [];
+  for (let d = 0; d < ASTEROID_DENT_COUNT; d++) {
+    const z = rand() * 2 - 1;
+    const a = rand() * Math.PI * 2;
+    const s = Math.sqrt(Math.max(0, 1 - z * z));
+    dentDirs.push(new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z));
+    dentDepths.push(rand() * ASTEROID_DENT_DEPTH);
+  }
+
+  const radial = new Map<string, number>();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+    let len = radial.get(key);
+    if (len === undefined) {
+      len = 0.72 + rand() * 0.55;
+      radial.set(key, len);
     }
-    mesh.instanceMatrix.needsUpdate = true;
+    // Dents are a smooth function of position, so unwelded duplicates agree.
+    for (let d = 0; d < dentDirs.length; d++) {
+      const dir = dentDirs[d];
+      const depth = dentDepths[d];
+      if (!dir || depth === undefined) continue;
+      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(dir))));
+      if (ang < ASTEROID_DENT_RADIUS) len *= 1 - depth * (1 - ang / ASTEROID_DENT_RADIUS);
+    }
+    pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+type AsteroidSpec = {
+  p: readonly [number, number, number];
+  r: readonly [number, number, number];
+  s: readonly [number, number, number];
+  c: readonly [number, number, number];
+};
+
+function Asteroids({ wp, reduced }: BodyProps) {
+  const driftRef = useRef<THREE.Group>(null);
+  const meshRefs = useRef<Array<THREE.InstancedMesh | null>>([]);
+
+  // Three craggy variants shared across all instances (index 0 is higher
+  // detail, reserved for the boulders) — the whole belt stays ≤3 rock draw
+  // calls plus one Points veil.
+  const geometries = useMemo(
+    () => ASTEROID_VARIANT_SEEDS.map((seed, i) => makeAsteroidGeometry(seed, i === 0 ? 2 : 1)),
+    [],
+  );
+  // Instance colors MULTIPLY the material color, so the base stays white and
+  // the albedo lives entirely in the per-instance palette (centred on
+  // ASTEROID_BASE_COLOR) — a tinted base would double-darken every rock.
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        flatShading: true,
+        roughness: 0.96,
+        metalness: 0.06,
+      }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      for (const g of geometries) g.dispose();
+      material.dispose();
+    },
+    [geometries, material],
+  );
+
+  // Belt layout, computed once per waypoint: seeded clump centres inside a
+  // flattened ellipsoid disc, most rocks gathered around them and the rest
+  // scattered loose — a belt with structure, not confetti.
+  const field = useMemo(() => {
+    const rand = mulberry32(wp.index * 7919 + 3);
+    const lateral = wp.bodyRadius;
+    const ySpread = lateral * ASTEROID_BELT_Y;
+
+    const centres: Array<readonly [number, number, number]> = [];
+    for (let cIdx = 0; cIdx < ASTEROID_CLUMP_COUNT; cIdx++) {
+      const ang = rand() * Math.PI * 2;
+      // sqrt keeps clump density uniform across the disc, not centre-piled.
+      const r = Math.sqrt(rand()) * lateral * 0.85;
+      centres.push([Math.cos(ang) * r, (rand() - 0.5) * ySpread * 0.7, Math.sin(ang) * r]);
+    }
+
+    const variants: AsteroidSpec[][] = ASTEROID_VARIANT_SEEDS.map(() => []);
+    for (let i = 0; i < ASTEROID_COUNT; i++) {
+      let x: number;
+      let y: number;
+      let z: number;
+      if (rand() < ASTEROID_CLUMP_CHANCE) {
+        const centre = centres[Math.floor(rand() * centres.length)] ?? [0, 0, 0];
+        // Triangular falloff (sum of two rands) piles rocks toward the core.
+        const spread = lateral * ASTEROID_CLUMP_SPREAD;
+        x = centre[0] + (rand() + rand() - 1) * spread;
+        y = centre[1] + (rand() + rand() - 1) * ySpread * 0.5;
+        z = centre[2] + (rand() + rand() - 1) * spread;
+      } else {
+        const ang = rand() * Math.PI * 2;
+        const r = Math.sqrt(rand()) * lateral;
+        x = Math.cos(ang) * r;
+        y = (rand() - 0.5) * ySpread;
+        z = Math.sin(ang) * r;
+      }
+
+      // Power law: most rocks small, a few genuine boulders.
+      const base = 0.35 + Math.pow(rand(), 2.6) * 2.3;
+
+      // Dark warm/cool greys and rusty umbers with a little lightness jitter.
+      scratchCol.set(
+        ASTEROID_PALETTE[Math.floor(rand() * ASTEROID_PALETTE.length)] ?? ASTEROID_BASE_COLOR,
+      );
+      scratchCol.offsetHSL(0, 0, (rand() - 0.5) * 0.08);
+
+      const spec: AsteroidSpec = {
+        p: [x, y, z],
+        r: [rand() * Math.PI * 2, rand() * Math.PI * 2, rand() * Math.PI * 2],
+        // ±18% per-axis jitter so nothing reads as a scaled sphere.
+        s: [
+          base * (0.82 + rand() * 0.36),
+          base * (0.82 + rand() * 0.36),
+          base * (0.82 + rand() * 0.36),
+        ],
+        c: [scratchCol.r, scratchCol.g, scratchCol.b],
+      };
+      const vi = base > ASTEROID_BOULDER_MIN ? 0 : 1 + Math.floor(rand() * 2);
+      variants[vi]?.push(spec);
+    }
+
+    // Dust veil positions, threaded through the same belt volume.
+    const dust = new Float32Array(ASTEROID_DUST_COUNT * 3);
+    for (let i = 0; i < ASTEROID_DUST_COUNT; i++) {
+      const ang = rand() * Math.PI * 2;
+      const r = Math.sqrt(rand()) * lateral * 1.05;
+      dust[i * 3] = Math.cos(ang) * r;
+      dust[i * 3 + 1] = (rand() - 0.5) * ySpread * 1.4;
+      dust[i * 3 + 2] = Math.sin(ang) * r;
+    }
+
+    return { variants, dust };
   }, [wp.index, wp.bodyRadius]);
+
+  // Matrices and colors are written once per field — a static belt only needs
+  // its collective drift, never per-instance updates.
+  useLayoutEffect(() => {
+    for (let vi = 0; vi < field.variants.length; vi++) {
+      const mesh = meshRefs.current[vi];
+      const specs = field.variants[vi];
+      if (!mesh || !specs) continue;
+      for (let i = 0; i < specs.length; i++) {
+        const spec = specs[i];
+        if (!spec) continue;
+        scratchObj.position.set(spec.p[0], spec.p[1], spec.p[2]);
+        scratchObj.rotation.set(spec.r[0], spec.r[1], spec.r[2]);
+        scratchObj.scale.set(spec.s[0], spec.s[1], spec.s[2]);
+        scratchObj.updateMatrix();
+        mesh.setMatrixAt(i, scratchObj.matrix);
+        scratchCol.setRGB(spec.c[0], spec.c[1], spec.c[2]);
+        mesh.setColorAt(i, scratchCol);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }, [field]);
 
   useFrame((_state, delta) => {
     if (reduced) return;
-    if (ref.current) ref.current.rotation.y += ASTEROID_DRIFT * delta;
+    if (driftRef.current) driftRef.current.rotation.y += ASTEROID_DRIFT * delta;
   });
 
   return (
-    // Culling is off because the instances spread far beyond the unit
-    // geometry's bounding sphere — three would cull the whole field.
-    <instancedMesh
-      ref={ref}
-      args={[undefined, undefined, ASTEROID_COUNT]}
-      position={wp.bodyPos}
-      frustumCulled={false}
-    >
-      <dodecahedronGeometry args={[1, 0]} />
-      <meshStandardMaterial color="#8d8d8d" roughness={0.95} metalness={0.05} />
-    </instancedMesh>
+    // The drift group carries rocks AND dust so the veil rides the same slow
+    // rotation. Culling is off because the instances spread far beyond each
+    // unit geometry's bounding sphere — three would cull the whole field.
+    <group ref={driftRef} position={wp.bodyPos}>
+      {geometries.map((geo, vi) => {
+        const specs = field.variants[vi];
+        if (!specs || specs.length === 0) return null;
+        return (
+          <instancedMesh
+            key={vi}
+            ref={(el) => {
+              meshRefs.current[vi] = el;
+            }}
+            args={[geo, material, specs.length]}
+            frustumCulled={false}
+          />
+        );
+      })}
+      {/* Dust veil: faint additive haze through the belt volume — the same
+          soft-disc technique as the star-cluster halos. */}
+      <points frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[field.dust, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          map={glowTexture()}
+          color={ASTEROID_DUST_COLOR}
+          size={ASTEROID_DUST_SIZE}
+          sizeAttenuation
+          transparent
+          opacity={ASTEROID_DUST_OPACITY}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
+    </group>
   );
 }
 

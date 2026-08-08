@@ -45,6 +45,11 @@ const tmpNorm = new THREE.Vector3();
 // Panel-anchoring scratch: a shadow camera that holds the BASE pose (kick
 // included, breathing excluded) so projected anchors are rock-still at rest.
 const projCam = new THREE.PerspectiveCamera(50, 1, 0.5, 2600);
+// Docked-formation scratch: camera basis + the parking spot.
+const tmpCamR = new THREE.Vector3();
+const tmpCamU = new THREE.Vector3();
+const tmpCamF = new THREE.Vector3();
+const tmpForm = new THREE.Vector3();
 const tmpView = new THREE.Vector3();
 const tmpNdc = new THREE.Vector3();
 const tmpRightW = new THREE.Vector3();
@@ -285,7 +290,9 @@ function Rig({
     let thrust = velThrust;
 
     if (rk) {
-      rk.scale.setScalar(0.62);
+      // "Make the rocket much larger" (verbatim): the craft is a main
+      // character, not an accessory. 0.62 read as a distant prop.
+      rk.scale.setScalar(0.95);
 
       // ==== THE LANDING — the finale is choreographed, not implied. Over
       // the homecoming leg the shuttle pulls ahead of the camera, flips
@@ -305,6 +312,31 @@ function Rig({
         .addScaledVector(tmpUp, -3.2)
         .addScaledVector(tmpRight, mobile ? 0 : -7.6)
         .addScaledVector(tmpTan, kick.get() * 0.35);
+      // ==== DOCKED FORMATION — the ship is a character, so it must be IN
+      // SHOT at every station. The path-cruise pose above drifts out of
+      // frame once the dock gaze swings toward the planet ("I can't even
+      // see the rocket after like 3 artifacts", verbatim), so near every
+      // dock the ship blends to a camera-relative parking spot: lower-left
+      // of frame, holding formation, nose toward the road ahead. At the
+      // hero it parks closer still — the opening frame showcases it. ====
+      const nearest = Math.round(tv);
+      const dockW = ramp > 0 ? 0 : 1 - Math.min(Math.abs(tv - nearest) / 0.35, 1);
+      if (dockW > 0) {
+        const heroW = 1 - Math.min(tv / 0.6, 1);
+        const sW = dockW * dockW * (3 - 2 * dockW);
+        tmpCamR.setFromMatrixColumn(camera.matrixWorld, 0);
+        tmpCamU.setFromMatrixColumn(camera.matrixWorld, 1);
+        tmpCamF.setFromMatrixColumn(camera.matrixWorld, 2).negate();
+        tmpForm
+          .copy(camera.position)
+          .addScaledVector(tmpCamF, 16.5 - heroW * 4.5)
+          // The hero parks nearer the frame centre — at the full -7.0 the
+          // showcase pose clipped a quarter of the ship off frame-left.
+          .addScaledVector(tmpCamR, mobile ? 0 : -(7.0 - heroW * 2.1))
+          .addScaledVector(tmpCamU, -(4.3 - heroW * 0.8));
+        tmpRocket.lerp(tmpForm, sW);
+      }
+
       if (!reduced) {
         // Idle float — barely there, sells zero-g. Fades out on approach; a
         // ship on final descent does not bob.

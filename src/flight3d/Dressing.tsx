@@ -75,7 +75,11 @@ const ROCK_SPREAD_MIN = 2.2; // cluster-local radius
 const ROCK_SPREAD_MAX = 6.5;
 const ROCK_SCALE_MIN = 0.6;
 const ROCK_SCALE_MAX = 1.9;
-const ROCK_COLOR = '#7d8187'; // greyscale per the palette contract
+const ROCK_COLOR = '#514c45'; // dark umber-grey regolith — still inside the neutral palette
+const ROCK_CRAG_SEED = 0x50c7; // shapes the one shared craggy geometry
+const ROCK_DENT_COUNT = 6; // seeded impact dents on the shared rock
+const ROCK_DENT_RADIUS = 0.5; // rad — angular reach of each dent
+const ROCK_DENT_DEPTH = 0.28; // max inward push at a dent's centre
 
 const ENV_MAP_INTENSITY = 0.55; // the single sanctioned GLB material mutation
 
@@ -132,13 +136,61 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _zAxis = new THREE.Vector3(0, 0, 1);
 const _dummy = new THREE.Object3D();
 
-// One geometry + material for every rock in every cluster — flat-shaded
-// dodecahedra read as rubble at silhouette distance.
-const ROCK_GEOMETRY = new THREE.DodecahedronGeometry(1, 0);
+/** Craggy rock geometry: an icosahedron whose every vertex is pushed in/out
+ *  along its radial direction by a seeded factor, then hit with a handful of
+ *  seeded "impact" dents. The base polyhedron ships unwelded (non-indexed)
+ *  vertices, so the radial factor is keyed by position — duplicated corners
+ *  displace together and the faceted shell never tears — and
+ *  computeVertexNormals on the non-indexed result yields per-face normals:
+ *  fractured rock, not candy. (SolarBodies' asteroid belt carries the same
+ *  approach; the two files deliberately do not import each other's internals.) */
+function makeCraggyRockGeometry(seed: number): THREE.BufferGeometry {
+  const rng = mulberry32(seed);
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+
+  const dentDirs: THREE.Vector3[] = [];
+  const dentDepths: number[] = [];
+  for (let d = 0; d < ROCK_DENT_COUNT; d++) {
+    const z = rng() * 2 - 1;
+    const a = rng() * Math.PI * 2;
+    const s = Math.sqrt(Math.max(0, 1 - z * z));
+    dentDirs.push(new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z));
+    dentDepths.push(rng() * ROCK_DENT_DEPTH);
+  }
+
+  const radial = new Map<string, number>();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+    let len = radial.get(key);
+    if (len === undefined) {
+      len = 0.72 + rng() * 0.55;
+      radial.set(key, len);
+    }
+    // Dents are a smooth function of position, so unwelded duplicates agree.
+    for (let d = 0; d < dentDirs.length; d++) {
+      const dir = dentDirs[d];
+      const depth = dentDepths[d];
+      if (!dir || depth === undefined) continue;
+      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(dir))));
+      if (ang < ROCK_DENT_RADIUS) len *= 1 - depth * (1 - ang / ROCK_DENT_RADIUS);
+    }
+    pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// One geometry + material for every rock in every cluster and the hero
+// loners — a single seeded craggy variant, flat-shaded so the facets read as
+// fractured rock at silhouette distance.
+const ROCK_GEOMETRY = makeCraggyRockGeometry(ROCK_CRAG_SEED);
 const ROCK_MATERIAL = new THREE.MeshStandardMaterial({
   color: ROCK_COLOR,
-  roughness: 0.95,
-  metalness: 0.05,
+  roughness: 0.96,
+  metalness: 0.06,
   flatShading: true,
 });
 

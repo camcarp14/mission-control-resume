@@ -127,6 +127,13 @@ try {
     cell = `${w}x${h} flight station 1`;
     await unlock(page, base);
     await page.waitForSelector('section.panel[aria-label^="Station 1:"]');
+    // The boot overlay (fixed z-30, own PDF escape link) covers the HUD pill
+    // while textures stream, and its 420ms fade window raced this probe under
+    // full-board CPU load — one flaky red on an otherwise green board. Wait
+    // for it to unmount: the assertion is about the STATION's link surface.
+    await page
+      .waitForFunction(() => !document.querySelector('div.fixed.z-30'), { timeout: 60000 })
+      .catch(() => {});
     await sleep(900); // liftoff choreography settles
     await checkLinkVisible(page, cell);
 
