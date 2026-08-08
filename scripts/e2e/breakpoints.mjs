@@ -20,7 +20,7 @@ import { mkdirSync } from 'node:fs';
 import { pw, serve, installGateMock, unlock, makeReporter } from './_lib.mjs';
 
 const PORT = 4313;
-const SETTLE = 5600; // cinematic legs run 1.7–4.8s (homecoming longest); generous margin
+const SETTLE = 7400; // cinematic legs run 2.6–6.2s (homecoming longest); generous margin
 const SHOTS = '/tmp/claude-0/-home-user-hyperscaler/8bf20831-d166-555c-a464-fdd5a13ea72e/scratchpad';
 const WIDTHS = [
   { w: 390, h: 844 },

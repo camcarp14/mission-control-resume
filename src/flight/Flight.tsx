@@ -174,9 +174,12 @@ export default function Flight({
       // "just jumps from planet to the next"). Travel now earns its name —
       // about two seconds a leg, longer for rail jumps, and the flight home
       // gets the full homecoming.
+      // Slower than the first cinematic pass: the ship is a character now,
+      // and the visitor should have time to look at it ("make the flight
+      // speed slower ... let the user appreciate the design", verbatim).
       const legs = Math.abs(c - from);
       const homecoming = c === N - 1 && legs === 1;
-      const dur = homecoming ? 4.8 : clampN(1.7 + 0.5 * (legs - 1), 1.7, 3.6);
+      const dur = homecoming ? 6.2 : clampN(2.6 + 0.6 * (legs - 1), 2.6, 4.8);
       const dir = c > from ? 1 : -1;
       // The kick envelope lives entirely INSIDE the leg: surge up through
       // the burn, bleed off during the deceleration, ZERO by the time t

@@ -80,15 +80,101 @@ const ASTEROID_DUST_COUNT = 140;
 const ASTEROID_DUST_COLOR = '#8b929c';
 const ASTEROID_DUST_SIZE = 0.5;
 const ASTEROID_DUST_OPACITY = 0.18;
-const NEBULA_PUFF_COUNT = 40;
-const NEBULA_DRIFT_X = 2.8; // per-puff orbit excursion, world units
-const NEBULA_DRIFT_Y = 2.2;
-const NEBULA_SPEED_BASE = 0.04; // per-puff orbit rate floor, rad/s
-const NEBULA_SPEED_VAR = 0.08; // + seeded variance on top of the floor
+/* ---- nebula (the FIREFIGHT backdrop) --------------------------------------
+ * Rebuilt as a layered emission nebula. The old field was 40 uniform ember
+ * sprites at one tint, which photographed as a scatter of flat discs — the
+ * user's word was "bad". The fix is three things at once: many more, much
+ * LARGER, much FAINTER billboards on soft turbulent textures (so the gas
+ * accumulates instead of tiling), a colour gradient from a hot ember heart out
+ * to cool violet at the edges, and a sprinkle of tiny hard embers that read as
+ * newly-lit stars inside the cloud.
+ *
+ * The whole field is exactly THREE draw calls: two instanced billboard layers
+ * (far/near, drifting at different rates for parallax) plus one Points cloud.
+ * Instancing is what makes 160 puffs cheaper than the old 40 sprites — sprites
+ * cost one draw each. */
+const NEBULA_TILES = 3; // texture variants packed side-by-side in one atlas
+const NEBULA_TEX_SEEDS = [0x51a3, 0x9d40, 0x2ee7] as const;
+const NEBULA_EMBER_COUNT = 220;
+const NEBULA_EMBER_SIZE = 0.9;
+// Gas knots. A purely radial scatter of soft cards averages out to a perfect
+// gaussian ball — the first build of this field photographed as exactly that,
+// a smooth red blob. Gathering most cards around a handful of seeded knots is
+// what gives the cloud filaments and hollows, the same trick the asteroid belt
+// above uses for its clumps.
+const NEBULA_KNOTS = 6;
+const NEBULA_KNOT_CHANCE = 0.7;
+const NEBULA_KNOT_SPREAD = 0.3; // × field radius
+// Master brightness. Additive cards accumulate, and this field overlaps ~40
+// deep at the core, so per-card contributions live in the low hundredths;
+// anything brighter clips the red channel and the whole gradient collapses to
+// flat vermilion (which is exactly what the first build did).
+const NEBULA_GAIN = 1.6;
+// Layer drift rates, rad/s and world units — an order of magnitude slower than
+// the old per-puff orbits. Two layers moving at different rates in opposite
+// directions is what sells depth; a single field rotating reads as a decal.
+const NEBULA_FAR_SPIN = 0.0055;
+const NEBULA_NEAR_SPIN = 0.0105;
+const NEBULA_FAR_SWAY: readonly [number, number, number, number] = [1.2, 0.017, 1.7, 0.021];
+const NEBULA_NEAR_SWAY: readonly [number, number, number, number] = [2.2, 0.026, 2.6, 0.031];
+// The gradient. Hot ember core, rust mid-field, cool dark violet at the rim.
+const NEBULA_CORE = '#ff7a3c';
+const NEBULA_MID = '#b4432a';
+const NEBULA_EDGE = '#3a2350';
+const NEBULA_EMBER_HOT = '#fff2e2';
+// In LINEAR light the palette spans a ~14:1 luminance range — the ember core
+// is vastly brighter than the violet rim — so a flat per-card opacity renders
+// the outer gas literally invisible and the field reads as one orange ball.
+// Dividing by luminance^0.75 (normalised to the core) restores the cool hue's
+// PRESENCE while still leaving the rim dimmer than the heart, which is the
+// falloff a real emission nebula has.
+const NEBULA_TINT_EXP = 0.75;
+// Where the gradient's stops land along normalised field radius. The ember
+// zone is deliberately small: give it half the field and the violet never
+// gets enough real estate to register as a colour at all.
+const NEBULA_CORE_STOP = 0.4;
 const CLUSTER_POINT_COUNT = 300;
 const RING_TILT = 0.45;
 const NAV_LIGHT_STEADY = 1.4; // emissive intensity when reduced (never pulses)
 const OUTPOST_TRACK_YAW = 0.02; // rad/s — solar panels crawling sunward
+/* ---- the satellite (BodyKind 'outpost') ----------------------------------
+ * Proportions of a real three-axis-stabilised relay bird, every dimension a
+ * FRACTION OF wp.bodyRadius so the waypoint contract still owns the station's
+ * size. Local frame: +Z is the sun-facing axis (array normal and dish boresight
+ * both look down it), +Y is the antenna deck, ±X are the array booms. */
+const SAT = {
+  busW: 0.46, // bus, across the boom axis
+  busH: 0.6, // bus, along the antenna/thruster stack
+  busD: 0.44, // bus, along the sun-facing axis
+  deckT: 0.06, // aft equipment deck slab
+  boomLen: 0.3,
+  boomR: 0.022,
+  yokeR: 0.038, // array hinge barrel
+  wingLen: 1.1, // one wing, tip to root
+  wingH: 0.44,
+  wingT: 0.012,
+  wingSegs: 3, // cell-texture repeats → three hinged panel segments per wing
+  mastR: 0.026,
+  mastH: 0.2,
+  dishR: 0.34,
+  dishDepth: 0.19, // ≈ f/D 0.33 — deep enough that the bowl shades as a bowl
+  dishRimT: 0.017, // a thin rim vanishes; this is what gives the disc an EDGE
+  subR: 0.055, // Cassegrain subreflector, held at the focus
+  whipR: 0.007,
+  whipLen: 0.72,
+  trackerW: 0.11, // star-tracker box
+  nozzleR: 0.036,
+  nozzleH: 0.075,
+  beaconR: 0.03,
+} as const;
+const SAT_MLI_SEED = 0x4d11;
+// A working relay does not tumble — it holds attitude. The old two-axis
+// accumulating spin read as a dead hulk (and swung the arrays away from the
+// sun), so it is replaced by a shallow non-accumulating wander: the deadband
+// of a live attitude-control system.
+const SAT_WANDER_AMP = 0.045; // rad
+const SAT_WANDER_RATE = 0.12; // rad/s
+const SAT_POSE: readonly [number, number, number] = [0.2, 0.6, 0.1];
 const SUN_LIGHT_COLOR = '#ffd9a0';
 const SUN_LIGHT_BASE = 600; // local-drama pointLight, decay 0, at world scale
 const SUN_LIGHT_PULSE = 0.12; // ± fraction, split across two detuned sines
@@ -181,6 +267,257 @@ function glowTexture(): THREE.CanvasTexture {
     [1, 'rgba(0,0,0,0)'],
   ]);
   return glowTexCache;
+}
+
+/* ---- spacecraft surface maps ---------------------------------------------
+ * Two canvas textures painted ONCE at module level and shared by every
+ * satellite in the scene. Both are seeded through mulberry32 so the craft is
+ * pixel-identical on every visit, and both double as their own bumpMap — the
+ * cheapest possible way to get crinkle relief and cell relief with no shipped
+ * assets. 256px is power-of-two, so mipmapping and RepeatWrapping both work. */
+
+let mliTexCache: THREE.CanvasTexture | null = null;
+/** Gold multi-layer insulation. An amber base under a few hundred seeded
+ *  facets that alternately catch light and fold into shadow, bright crease
+ *  hairlines, and aluminised tape bands with stitch ticks. This one texture is
+ *  most of what separates "spacecraft" from "painted crate". */
+function mliTexture(): THREE.CanvasTexture {
+  if (mliTexCache) return mliTexCache;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(SAT_MLI_SEED);
+
+  const base = ctx.createLinearGradient(0, 0, size, size);
+  base.addColorStop(0, '#c98f27');
+  base.addColorStop(0.4, '#ffce6b');
+  base.addColorStop(0.72, '#e2a63c');
+  base.addColorStop(1, '#a97b22');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Crinkle facets: irregular polygons, half of them catching a highlight and
+  // half dropping into a fold shadow. Vacuum-deposited foil is never flat.
+  // FEWER and LARGER than the first pass: the bus is only ~2 world units, so
+  // fine facets averaged into a muddy brown smear instead of reading as gold.
+  for (let i = 0; i < 130; i++) {
+    const cx = rand() * size;
+    const cy = rand() * size;
+    const rr = size * (0.07 + rand() * 0.16);
+    const sides = 3 + Math.floor(rand() * 3);
+    ctx.beginPath();
+    for (let s = 0; s < sides; s++) {
+      const a = (s / sides) * Math.PI * 2 + rand() * 0.8;
+      const d = rr * (0.4 + rand() * 0.8);
+      const px = cx + Math.cos(a) * d;
+      const py = cy + Math.sin(a) * d;
+      if (s === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    // Highlights outnumber shadows 2:1 — foil scatters far more light than it
+    // swallows, and an even split reads as dirt rather than metal.
+    ctx.fillStyle =
+      rand() > 0.34
+        ? `rgba(255,241,196,${0.1 + rand() * 0.26})`
+        : `rgba(96,58,6,${0.06 + rand() * 0.16})`;
+    ctx.fill();
+  }
+
+  // Creases: the hairlines where the blanket actually folds.
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 120; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const a = rand() * Math.PI * 2;
+    const len = size * (0.08 + rand() * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    ctx.strokeStyle = rand() > 0.4 ? 'rgba(255,250,226,0.44)' : 'rgba(84,52,6,0.32)';
+    ctx.lineWidth = 0.8 + rand() * 2.2;
+    ctx.stroke();
+  }
+
+  // Aluminised tape bands pinning the blanket down — bright silver, so the
+  // bus gets horizontal structure instead of reading as a plain slab.
+  for (let b = 0; b < 3; b++) {
+    const y = size * (0.16 + b * 0.31 + rand() * 0.05);
+    const h = size * 0.045;
+    ctx.fillStyle = 'rgba(238,238,230,0.5)';
+    ctx.fillRect(0, y, size, h);
+    ctx.fillStyle = 'rgba(52,36,8,0.42)';
+    ctx.fillRect(0, y + h, size, 2);
+    for (let s = 0; s < 26; s++) {
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillRect((s / 26) * size + 2, y + h * 0.35, 3, h * 0.3);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  mliTexCache = tex;
+  return tex;
+}
+
+let cellTexCache: THREE.CanvasTexture | null = null;
+/** Solar array face: dark blue-violet PV cells on a thin silver grid, two
+ *  busbar ribbons per cell, and a hard dark seam down each tile edge. The
+ *  wings repeat this SAT.wingSegs times along their length, so the seams read
+ *  as the hinge lines between deployed panel segments. */
+function solarCellTexture(): THREE.CanvasTexture {
+  if (cellTexCache) return cellTexCache;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+
+  ctx.fillStyle = '#12162e';
+  ctx.fillRect(0, 0, size, size);
+
+  const cols = 6;
+  const rows = 4;
+  const cw = size / cols;
+  const ch = size / rows;
+  const pad = 2.5;
+  for (let cx = 0; cx < cols; cx++) {
+    for (let cy = 0; cy < rows; cy++) {
+      const x = cx * cw + pad;
+      const y = cy * ch + pad;
+      const w = cw - pad * 2;
+      const h = ch - pad * 2;
+      // Diagonal gradient per cell: silicon wafers are directional, so the
+      // grid glints unevenly as the array tracks instead of reading as paint.
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, '#3b4189');
+      g.addColorStop(0.45, '#242a63');
+      g.addColorStop(1, '#161b42');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(196,206,222,0.45)';
+      ctx.fillRect(x + w * 0.3, y, 1.2, h);
+      ctx.fillRect(x + w * 0.7, y, 1.2, h);
+    }
+  }
+
+  // The interconnect grid between cells.
+  ctx.strokeStyle = 'rgba(172,184,202,0.4)';
+  ctx.lineWidth = 1;
+  for (let cx = 0; cx <= cols; cx++) {
+    ctx.beginPath();
+    ctx.moveTo(cx * cw, 0);
+    ctx.lineTo(cx * cw, size);
+    ctx.stroke();
+  }
+  for (let cy = 0; cy <= rows; cy++) {
+    ctx.beginPath();
+    ctx.moveTo(0, cy * ch);
+    ctx.lineTo(size, cy * ch);
+    ctx.stroke();
+  }
+
+  // Panel seam: a dark gap with a bright structural edge on each side, so a
+  // repeat lands hinge-to-hinge rather than smearing the grid.
+  ctx.fillStyle = 'rgba(8,10,22,0.92)';
+  ctx.fillRect(0, 0, 3.5, size);
+  ctx.fillRect(size - 3.5, 0, 3.5, size);
+  ctx.fillStyle = 'rgba(158,168,186,0.4)';
+  ctx.fillRect(3.5, 0, 1.5, size);
+  ctx.fillRect(size - 5, 0, 1.5, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(SAT.wingSegs, 1); // the wings are this map's only consumer
+  tex.anisotropy = 8;
+  cellTexCache = tex;
+  return tex;
+}
+
+let nebulaAtlasCache: THREE.CanvasTexture | null = null;
+/** Three soft turbulent gas blobs packed side by side in one 384x128 atlas —
+ *  one texture, so the whole billboard layer stays a single draw call.
+ *
+ *  Each tile is an fbm SILHOUETTE built out of stacked seeded radial gradients
+ *  (4 octaves, 3→26 lumps at descending radii) rather than per-pixel noise:
+ *  visually equivalent, and ~50k per-pixel mulberry32 calls cheaper on load.
+ *  A `destination-in` radial mask then drives every tile to zero alpha well
+ *  inside its border — that is what kills the hard-edged disc look, and it
+ *  also means atlas bleed between tiles is a non-issue. Alpha only; all colour
+ *  comes from the per-instance tint. */
+function nebulaAtlas(): THREE.CanvasTexture {
+  if (nebulaAtlasCache) return nebulaAtlasCache;
+  const tile = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = tile * NEBULA_TILES;
+  canvas.height = tile;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const octaves = [
+    { n: 3, r: 0.42, a: 0.3, off: 0.22 },
+    { n: 8, r: 0.24, a: 0.26, off: 0.3 },
+    { n: 16, r: 0.13, a: 0.2, off: 0.34 },
+    { n: 30, r: 0.07, a: 0.15, off: 0.36 },
+  ] as const;
+
+  for (let v = 0; v < NEBULA_TILES; v++) {
+    const ox = v * tile;
+    const rand = mulberry32(NEBULA_TEX_SEEDS[v] ?? 0x51a3);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, 0, tile, tile);
+    ctx.clip();
+    for (const oct of octaves) {
+      for (let i = 0; i < oct.n; i++) {
+        const ang = rand() * Math.PI * 2;
+        // Finer octaves reach further out, so the blob gains ragged edges
+        // instead of settling into a centre-weighted gaussian.
+        const rad = Math.sqrt(rand()) * tile * oct.off;
+        const cx = ox + tile / 2 + Math.cos(ang) * rad;
+        const cy = tile / 2 + Math.sin(ang) * rad;
+        const rr = tile * oct.r * (0.6 + rand() * 0.8);
+        const a = oct.a * (0.55 + rand() * 0.7);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(0.42, `rgba(255,255,255,${a * 0.42})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(ox, 0, tile, tile);
+      }
+    }
+    // Global falloff — clipped, so it only touches this tile.
+    ctx.globalCompositeOperation = 'destination-in';
+    const mask = ctx.createRadialGradient(ox + tile / 2, tile / 2, 0, ox + tile / 2, tile / 2, tile * 0.5);
+    mask.addColorStop(0, 'rgba(255,255,255,1)');
+    mask.addColorStop(0.34, 'rgba(255,255,255,0.96)');
+    mask.addColorStop(0.66, 'rgba(255,255,255,0.5)');
+    mask.addColorStop(0.87, 'rgba(255,255,255,0.1)');
+    mask.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = mask;
+    ctx.fillRect(ox, 0, tile, tile);
+    ctx.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  // Alpha channel only — no colour is sampled, so no colour management.
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  // No mip chain. Three tiles share one 384x128 image, so the coarse mips
+  // average them into each other — a card seen small (the field is visible
+  // from neighbouring waypoints) would sample a flat blend of all three and
+  // render as a uniform rectangle. The content is soft and low-contrast, so
+  // dropping mips costs nothing in aliasing.
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  nebulaAtlasCache = tex;
+  return tex;
 }
 
 /* ==== ATMOSPHERE — the fresnel limb glow that makes a sphere read as a
@@ -820,90 +1157,441 @@ function Asteroids({ wp, reduced }: BodyProps) {
 
 /* ==== NEBULA — the FIREFIGHT backdrop ==== */
 
-type PuffSpec = {
-  x: number;
-  y: number;
-  z: number;
-  scale: number;
-  opacity: number;
-  phase: number;
-  speed: number;
+/* ---- instanced billboards -------------------------------------------------
+ * A sprite costs one draw call each, which is why the old 40-puff field could
+ * never afford to get bigger. These are instanced quads billboarded in the
+ * VERTEX SHADER (the quad corner is offset in view space, so the card always
+ * squares up to the camera no matter what the drift group has done to its
+ * centre), which puts a whole layer — scale, roll, tint and texture variant
+ * all varying per instance — into ONE draw call.
+ *
+ * Under AdditiveBlending (SRC_ALPHA, ONE) the destination gains rgb * a, so
+ * per-instance opacity is folded straight into the instance colour and costs
+ * no extra attribute. Additive is also order-independent by construction:
+ * nothing here needs sorting, which is what lets 160 overlapping soft cards
+ * composite cleanly with depthWrite off. */
+
+const GAS_VERT = `
+attribute vec3 iPos;
+attribute vec3 iColor;
+attribute vec3 iParam; // x = world scale, y = roll (rad), z = atlas tile index
+varying vec2 vUv;
+varying vec3 vColor;
+void main() {
+  vColor = iColor;
+  // Atlas lookup, inset a hair so neighbouring tiles can never bleed at low mips.
+  vUv = vec2((iParam.z + 0.006 + uv.x * 0.988) * ${(1 / NEBULA_TILES).toFixed(8)}, uv.y);
+  vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+  float c = cos(iParam.y);
+  float s = sin(iParam.y);
+  mv.xy += vec2(position.x * c - position.y * s, position.x * s + position.y * c) * iParam.x;
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const GAS_FRAG = `
+uniform sampler2D uMap;
+varying vec2 vUv;
+varying vec3 vColor;
+void main() {
+  float a = texture2D(uMap, vUv).a;
+  if (a < 0.003) discard;
+  gl_FragColor = vec4(vColor * a, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+// One unit quad, shared as source data by both layers. Each geometry wraps it
+// in its own BufferAttribute so disposing one layer never frees the other's
+// GPU buffers.
+const QUAD_POS = new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]);
+const QUAD_UV = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]);
+const QUAD_INDEX = [0, 1, 2, 0, 2, 3];
+
+const NEB_CORE_C = new THREE.Color(NEBULA_CORE);
+const NEB_MID_C = new THREE.Color(NEBULA_MID);
+const NEB_EDGE_C = new THREE.Color(NEBULA_EDGE);
+const NEB_HOT_C = new THREE.Color(NEBULA_EMBER_HOT);
+
+const NEB_CORE_LUM = 0.2126 * NEB_CORE_C.r + 0.7152 * NEB_CORE_C.g + 0.0722 * NEB_CORE_C.b;
+
+/** The field's colour law: a pale-hot heart bleaching into the ember core,
+ *  through rust, out to a cool violet rim — keyed on normalised distance from
+ *  the field centre. The innermost bleach matters: pure #ff7a3c accumulating
+ *  additively saturates the red channel long before green and blue catch up,
+ *  so without a whiter heart the core photographs as flat primary red. */
+function nebulaTint(t: number, out: THREE.Color): THREE.Color {
+  if (t < NEBULA_CORE_STOP) {
+    out.copy(NEB_CORE_C).lerp(NEB_MID_C, t / NEBULA_CORE_STOP);
+    out.lerp(NEB_HOT_C, Math.max(0, 1 - t / (NEBULA_CORE_STOP * 0.7)) * 0.38);
+  } else {
+    out.copy(NEB_MID_C).lerp(NEB_EDGE_C, (t - NEBULA_CORE_STOP) / (1 - NEBULA_CORE_STOP));
+  }
+  return out;
+}
+
+/** Per-card brightness for a tint, normalised so a dark hue is as PRESENT as
+ *  a bright one without fully flattening the field's core-to-rim falloff. */
+function nebulaWeight(c: THREE.Color): number {
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  return Math.pow(NEB_CORE_LUM / Math.max(lum, 0.004), NEBULA_TINT_EXP);
+}
+
+type GasLayerSpec = {
+  /** Mixed into the waypoint seed so the two layers never share a scatter. */
+  seed: number;
+  count: number;
+  /** Field extent multipliers on wp.bodyRadius. Combined they preserve the
+   *  original x ±R, y ±0.8R, z ±0.6R envelope. */
+  xk: number;
+  yk: number;
+  zMin: number;
+  zMax: number;
+  /** Billboard scale range, × wp.bodyRadius. The power law between them is
+   *  steep on purpose: a handful of vast faint envelopes carrying the cloud's
+   *  outline, and many mid-sized cards carrying its structure. */
+  scaleMin: number;
+  scaleSpan: number;
+  scalePow: number;
+  /** Per-card peak contribution before the tint weighting. Deliberately tiny —
+   *  see NEBULA_GAIN. */
+  opMin: number;
+  opMax: number;
 };
 
-function Nebula({ wp, reduced }: BodyProps) {
-  const groupRef = useRef<THREE.Group>(null);
+// FAR: the body and outline of the cloud, deep and faint.
+const NEBULA_FAR: GasLayerSpec = {
+  seed: 0x1013,
+  count: 100,
+  xk: 1.05,
+  yk: 0.84,
+  zMin: -0.62,
+  zMax: 0.02,
+  scaleMin: 0.28,
+  scaleSpan: 1.35,
+  scalePow: 2.2,
+  opMin: 0.006,
+  opMax: 0.022,
+};
+// NEAR: smaller, hotter, closer to the lens — where the eye reads detail.
+const NEBULA_NEAR: GasLayerSpec = {
+  seed: 0x1b77,
+  count: 115,
+  xk: 0.86,
+  yk: 0.64,
+  zMin: -0.04,
+  zMax: 0.58,
+  scaleMin: 0.14,
+  scaleSpan: 0.62,
+  scalePow: 2,
+  opMin: 0.01,
+  opMax: 0.034,
+};
 
-  const puffs = useMemo<PuffSpec[]>(() => {
-    const rand = mulberry32(wp.index * 1013 + 11);
-    const out: PuffSpec[] = [];
-    for (let i = 0; i < NEBULA_PUFF_COUNT; i++) {
-      out.push({
-        x: (rand() - 0.5) * 2 * wp.bodyRadius,
-        y: (rand() - 0.5) * 2 * wp.bodyRadius * 0.8,
-        z: (rand() - 0.5) * 2 * wp.bodyRadius * 0.6, // shallow — reads as a wall of smoke
-        scale: 6 + rand() * 22,
-        // Low opacities on additive blending smoulder instead of glowing neon.
-        opacity: 0.05 + rand() * 0.17,
-        phase: rand() * Math.PI * 2,
-        speed: NEBULA_SPEED_BASE + rand() * NEBULA_SPEED_VAR,
-      });
+function makeGasGeometry(spec: GasLayerSpec, wpIndex: number, radius: number) {
+  const rand = mulberry32((wpIndex * 1013 + spec.seed) >>> 0);
+  const n = spec.count;
+  const iPos = new Float32Array(n * 3);
+  const iColor = new Float32Array(n * 3);
+  const iParam = new Float32Array(n * 3);
+
+  // Knot centres, drawn first so the whole layer gathers around the same
+  // structure regardless of how many cards land loose.
+  const knots: Array<readonly [number, number]> = [];
+  for (let k = 0; k < NEBULA_KNOTS; k++) {
+    const ang = rand() * Math.PI * 2;
+    // sqrt keeps knots spread evenly across the disc instead of centre-piled.
+    const rr = Math.sqrt(rand()) * 0.72;
+    knots.push([Math.cos(ang) * rr * spec.xk, Math.sin(ang) * rr * spec.yk]);
+  }
+
+  for (let i = 0; i < n; i++) {
+    // Normalised (unit-ellipse) coordinates, so the colour law can key off a
+    // single distance whatever the layer's aspect is.
+    let ux: number;
+    let uy: number;
+    if (rand() < NEBULA_KNOT_CHANCE) {
+      const knot = knots[Math.floor(rand() * knots.length)] ?? [0, 0];
+      // Triangular falloff (sum of two rands) piles gas toward the knot core.
+      ux = knot[0] + (rand() + rand() - 1) * NEBULA_KNOT_SPREAD * spec.xk;
+      uy = knot[1] + (rand() + rand() - 1) * NEBULA_KNOT_SPREAD * spec.yk;
+    } else {
+      const ang = rand() * Math.PI * 2;
+      const rr = Math.pow(rand(), 0.72);
+      ux = Math.cos(ang) * rr * spec.xk;
+      uy = Math.sin(ang) * rr * spec.yk;
     }
-    return out;
-  }, [wp.index, wp.bodyRadius]);
+    iPos[i * 3] = ux * radius;
+    iPos[i * 3 + 1] = uy * radius;
+    iPos[i * 3 + 2] = radius * (spec.zMin + rand() * (spec.zMax - spec.zMin));
+
+    const t = Math.min(
+      1,
+      Math.max(0, Math.hypot(ux / spec.xk, uy / spec.yk) + (rand() - 0.5) * 0.18),
+    );
+    nebulaTint(t, scratchCol);
+    const op =
+      (spec.opMin + rand() * (spec.opMax - spec.opMin)) *
+      nebulaWeight(scratchCol) *
+      NEBULA_GAIN;
+    iColor[i * 3] = scratchCol.r * op;
+    iColor[i * 3 + 1] = scratchCol.g * op;
+    iColor[i * 3 + 2] = scratchCol.b * op;
+
+    // Outer gas is diffuse and vast; knotted core gas is smaller and denser.
+    iParam[i * 3] =
+      radius *
+      (spec.scaleMin + Math.pow(rand(), spec.scalePow) * spec.scaleSpan) *
+      (0.8 + t * 0.5);
+    iParam[i * 3 + 1] = rand() * Math.PI * 2;
+    iParam[i * 3 + 2] = Math.floor(rand() * NEBULA_TILES);
+  }
+
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(QUAD_POS, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(QUAD_UV, 2));
+  geo.setIndex(QUAD_INDEX);
+  geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(iPos, 3));
+  geo.setAttribute('iColor', new THREE.InstancedBufferAttribute(iColor, 3));
+  geo.setAttribute('iParam', new THREE.InstancedBufferAttribute(iParam, 3));
+  geo.instanceCount = n;
+  return geo;
+}
+
+/** Tiny hard embers threaded through the gas — newly-lit stars in the cloud.
+ *  Piled hard toward the core (pow 1.8) and bleached toward white there, so
+ *  the heart of the nebula has something SHARP in it; without these the field
+ *  is all soft falloff and reads as fog rather than fire. */
+function makeEmbers(wpIndex: number, radius: number) {
+  const rand = mulberry32((wpIndex * 1013 + 0x2c5f) >>> 0);
+  const positions = new Float32Array(NEBULA_EMBER_COUNT * 3);
+  const colors = new Float32Array(NEBULA_EMBER_COUNT * 3);
+  for (let i = 0; i < NEBULA_EMBER_COUNT; i++) {
+    const ang = rand() * Math.PI * 2;
+    const rr = Math.pow(rand(), 1.8);
+    positions[i * 3] = Math.cos(ang) * rr * radius * 0.95;
+    positions[i * 3 + 1] = Math.sin(ang) * rr * radius * 0.75;
+    positions[i * 3 + 2] = (rand() - 0.5) * radius * 0.9;
+    nebulaTint(Math.min(1, rr * 1.15), scratchCol);
+    // Hot white core, cooling with distance; the outer embers also dim, so
+    // the eye reads a light source rather than an even sprinkle.
+    scratchCol.lerp(NEB_HOT_C, Math.max(0, 1 - rr * 1.6) * 0.85);
+    const b = 0.35 + (1 - rr) * 0.65;
+    colors[i * 3] = scratchCol.r * b;
+    colors[i * 3 + 1] = scratchCol.g * b;
+    colors[i * 3 + 2] = scratchCol.b * b;
+  }
+  return { positions, colors };
+}
+
+function Nebula({ wp, reduced }: BodyProps) {
+  const farRef = useRef<THREE.Group>(null);
+  const nearRef = useRef<THREE.Group>(null);
+
+  const farGeo = useMemo(
+    () => makeGasGeometry(NEBULA_FAR, wp.index, wp.bodyRadius),
+    [wp.index, wp.bodyRadius],
+  );
+  const nearGeo = useMemo(
+    () => makeGasGeometry(NEBULA_NEAR, wp.index, wp.bodyRadius),
+    [wp.index, wp.bodyRadius],
+  );
+  const embers = useMemo(() => makeEmbers(wp.index, wp.bodyRadius), [wp.index, wp.bodyRadius]);
+
+  // One material for both layers — the tint lives entirely in the instance
+  // data, so the two draws differ only by their vertex buffers.
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: { uMap: { value: nebulaAtlas() } },
+        vertexShader: GAS_VERT,
+        fragmentShader: GAS_FRAG,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    [],
+  );
+
+  // R3F only auto-disposes JSX-created objects; these are memoized, so they
+  // clean up after themselves. The atlas is module-cached and shared — never
+  // disposed here.
+  useEffect(
+    () => () => {
+      farGeo.dispose();
+      nearGeo.dispose();
+      material.dispose();
+    },
+    [farGeo, nearGeo, material],
+  );
 
   useFrame((state) => {
     if (reduced) return;
-    const g = groupRef.current;
-    if (!g) return;
     const t = state.clock.elapsedTime;
-    for (let i = 0; i < g.children.length; i++) {
-      const child = g.children[i];
-      const p = puffs[i];
-      if (!child || !p) continue;
-      // Each puff orbits its own seed point — smoke shifting, not a field
-      // spinning. Excursion and rate are ~2x the first pass so the backdrop
-      // visibly smoulders instead of freezing on camera (live-site finding).
-      child.position.x = p.x + Math.cos(t * p.speed + p.phase) * NEBULA_DRIFT_X;
-      child.position.y = p.y + Math.sin(t * p.speed * 0.8 + p.phase) * NEBULA_DRIFT_Y;
+    // Parallax: two layers churning in opposite directions at different rates.
+    // Very slow — the gas should be perceptibly alive over ~30s, never busy.
+    const far = farRef.current;
+    if (far) {
+      far.rotation.z = t * NEBULA_FAR_SPIN;
+      far.position.x = Math.cos(t * NEBULA_FAR_SWAY[1]) * NEBULA_FAR_SWAY[0];
+      far.position.y = Math.sin(t * NEBULA_FAR_SWAY[3]) * NEBULA_FAR_SWAY[2];
+    }
+    const near = nearRef.current;
+    if (near) {
+      near.rotation.z = -t * NEBULA_NEAR_SPIN;
+      near.position.x = Math.cos(t * NEBULA_NEAR_SWAY[1] + 0.6) * NEBULA_NEAR_SWAY[0];
+      near.position.y = Math.sin(t * NEBULA_NEAR_SWAY[3] + 1.7) * NEBULA_NEAR_SWAY[2];
     }
   });
 
   return (
-    <group ref={groupRef} position={wp.bodyPos}>
-      {puffs.map((p, i) => (
-        <sprite key={i} position={[p.x, p.y, p.z]} scale={[p.scale, p.scale, 1]}>
-          <spriteMaterial
-            map={emberTexture()}
+    <group position={wp.bodyPos}>
+      {/* Draw 1 — the deep body of the cloud. */}
+      <group ref={farRef}>
+        <mesh geometry={farGeo} material={material} frustumCulled={false} />
+      </group>
+      {/* Draws 2 and 3 — near gas plus the embers riding with it. Culling is
+          off on both: the instances spread far beyond the unit quad's bounds,
+          so three would cull the whole layer the moment its origin left frame. */}
+      <group ref={nearRef}>
+        <mesh geometry={nearGeo} material={material} frustumCulled={false} />
+        <points frustumCulled={false}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[embers.positions, 3]} />
+            <bufferAttribute attach="attributes-color" args={[embers.colors, 3]} />
+          </bufferGeometry>
+          <pointsMaterial
+            map={glowTexture()}
+            size={NEBULA_EMBER_SIZE}
+            sizeAttenuation
+            vertexColors
             transparent
-            opacity={p.opacity}
+            opacity={0.95}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
           />
-        </sprite>
-      ))}
+        </points>
+      </group>
     </group>
   );
 }
 
-/* ==== OUTPOST — procedural relay station ==== */
+/* ==== OUTPOST — the satellite ==============================================
+ *
+ * A believable three-axis-stabilised relay bird, built entirely from
+ * primitives + two canvas maps: a foil-wrapped MLI bus, two deployed
+ * three-segment solar arrays on booms, a white parabolic high-gain dish on a
+ * two-axis gimbal aimed down the sun-facing axis, whip antennas, a star
+ * tracker, thruster nozzles and a nav beacon.
+ *
+ * ~26 draws against 6 shared materials and one memoized lathe. The waypoint
+ * contract is untouched: position is wp.bodyPos and EVERY dimension is a
+ * fraction of wp.bodyRadius, so src/engine/space.ts still owns the size.
+ * ======================================================================== */
+
+/** The dish: a true paraboloid of revolution (y = depth·(x/R)²), not a cone.
+ *  A cone has a straight profile and photographs as a lampshade; the curved
+ *  profile is what catches the key light as a bright crescent across the
+ *  bowl, which is the single tell that says "antenna". */
+function makeDishGeometry(radius: number, depth: number): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [];
+  const steps = 14;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    // Never exactly zero: a degenerate lathe pole yields NaN normals.
+    pts.push(new THREE.Vector2(Math.max(radius * t, radius * 1e-3), depth * t * t));
+  }
+  return new THREE.LatheGeometry(pts, 44);
+}
 
 function Outpost({ wp, reduced }: BodyProps) {
   const r = wp.bodyRadius;
   const trackRef = useRef<THREE.Group>(null);
-  const groupRef = useRef<THREE.Group>(null);
+  const attitudeRef = useRef<THREE.Group>(null);
   const lampRef = useRef<THREE.MeshStandardMaterial>(null);
 
+  const mli = mliTexture();
+  const cells = solarCellTexture();
+
+  const dishGeo = useMemo(() => makeDishGeometry(r * SAT.dishR, r * SAT.dishDepth), [r]);
+
+  /* Six materials, each shared by every mesh that wears it. Every one carries
+   * a small emissive so no face of the craft ever goes to pure void-black on
+   * the shadow side — the scene's key light is a single directional and the
+   * env map is a night HDRI, so an unlit metal reads as a hole. */
+  const mats = useMemo(() => {
+    const foil = new THREE.MeshStandardMaterial({
+      map: mli,
+      bumpMap: mli,
+      bumpScale: 0.35,
+      emissiveMap: mli,
+      emissive: '#ffd489',
+      emissiveIntensity: 0.13,
+      metalness: 0.72,
+      roughness: 0.38,
+      envMapIntensity: 1.15,
+    });
+    const cellFace = new THREE.MeshStandardMaterial({
+      map: cells,
+      emissiveMap: cells,
+      emissive: '#3d4a96',
+      emissiveIntensity: 0.16,
+      // Cover glass is glossy: low roughness is what makes the array flash as
+      // it tracks, which is most of what says "solar panel" at distance.
+      metalness: 0.34,
+      roughness: 0.22,
+      envMapIntensity: 0.95,
+    });
+    const alloy = new THREE.MeshStandardMaterial({
+      color: '#b9bec6',
+      emissive: '#43494f',
+      emissiveIntensity: 0.2,
+      metalness: 0.85,
+      roughness: 0.42,
+      envMapIntensity: 1,
+    });
+    const paint = new THREE.MeshStandardMaterial({
+      color: '#eef1f5',
+      emissive: '#93a4b6',
+      emissiveIntensity: 0.07,
+      metalness: 0.05,
+      roughness: 0.55,
+      side: THREE.DoubleSide, // the dish is a shell: both faces must light
+      envMapIntensity: 0.9,
+    });
+    const dark = new THREE.MeshStandardMaterial({
+      color: '#2b3037',
+      emissive: '#1a1e24',
+      emissiveIntensity: 0.5,
+      metalness: 0.5,
+      roughness: 0.65,
+      envMapIntensity: 0.8,
+    });
+    return { foil, cellFace, alloy, paint, dark };
+  }, [mli, cells]);
+
+  useEffect(
+    () => () => {
+      dishGeo.dispose();
+      for (const m of Object.values(mats)) m.dispose();
+    },
+    [dishGeo, mats],
+  );
+
   useFrame((state, delta) => {
+    const t = state.clock.elapsedTime;
     if (!reduced) {
-      // Whole-station yaw: the solar panels slowly tracking the sun — a
-      // deliberate, mechanical motion layered under the drift tumble.
+      // The existing contract: a slow whole-station yaw, the arrays crawling
+      // sunward. This is the only accumulating rotation on the craft.
       const track = trackRef.current;
       if (track) track.rotation.y += OUTPOST_TRACK_YAW * delta;
-      const g = groupRef.current;
+      // Attitude wander: a shallow, NON-accumulating sway around the base
+      // pose. A live relay holds its arrays on the sun and its dish on the
+      // link — it does not tumble — so this is the deadband of a working
+      // control system, not a drift.
+      const g = attitudeRef.current;
       if (g) {
-        // Two-axis tumble reads as an object adrift, not a turntable.
-        g.rotation.y += 0.03 * delta;
-        g.rotation.x += 0.011 * delta;
+        g.rotation.x = SAT_POSE[0] + Math.sin(t * SAT_WANDER_RATE) * SAT_WANDER_AMP;
+        g.rotation.z = SAT_POSE[2] + Math.sin(t * SAT_WANDER_RATE * 0.63 + 2.1) * SAT_WANDER_AMP;
       }
     }
     const lamp = lampRef.current;
@@ -911,58 +1599,149 @@ function Outpost({ wp, reduced }: BodyProps) {
       // Under reduced motion the nav light holds steady — a pulse is motion.
       lamp.emissiveIntensity = reduced
         ? NAV_LIGHT_STEADY
-        : 0.5 + Math.max(0, Math.sin(state.clock.elapsedTime * 2.2)) ** 6 * 2.4;
+        : 0.5 + Math.max(0, Math.sin(t * 2.2)) ** 6 * 2.4;
     }
   });
 
+  const wingX = r * (SAT.busW / 2 + SAT.boomLen + SAT.wingLen / 2);
+  const hingeX = r * (SAT.busW / 2 + SAT.boomLen);
+  const boomX = r * (SAT.busW / 2 + SAT.boomLen / 2);
+  const deckY = -r * (SAT.busH / 2 + SAT.deckT / 2);
+  const mastY = r * (SAT.busH / 2 + SAT.mastH / 2);
+  const gimbalY = r * (SAT.busH / 2 + SAT.mastH);
+
   return (
     <group ref={trackRef} position={wp.bodyPos}>
-      <group ref={groupRef} rotation={[0.2, 0.6, 0.1]}>
-      {/* Central hull */}
-      <mesh>
-        <cylinderGeometry args={[r * 0.16, r * 0.16, r * 0.95, 20]} />
-        <meshStandardMaterial color="#9aa0a8" metalness={0.55} roughness={0.4} />
-      </mesh>
-      {/* Solar-panel wings; the glossy face against rough spars fakes a grid
-          without a texture. */}
-      {[1, -1].map((side) => (
-        <group key={side} position={[side * r * 0.72, 0, 0]}>
-          <mesh>
-            <boxGeometry args={[r * 1.05, r * 0.02, r * 0.42]} />
-            <meshStandardMaterial color="#39424f" metalness={0.8} roughness={0.22} />
+      <group ref={attitudeRef} rotation={[SAT_POSE[0], SAT_POSE[1], SAT_POSE[2]]}>
+        {/* --- foil-wrapped bus. The MLI map wraps every face and doubles as
+            its own bump, so the crinkle catches the key light. --- */}
+        <mesh material={mats.foil}>
+          <boxGeometry args={[r * SAT.busW, r * SAT.busH, r * SAT.busD]} />
+        </mesh>
+        {/* Aft equipment deck: a darker radiator slab proud of the blanket,
+            which is what breaks the bus out of reading as a plain box. */}
+        <mesh material={mats.dark} position={[0, deckY, 0]}>
+          <boxGeometry args={[r * SAT.busW * 1.06, r * SAT.deckT, r * SAT.busD * 1.06]} />
+        </mesh>
+
+        {/* --- deployed solar arrays --- */}
+        {[1, -1].map((side) => (
+          <group key={side}>
+            {/* Boom out to the array, plus the hinge barrel it pivots on. */}
+            <mesh material={mats.alloy} position={[side * boomX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[r * SAT.boomR, r * SAT.boomR, r * SAT.boomLen, 10]} />
+            </mesh>
+            <mesh material={mats.alloy} position={[side * hingeX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[r * SAT.yokeR, r * SAT.yokeR, r * SAT.yokeR * 1.6, 12]} />
+            </mesh>
+            {/* The wing itself: a thin slab whose face carries the cell grid
+                repeated SAT.wingSegs times, so the seams read as the hinge
+                lines of three deployed panel segments. Normal is +Z — the
+                sun-facing axis the dish also looks down. */}
+            <mesh material={mats.cellFace} position={[side * wingX, 0, 0]}>
+              <boxGeometry args={[r * SAT.wingLen, r * SAT.wingH, r * SAT.wingT]} />
+            </mesh>
+            {/* Spine along the back of the wing — the structural spar. */}
+            <mesh material={mats.alloy} position={[side * wingX, 0, -r * SAT.wingT * 1.4]}>
+              <boxGeometry args={[r * SAT.wingLen * 1.01, r * SAT.wingH * 0.06, r * SAT.wingT * 1.6]} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* --- high-gain dish on a two-axis gimbal ---
+            The gimbal ring and trunnion make the aim read as CHOSEN rather
+            than moulded on. Boresight is +Z, the same axis the arrays face,
+            so it stays pointed sunward as the tracking yaw carries it round. */}
+        <mesh material={mats.foil} position={[0, mastY, 0]}>
+          <cylinderGeometry args={[r * SAT.mastR, r * SAT.mastR * 1.3, r * SAT.mastH, 12]} />
+        </mesh>
+        <mesh material={mats.dark} position={[0, gimbalY, 0]}>
+          <cylinderGeometry args={[r * SAT.mastR * 1.9, r * SAT.mastR * 1.9, r * SAT.mastR * 1.1, 14]} />
+        </mesh>
+        <group position={[0, gimbalY + r * SAT.mastR * 1.6, 0]}>
+          <mesh material={mats.alloy} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[r * SAT.mastR * 0.8, r * SAT.mastR * 0.8, r * SAT.dishR * 0.5, 10]} />
           </mesh>
-          <mesh position={[0, r * 0.012, 0]}>
-            <boxGeometry args={[r * 1.05, r * 0.006, r * 0.03]} />
-            <meshStandardMaterial color="#2b323c" metalness={0.3} roughness={0.9} />
+          {/* rotation.x = π/2 turns the lathe's +Y opening onto +Z; the small
+              extra tilt/yaw keeps the bowl three-dimensional on camera
+              instead of presenting as a flat white circle. */}
+          <group rotation={[Math.PI / 2 - 0.52, 0.34, 0]}>
+            <mesh geometry={dishGeo} material={mats.paint} />
+            <mesh material={mats.alloy} position={[0, r * SAT.dishDepth, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[r * SAT.dishR, r * SAT.dishRimT, 6, 40]} />
+            </mesh>
+            {/* Cassegrain subreflector on a central strut, held at the focus. */}
+            <mesh material={mats.alloy} position={[0, r * SAT.dishR * 0.36, 0]}>
+              <cylinderGeometry args={[r * 0.009, r * 0.009, r * SAT.dishR * 0.72, 6]} />
+            </mesh>
+            <mesh material={mats.paint} position={[0, r * SAT.dishR * 0.72, 0]} rotation={[Math.PI, 0, 0]}>
+              <coneGeometry args={[r * SAT.subR, r * SAT.subR * 0.7, 16, 1, true]} />
+            </mesh>
+          </group>
+        </group>
+
+        {/* --- whip antennas: two thin omnis, splayed so they never read as
+            a symmetric pair of pins. --- */}
+        {[
+          [0.42, 0.28],
+          [-0.55, -0.16],
+        ].map(([tilt, yaw], i) => (
+          <group key={i} rotation={[yaw ?? 0, 0, tilt ?? 0]}>
+            <mesh material={mats.alloy} position={[0, r * (SAT.busH / 2 + SAT.whipLen / 2), 0]}>
+              <cylinderGeometry args={[r * SAT.whipR * 0.5, r * SAT.whipR, r * SAT.whipLen, 6]} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* --- star tracker: a shaded box with a dark aperture, the one piece
+            of kit that unmistakably says "this thing knows where it is". --- */}
+        <group position={[r * SAT.busW * 0.26, r * SAT.busH * 0.26, r * (SAT.busD / 2 + SAT.trackerW / 2)]}>
+          <mesh material={mats.dark}>
+            <boxGeometry args={[r * SAT.trackerW, r * SAT.trackerW, r * SAT.trackerW]} />
           </mesh>
-          <mesh position={[0, r * 0.012, 0]} rotation={[0, Math.PI / 2, 0]}>
-            <boxGeometry args={[r * 0.42, r * 0.006, r * 0.03]} />
-            <meshStandardMaterial color="#2b323c" metalness={0.3} roughness={0.9} />
+          <mesh material={mats.alloy} position={[0, 0, r * SAT.trackerW * 0.55]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[r * SAT.trackerW * 0.34, r * SAT.trackerW * 0.34, r * SAT.trackerW * 0.2, 14]} />
           </mesh>
         </group>
-      ))}
-      {/* Comms dish: open cone with a torus rim, aimed off-axis so it reads
-          as pointing somewhere. */}
-      <group position={[0, r * 0.55, 0]} rotation={[0.7, 0, 0]}>
-        <mesh>
-          <coneGeometry args={[r * 0.22, r * 0.1, 24, 1, true]} />
-          <meshStandardMaterial color="#c2c6cc" side={THREE.DoubleSide} roughness={0.5} metalness={0.4} />
+
+        {/* --- thruster nozzles on the aft deck. CLOSED cones: the dark
+            material is single-sided, so an open bell would be see-through
+            from below rather than hollow. --- */}
+        {[
+          [0.26, 0.24],
+          [-0.26, 0.24],
+          [0, -0.26],
+        ].map(([kx, kz], i) => (
+          <mesh
+            key={i}
+            material={mats.dark}
+            position={[
+              r * SAT.busW * (kx ?? 0),
+              deckY - r * (SAT.deckT / 2 + SAT.nozzleH / 2),
+              r * SAT.busD * (kz ?? 0),
+            ]}
+          >
+            <coneGeometry args={[r * SAT.nozzleR, r * SAT.nozzleH, 12]} />
+          </mesh>
+        ))}
+
+        {/* --- nav beacon: white, because the accent belongs to fire and sun.
+            Steady under reduced motion, a slow blink otherwise. --- */}
+        <mesh
+          position={[
+            r * SAT.busW * 0.5,
+            deckY,
+            r * (SAT.busD / 2 + SAT.beaconR * 0.6),
+          ]}
+        >
+          <sphereGeometry args={[r * SAT.beaconR, 12, 10]} />
+          <meshStandardMaterial
+            ref={lampRef}
+            color="#111111"
+            emissive="#ffffff"
+            emissiveIntensity={NAV_LIGHT_STEADY}
+          />
         </mesh>
-        <mesh position={[0, r * 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[r * 0.22, r * 0.012, 8, 32]} />
-          <meshStandardMaterial color="#7d838c" roughness={0.5} metalness={0.5} />
-        </mesh>
-      </group>
-      {/* Nav light — white, because the accent belongs to fire and sun. */}
-      <mesh position={[0, -r * 0.52, 0]}>
-        <sphereGeometry args={[r * 0.05, 12, 10]} />
-        <meshStandardMaterial
-          ref={lampRef}
-          color="#111111"
-          emissive="#ffffff"
-          emissiveIntensity={NAV_LIGHT_STEADY}
-        />
-      </mesh>
       </group>
     </group>
   );

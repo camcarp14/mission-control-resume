@@ -21,7 +21,10 @@
  * hangs opposite, over the lake.
  *
  * Everything is procedural and seeded (mulberry32(0xC0FFEE), one rng, fixed
- * order), merged RR-style into ~15 draw calls. The opacity ramp is STATE (it
+ * order), merged RR-style into 15 draw calls — the ENTIRE city (four depth
+ * rows, ~84 fill towers, five signature masses, shoreline, piers, street
+ * lights, beacons, billboards) lives in exactly TWO of them: the site-wide
+ * opaque `archGeo` batch and the emissive `windowGeo` batch. The opacity ramp is STATE (it
  * tracks the flight position) times a camera-distance gate, so it runs under
  * reduced motion; the continuous animations — wheel spin, gull circling,
  * moon-path shimmer — are gated off and parked when `reduced` is true.
@@ -42,11 +45,18 @@ const SEED = 0xc0ffee;
 // Staging: the site materializes only on final descent (the globe owns the
 // approach), THEN a camera-distance gate keeps it invisible from outside —
 // so the return arc never shows a pier floating in space.
+// Compressed from (0.70 + 0.22 / 0.80 + 0.16) after profiling the descent:
+// while the site fades IN, every one of its surfaces is on the transparent
+// path AND the whole solar system is still drawing behind it — the most
+// expensive window in the entire experience. Reaching full opacity sooner
+// shortens that overlap and lets Scene3D's deep-space cull fire earlier.
+// The camera-distance gate (kCam), not this ramp, is what keeps the pier
+// from ever being visible from orbit, so pulling these in is safe.
 const VISIBLE_AT = 0.6;
-const FADE_START = 0.7;
-const FADE_SPAN = 0.22;
-const DOME_START = 0.8; // the sky completes last: most readable "from outside"
-const DOME_SPAN = 0.16;
+const FADE_START = 0.62;
+const FADE_SPAN = 0.16; // opaque by ramp 0.78
+const DOME_START = 0.68; // the sky completes last: most readable "from outside"
+const DOME_SPAN = 0.14; // opaque by ramp 0.82
 const CAM_FADE_NEAR = 60; // kCam = 1 inside this camera distance…
 const CAM_FADE_SPAN = 50; // …fading to 0 by NEAR + SPAN
 
@@ -77,32 +87,107 @@ const WHEEL_SPEED = 0.05; // rad/s — three revolutions in ~6 min, parked when 
 const CG_X = -95;
 const HEAD_X = -150;
 
-// Skyline: seeded Chicago silhouettes on the shore arc beyond the pier root —
-// two depth rows of background towers (near dark/cool, far lifted into the
-// amber city haze) plus five signature masses adapted from the user's river-racer
-// landmarks (Willis / Hancock / Marina City / Aon / Crain analogues). Window
-// grids come from ONE shared 1024² emissive atlas; the whole skyline is ONE
-// merged mesh.
-const SKYLINE_NEAR_COUNT = 14;
-const SKYLINE_FAR_COUNT = 12;
-const TOWER_R_MIN = 178;
-const TOWER_R_SPAN = 30;
-const FAR_R_MIN = 230;
-const FAR_R_SPAN = 42;
-const SHORE_Y = -3.6; // tower bases sink just under the water plane
+// Skyline: seeded Chicago silhouettes on the shore arc beyond the pier root.
+// FOUR depth rows — a continuous mid-rise waterfront wall, two rows carrying
+// the bulk of the towers, and a tallest/haziest back row — plus five signature
+// masses adapted from the user's river-racer landmarks (Willis / Hancock /
+// Marina City / Aon / Crain analogues), which are lifted above the fill so
+// they still read. Window grids come from ONE shared 1024² emissive atlas
+// (16 variants); the whole city is ONE merged mesh plus its share of the
+// site-wide opaque batch.
+const SHORE_Y = -3.2; // tower bases sink just under the land surface
 
-// Horizon haze: an additive gradient ring where the towers meet the water.
-const HAZE_R = 171;
-const HAZE_H = 26;
-const HAZE_Y = 7;
+/** One depth row of the skyline. `fill > 0` makes each facade at least the
+ *  slot chord wide, so the row closes into a continuous wall with no gaps to
+ *  empty sky at its base; otherwise widths come from wMin/wSpan. */
+type SkyRow = {
+  count: number;
+  rMin: number;
+  rSpan: number;
+  arc: number; // angular spread, radians
+  jit: number; // slot jitter as a fraction of the angular step
+  hMin: number;
+  hSpan: number;
+  hPow: number; // >1 biases toward hMin — a few giants, many mid-rises
+  fill: number; // >0: width = slot chord × (fill + rng·wSpan)
+  wMin: number;
+  wSpan: number;
+  dMin: number; // depth toward the camera
+  dSpan: number;
+  setback: number; // chance of a stacked setback tier
+  yaw: number; // max off-grid rotation, radians
+  pal: readonly number[];
+  vBase: number; // first window-atlas variant this row draws from
+  vSpan: number;
+  refl: number; // water-reflection strength (0 = too far to reflect)
+};
+
+const SKY_ROWS: readonly SkyRow[] = [
+  // 0 — the waterfront wall: continuous mid-rise, varied footprints/setbacks.
+  {
+    count: 28, rMin: 176, rSpan: 9, arc: 2.42, jit: 0.06,
+    hMin: 8, hSpan: 14, hPow: 1.1,
+    fill: 1.15, wMin: 0, wSpan: 0.5, dMin: 8, dSpan: 11,
+    setback: 0.34, yaw: 0.1,
+    pal: [0x1e2530, 0x222a35, 0x1a212b, 0x252d39], vBase: 0, vSpan: 8, refl: 0.85,
+  },
+  // 1 — first tower row.
+  {
+    count: 24, rMin: 192, rSpan: 15, arc: 2.5, jit: 0.3,
+    hMin: 17, hSpan: 23, hPow: 1.25,
+    fill: 0, wMin: 8, wSpan: 13, dMin: 8, dSpan: 11,
+    setback: 0.5, yaw: 0.13,
+    pal: [0x232b37, 0x27303d, 0x1f2732, 0x2a3340], vBase: 0, vSpan: 8, refl: 0.6,
+  },
+  // 2 — the bulk of the skyline.
+  {
+    count: 19, rMin: 216, rSpan: 20, arc: 2.6, jit: 0.32,
+    hMin: 22, hSpan: 28, hPow: 1.3,
+    fill: 0, wMin: 9, wSpan: 14, dMin: 9, dSpan: 12,
+    setback: 0.55, yaw: 0.14,
+    pal: [0x2b3242, 0x30374a, 0x282f3e, 0x333b4e], vBase: 4, vSpan: 8, refl: 0.34,
+  },
+  // 3 — back row: tallest and hazier, sampling the atlas' dimmest band.
+  {
+    count: 13, rMin: 248, rSpan: 34, arc: 2.72, jit: 0.34,
+    hMin: 26, hSpan: 26, hPow: 1.2,
+    fill: 0, wMin: 9, wSpan: 13, dMin: 9, dSpan: 12,
+    setback: 0.45, yaw: 0.15,
+    pal: [0x363c50, 0x3c4258, 0x333950, 0x414863], vBase: 8, vSpan: 8, refl: 0,
+  },
+];
+
+// Shoreline: a continuous low embankment mass so the city sits on LAND and
+// never floats over the lake — faceted chord segments along the arc (a box
+// per facet keeps every face front-facing in the single opaque batch), a
+// slightly lighter quay lip that catches the city light, and a handful of
+// piers/breakwaters poking into the water.
+const SHORE_R = 172; // waterline radius
+const SHORE_TOP = -1.2; // land surface (the lake plane is at WATER_Y = -3.5)
+const SHORE_DEPTH = 155; // land runs back from SHORE_R under every row
+const SHORE_ARC = 2.98; // wider than any tower row
+const SHORE_SEGS = 30;
+const SHORE_LAMPS = 58; // tiny street-level lights strung along the waterfront
+const SHORE_PIERS = 4;
+const SHORE_BREAKS = 3;
+
+// Horizon haze: a THIN additive band where the towers meet the water — not a
+// tall cylinder (a 26-unit skirt was pure overdraw across the whole horizon).
+const HAZE_R = 170;
+const HAZE_H = 14;
+const HAZE_Y = 2;
+const HAZE_SEGS = 32;
 const HAZE_OPACITY = 0.5;
 const HAZE_CITY_U = 0.676; // cylinder-u of the city azimuth: glow warmest there
 
 // Skyline water reflection: one additive plane of smeared warm columns,
 // painted FROM the seeded tower z-positions so light lands under towers.
+// Sized to the water it actually covers — at x = REFL_X the night lake is
+// only ±sqrt(WATER_RADIUS² - REFL_X²) ≈ ±220 wide, and the plane must not
+// spill additive pixels past the disc it is supposed to be lying on.
 const REFL_X = -138; // plane centre along the camera axis
-const REFL_W = 84; // extent toward the camera (the smear direction)
-const REFL_SPAN = 400; // extent across the skyline
+const REFL_W = 70; // extent toward the camera (the smear direction)
+const REFL_SPAN = 340; // extent across the skyline
 const REFL_OPACITY = 0.34; // night: the lit skyline owns more of the water
 
 // Water: calm night lake, rim alpha baked so it dissolves into haze.
@@ -117,9 +202,17 @@ const CITY_AZ_Z = -0.4472;
 const MOON_AZ_X = 0.8944;
 const MOON_AZ_Z = 0.4472;
 const DOME_RADIUS = 420;
-const MOON_SPRITE_SCALE = 34; // small cool disc, not the old broad sun glow
-const MOON_SPRITE_OPACITY = 0.7;
-const MOON_SPRITE_Y = 150; // high over the lake
+// The dome is a BAND, not a cap: its alpha is already 0 above h ≈ 0.72, so
+// everything from the zenith down to theta 0.21π rasterized fully transparent
+// pixels every frame. Starting the sphere segment below that line deletes the
+// whole cap from the fill budget and still lets the real starfield through.
+const DOME_THETA_START = Math.PI * 0.21;
+const DOME_THETA_LEN = Math.PI * 0.37;
+// The moon is drawn BY the dome shader (a disc + tight halo on uMoonDir)
+// rather than by its own additive sprite: one fewer draw call, one fewer
+// material/program, one fewer canvas texture, identical fade schedule.
+const MOON_ALT_Y = 150; // high over the lake
+const MOON_R = 385; // ground-plane radius of the moon's azimuth
 const STREAK_OPACITY = 0.5; // moon path: subtler than the old sun path
 
 // Gulls: three silhouettes on a slow circle over the water.
@@ -156,6 +249,7 @@ const LAMP_BOOST = 1.5;
 // and spark directions come from mulberry32 tables built once; the useFrame
 // choreography reads state.clock.elapsedTime epochs only.
 const FW_MAX = 600; // pool size: rockets + trails + bursts share it
+const FW_LIVE_CAP = 380; // hard ceiling on simultaneously live particles
 const FW_ARM_AT = 0.99; // ramp latch: touched down
 const FW_DISARM_AT = 0.6; // ramp unlatch: flew away — return re-celebrates
 const FW_SALVO = 3; // opening salvo size…
@@ -220,6 +314,7 @@ const DOME_VERT = /* glsl */ `
 const DOME_FRAG = /* glsl */ `
   uniform float uOpacity;
   uniform vec3 uCityDir;
+  uniform vec3 uMoonDir;
   varying vec3 vPos;
   void main() {
     vec3 D = normalize(vPos);
@@ -245,6 +340,15 @@ const DOME_FRAG = /* glsl */ `
     float strips = min(1.0, s1 * 0.55 + s2 * 0.45 + s3 * 0.35) * amp;
     col = mix(col, vec3(0.012, 0.016, 0.026), strips * 0.7);
     col += vec3(0.35, 0.22, 0.10) * strips * sc * 0.12;
+    /* the moon itself: small cool disc + a tight halo, on the azimuth
+       opposite the city. Chord length (not dot) keeps the precision sane at
+       these angular radii — a dot-product test near 1.0 has ~6e-8 of float
+       headroom and bands badly. Rides the dome's alpha, so it fades on the
+       same kd schedule the sprite used to. */
+    float md = length(D - uMoonDir);
+    float disc = 1.0 - smoothstep(0.009, 0.014, md);
+    float halo = exp(-md * 52.0);
+    col += vec3(0.94, 0.962, 1.0) * (disc * 0.90 + halo * 0.26);
     float a = 1.0 - smoothstep(0.45, 0.72, h);
     gl_FragColor = vec4(col, a * uOpacity);
   }
@@ -440,20 +544,6 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   ctx.globalCompositeOperation = 'source-over';
 }
 
-/** Small cool moon: a modest #dfe8f5 disc with a tight limb falloff and a
- *  restrained halo — nothing like the old broad sun glow. */
-function paintMoonGlow(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-  const c = w / 2;
-  const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-  g.addColorStop(0, 'rgba(240,246,255,0.95)');
-  g.addColorStop(0.16, 'rgba(223,232,245,0.88)'); /* #dfe8f5 disc */
-  g.addColorStop(0.24, 'rgba(223,232,245,0.32)'); /* limb falloff */
-  g.addColorStop(0.55, 'rgba(190,205,228,0.10)');
-  g.addColorStop(1, 'rgba(190,205,228,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-}
-
 /** Elongated cool silver blob (long axis = canvas y) for the moon's specular
  *  path lying flat on the water, pointed at the moon azimuth — narrower and
  *  subtler than the old sun path. */
@@ -484,17 +574,35 @@ function paintSpark(ctx: CanvasRenderingContext2D, w: number, h: number): void {
 
 /* ---- skyline window atlas (technique adapted from RR city.js nightTile) -- */
 
-// One 1024² canvas split into 4×2 facade-grid variants. Top row: near-depth
-// variants at full brightness; bottom row: the same grids dimmed and sparser
-// for the far row — aerial perspective without a second material. Every tower
-// facade samples one variant at a seeded, bay-aligned UV offset, so ~30
-// towers share ONE texture and ONE merged draw.
+// One 1024² canvas repacked from 4×2 cells into 8×2 — SIXTEEN facade-grid
+// variants for the same pixel budget. The variants are ordered by MOOD, not
+// just by pitch: index 0 is ablaze, index 7 is nearly dark, indices 8–15 are
+// the same ladder dimmed for the hazy back row. Every building rolls its own
+// variant, so some towers burn and some are black — a uniform sprinkle across
+// every facade is exactly what reads as fake. ~90 buildings share ONE texture.
+//
+// The atlas' unused TOP margin (never sampled by a facade — floor offsets are
+// bounded by the cell's slack) carries four solid utility swatches. Beacons,
+// street lights and billboards are quads whose four UVs collapse onto ONE
+// texel centre: a constant UV means zero derivatives, hence LOD 0, hence the
+// exact swatch colour with no mip bleed — the same trick the roof faces use.
 const ATLAS_PX = 1024;
-const CELL_W = 256;
+const CELL_W = 128;
 const CELL_H = 512;
 const CELL_MARGIN = 8;
-const ATLAS_PPX = 10; // atlas px per world unit across a facade (bay ≈ 1.6–2.4u)
-const ATLAS_PPY = 7; // atlas px per world unit up a facade (floor ≈ 2.3–3.4u)
+const ATLAS_PPX = 4.2; // atlas px per world unit across a facade (bay ≈ 2.4–3.6u)
+const ATLAS_PPY = 6.2; // atlas px per world unit up a facade (floor ≈ 1.9–2.7u)
+
+// Utility swatch texel centres (top margin, x well clear of the black roof
+// texel at (3,3)). Values are the UV pairs the emissive quads collapse onto.
+const SW_Y = 4;
+const SW_RED = 200; // aircraft-warning beacon
+const SW_WARM = 214; // street-level / pier lamp
+const SW_CYAN = 228; // billboard
+const SW_MAG = 242; // billboard
+function swUV(px: number): [number, number] {
+  return [(px + 0.5) / ATLAS_PX, 1 - (SW_Y + 0.5) / ATLAS_PX];
+}
 
 type AtlasVariant = {
   col: number;
@@ -503,21 +611,36 @@ type AtlasVariant = {
   floorPx: number;
   density: number;
   dim: number;
+  cool: number; // fraction of panes on fluorescent white-green instead of amber
+  core: number; // chance of an always-lit stairwell/lift column
 };
 
 const ATLAS_VARIANTS: readonly AtlasVariant[] = [
-  { col: 0, row: 0, bayPx: 19, floorPx: 18, density: 0.52, dim: 1 },
-  { col: 1, row: 0, bayPx: 24, floorPx: 20, density: 0.44, dim: 1 },
-  { col: 2, row: 0, bayPx: 16, floorPx: 16, density: 0.55, dim: 1 },
-  { col: 3, row: 0, bayPx: 21, floorPx: 23, density: 0.38, dim: 1 },
-  { col: 0, row: 1, bayPx: 19, floorPx: 18, density: 0.4, dim: 0.55 },
-  { col: 1, row: 1, bayPx: 24, floorPx: 20, density: 0.34, dim: 0.5 },
-  { col: 2, row: 1, bayPx: 16, floorPx: 16, density: 0.44, dim: 0.55 },
-  { col: 3, row: 1, bayPx: 22, floorPx: 24, density: 0.3, dim: 0.45 },
+  // 0–7: the near/mid ladder, ablaze → nearly dark.
+  { col: 0, row: 0, bayPx: 12, floorPx: 14, density: 0.74, dim: 1.15, cool: 0.1, core: 0.5 },
+  { col: 1, row: 0, bayPx: 15, floorPx: 17, density: 0.63, dim: 1.05, cool: 0.3, core: 0.4 },
+  { col: 2, row: 0, bayPx: 11, floorPx: 12, density: 0.55, dim: 1.0, cool: 0.08, core: 0.5 },
+  { col: 3, row: 0, bayPx: 17, floorPx: 19, density: 0.47, dim: 0.95, cool: 0.22, core: 0.35 },
+  { col: 4, row: 0, bayPx: 13, floorPx: 15, density: 0.39, dim: 0.9, cool: 0.14, core: 0.55 },
+  { col: 5, row: 0, bayPx: 12, floorPx: 13, density: 0.31, dim: 0.85, cool: 0.35, core: 0.45 },
+  { col: 6, row: 0, bayPx: 16, floorPx: 18, density: 0.23, dim: 0.8, cool: 0.1, core: 0.6 },
+  { col: 7, row: 0, bayPx: 11, floorPx: 14, density: 0.15, dim: 0.7, cool: 0.2, core: 0.65 },
+  // 8–15: the same ladder pulled back for the hazy far rows.
+  { col: 0, row: 1, bayPx: 12, floorPx: 14, density: 0.56, dim: 0.6, cool: 0.12, core: 0.3 },
+  { col: 1, row: 1, bayPx: 15, floorPx: 17, density: 0.47, dim: 0.56, cool: 0.28, core: 0.25 },
+  { col: 2, row: 1, bayPx: 11, floorPx: 12, density: 0.39, dim: 0.52, cool: 0.1, core: 0.3 },
+  { col: 3, row: 1, bayPx: 17, floorPx: 19, density: 0.31, dim: 0.5, cool: 0.2, core: 0.2 },
+  { col: 4, row: 1, bayPx: 13, floorPx: 15, density: 0.25, dim: 0.46, cool: 0.15, core: 0.35 },
+  { col: 5, row: 1, bayPx: 12, floorPx: 13, density: 0.19, dim: 0.42, cool: 0.3, core: 0.3 },
+  { col: 6, row: 1, bayPx: 16, floorPx: 18, density: 0.13, dim: 0.4, cool: 0.1, core: 0.4 },
+  { col: 7, row: 1, bayPx: 11, floorPx: 14, density: 0.09, dim: 0.35, cool: 0.18, core: 0.4 },
 ];
 
 function variantAt(i: number): AtlasVariant {
-  return ATLAS_VARIANTS[i] ?? { col: 0, row: 0, bayPx: 19, floorPx: 18, density: 0.5, dim: 1 };
+  return (
+    ATLAS_VARIANTS[i] ??
+    { col: 0, row: 0, bayPx: 12, floorPx: 14, density: 0.5, dim: 1, cool: 0.15, core: 0.4 }
+  );
 }
 
 function dimHex(hex: string, k: number): string {
@@ -535,14 +658,19 @@ function dimHex(hex: string, k: number): string {
 function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): void {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, ATLAS_PX, ATLAS_PX);
-  const lit = ['#ffd9a0', '#ffca7a', '#fff3d0'] as const;
+  const warm = ['#ffd7a2', '#ffc07a', '#ffe9c4', '#ffb968'] as const;
+  const cool = ['#e2f0e6', '#cfe2f2'] as const;
   for (const v of ATLAS_VARIANTS) {
     const x0 = v.col * CELL_W;
     const y0 = v.row * CELL_H;
     const cols = Math.floor((CELL_W - 2 * CELL_MARGIN) / v.bayPx);
     const rows = Math.floor((CELL_H - 2 * CELL_MARGIN) / v.floorPx);
+    // A stairwell / lift core: one bay lit on nearly every floor. Real towers
+    // have exactly this vertical thread and it is what stops a sparse tower
+    // from reading as random noise.
+    const coreCol = rng() < v.core ? Math.floor(rng() * cols) : -1;
     for (let r = 0; r < rows; r++) {
-      if (rng() < 0.12) continue; // a whole dark floor (fewer at night)
+      const darkFloor = rng() < 0.12; // a whole dark floor (fewer at night)
       const height = 1 - r / rows; // 1 at the cell top (upper floors)
       // Night: slightly more of the grid lit — the skyline carries the scene.
       const density = Math.min(0.9, v.density * 1.12 * (0.62 + 0.38 * (1 - height)));
@@ -554,10 +682,14 @@ function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): voi
           run = 1 + Math.floor(rng() * (on ? 3 : 4)); // lit clusters / dark gaps
         }
         run--;
-        if (!on) continue;
-        const hex = lit[Math.floor(rng() * lit.length)] ?? '#ffca7a';
-        // 1.3x lit-cell brightness against the darker night sky (dimHex clamps).
-        ctx.fillStyle = dimHex(hex, (0.66 + rng() * 0.38) * 1.3 * v.dim);
+        const isCore = c === coreCol && rng() < 0.88;
+        if ((!on || darkFloor) && !isCore) continue;
+        const pal = rng() < v.cool ? cool : warm;
+        const hex = pal[Math.floor(rng() * pal.length)] ?? '#ffc07a';
+        // 1.3x lit-cell brightness against the darker night sky (dimHex clamps);
+        // the core thread runs dimmer, like the corridor light it is.
+        const k = (0.66 + rng() * 0.38) * 1.3 * v.dim * (isCore && !on ? 0.55 : 1);
+        ctx.fillStyle = dimHex(hex, k);
         ctx.fillRect(
           x0 + CELL_MARGIN + c * v.bayPx + 2,
           y0 + CELL_MARGIN + r * v.floorPx + 2,
@@ -566,6 +698,18 @@ function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): voi
         );
       }
     }
+  }
+  // Utility swatches in the never-sampled top margin: sampled by degenerate
+  // (single-texel) UVs, so mip level is always 0 and the colour is exact.
+  const sw: readonly (readonly [number, string])[] = [
+    [SW_RED, '#ff3020'],
+    [SW_WARM, '#ffd9a0'],
+    [SW_CYAN, '#7df9ff'],
+    [SW_MAG, '#ff86c4'],
+  ];
+  for (const [px, hex] of sw) {
+    ctx.fillStyle = hex;
+    ctx.fillRect(px - 4, SW_Y - 3, 10, 7);
   }
 }
 
@@ -612,11 +756,13 @@ function paintReflections(
   ctx.fillStyle = wash;
   ctx.fillRect(0, 0, w, h);
   for (const e of entries) {
-    if (Math.abs(e.z) > REFL_SPAN * 0.42) continue; // off the water disc
+    if (Math.abs(e.z) > REFL_SPAN * 0.48) continue; // off the water disc
     const y = (0.5 + e.z / REFL_SPAN) * h;
     const half = Math.max(2, (e.w * 0.55 * h) / REFL_SPAN);
     const len = w * (0.3 + 0.55 * Math.min(1, e.s));
-    const a = 0.3 + 0.45 * Math.min(1, e.s);
+    // Three times as many towers now feed this pass, so each streak carries
+    // proportionally less alpha — otherwise the whole strip blows out white.
+    const a = 0.14 + 0.3 * Math.min(1, e.s);
     const g = ctx.createLinearGradient(0, 0, len, 0);
     g.addColorStop(0, `rgba(255,196,130,${a.toFixed(3)})`);
     g.addColorStop(0.55, `rgba(255,170,110,${(a * 0.4).toFixed(3)})`);
@@ -742,6 +888,34 @@ function towerTo(
   if (rotY) g.rotateY(rotY);
   g.translate(x, yBase + sy / 2, z);
   tintGeom(g, hex, jitter, rng);
+  list.push(g);
+}
+
+/** A camera-facing emissive quad for the window batch: street-level lights,
+ *  aircraft-warning beacons and rooftop billboards. All four UVs collapse onto
+ *  ONE atlas texel, so the fragment derivatives are zero, the mip level is 0
+ *  and the swatch colour arrives exact however small the quad gets on screen.
+ *  Albedo is near-black — the emissive map is the whole point. `rotY` is the
+ *  tower yaw: PlaneGeometry's +Z normal turns to face the pier origin at
+ *  rotY + π/2, matching the box convention where rotateY(phi) aims +X home. */
+function emitQuadTo(
+  list: THREE.BufferGeometry[],
+  rng: () => number,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  z: number,
+  rotY: number,
+  uv: readonly [number, number],
+): void {
+  const g = new THREE.PlaneGeometry(w, h);
+  const a = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < a.count; i++) a.setXY(i, uv[0], uv[1]);
+  a.needsUpdate = true;
+  g.rotateY(rotY + Math.PI / 2);
+  g.translate(x, y, z);
+  tintGeom(g, 0x05070a, 0, rng);
   list.push(g);
 }
 
@@ -893,6 +1067,7 @@ type FwSim = {
   counter: number;
   nextLaunch: number; // elapsedTime epoch of the next launch
   lastE: number; // previous elapsedTime, for dt
+  aliveEst: number; // running live count, so bursts can be budget-capped
 };
 
 /** Seeded tables + pool + ONE Points geometry/material, built once. A
@@ -1007,6 +1182,7 @@ function buildFireworks(): FwSim {
     counter: 0,
     nextLaunch: 0,
     lastE: 0,
+    aliveEst: 0,
   };
 }
 
@@ -1018,6 +1194,7 @@ function fwAlloc(fw: FwSim): FwParticle | undefined {
     fw.cursor = (fw.cursor + 1) % FW_MAX;
     if (!p) continue;
     if (p.kind === 0 && p.age < p.life) continue;
+    if (p.age >= p.life) fw.aliveEst++; // reviving a dead slot adds one live
     return p;
   }
   return undefined;
@@ -1074,7 +1251,13 @@ function fwBurst(fw: FwSim, x: number, y: number, z: number, shellIdx: number): 
   const br = FW_PAL[c] ?? 1;
   const bg = FW_PAL[c + 1] ?? 0.9;
   const bb = FW_PAL[c + 2] ?? 0.7;
-  for (let j = 0; j < sh.count; j++) {
+  // Hard live-particle ceiling: overlapping salvos used to be able to push the
+  // pool to its full 600 at once, which is 600 additive full-screen-ish point
+  // sprites in a single blended pass. A clipped burst is invisible; the frame
+  // spike is not.
+  const budget = FW_LIVE_CAP - fw.aliveEst;
+  const n = sh.count < budget ? sh.count : budget;
+  for (let j = 0; j < n; j++) {
     const sp = fw.sparks[(sh.off + j) % fw.sparks.length];
     if (!sp) continue;
     const p = fwAlloc(fw);
@@ -1103,7 +1286,9 @@ function fwArm(fw: FwSim, e: number): void {
   fw.live = true;
   fw.salvoLeft = FW_SALVO;
   fw.nextLaunch = e + 0.35;
-  fw.geo.setDrawRange(0, FW_MAX);
+  // The draw range is NOT opened to the whole pool here — fwUpdate sets it to
+  // the live high-water mark every frame, so the opening salvo draws ~200
+  // points, not 600.
 }
 
 /** Disarm and clear: kill every particle, hide the buffers, close the draw
@@ -1125,6 +1310,7 @@ function fwKill(fw: FwSim): void {
   fw.posAttr.needsUpdate = true;
   fw.colAttr.needsUpdate = true;
   fw.sizeAttr.needsUpdate = true;
+  fw.aliveEst = 0;
   fw.geo.setDrawRange(0, 0);
 }
 
@@ -1161,6 +1347,7 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
   const siz = fw.sizeArr;
   const dr = Math.exp(-FW_DRAG * dt); // spark drag, once per frame
   let alive = 0;
+  let hi = -1; // highest live pool index → the tight Points draw range
   for (let i = 0; i < FW_MAX; i++) {
     const p = fw.pool[i];
     if (!p) continue;
@@ -1185,6 +1372,7 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
           continue;
         }
         alive++;
+        hi = i;
         pos[i * 3] = p.x;
         pos[i * 3 + 1] = p.y;
         pos[i * 3 + 2] = p.z;
@@ -1196,6 +1384,7 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
         // Spark: gravity + drag, quadratic alpha fade, shrinking size,
         // brightness starting over 1.0 so bloom catches the burst.
         alive++;
+        hi = i;
         p.vy -= FW_G * dt;
         p.vx *= dr;
         p.vy *= dr;
@@ -1216,6 +1405,7 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
       } else {
         // Trail tick: sinks slightly, fades fast, shrinks to nothing.
         alive++;
+        hi = i;
         p.y += p.vy * dt;
         const u0 = 1 - p.age / p.life;
         const u = u0 < 0 ? 0 : u0;
@@ -1237,6 +1427,8 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
   fw.posAttr.needsUpdate = true;
   fw.colAttr.needsUpdate = true;
   fw.sizeAttr.needsUpdate = true;
+  fw.aliveEst = alive;
+  fw.geo.setDrawRange(0, hi + 1); // tight: never rasterize dead pool slots
   fw.live = fw.armed || alive > 0;
 }
 
@@ -1260,23 +1452,28 @@ type SiteAssets = {
   streakGeo: THREE.BufferGeometry;
   domeGeo: THREE.BufferGeometry;
   gullGeo: THREE.BufferGeometry;
-  deckMat: THREE.MeshStandardMaterial;
-  padMat: THREE.MeshStandardMaterial;
-  archMat: THREE.MeshStandardMaterial;
+  deckMat: THREE.MeshLambertMaterial;
+  padMat: THREE.MeshLambertMaterial;
+  archMat: THREE.MeshLambertMaterial;
   glowMat: THREE.MeshBasicMaterial;
-  windowMat: THREE.MeshStandardMaterial;
+  windowMat: THREE.MeshLambertMaterial;
   hazeMat: THREE.MeshBasicMaterial;
   reflMat: THREE.MeshBasicMaterial;
   glassMat: THREE.MeshStandardMaterial;
   steelMat: THREE.MeshStandardMaterial;
-  cabinMat: THREE.MeshStandardMaterial;
-  waterMat: THREE.MeshStandardMaterial;
+  cabinMat: THREE.MeshLambertMaterial;
+  waterMat: THREE.MeshLambertMaterial;
   streakMat: THREE.MeshBasicMaterial;
-  moonMat: THREE.SpriteMaterial;
   domeMat: THREE.ShaderMaterial;
   gullMat: THREE.MeshBasicMaterial;
-  domeUniforms: { uOpacity: { value: number }; uCityDir: { value: THREE.Vector3 } };
+  domeUniforms: {
+    uOpacity: { value: number };
+    uCityDir: { value: THREE.Vector3 };
+    uMoonDir: { value: THREE.Vector3 };
+  };
   fade: { m: THREE.Material; mul: number }[];
+  solid: THREE.Material[];
+  solidState: { opaque: boolean };
   fw: FwSim;
 };
 
@@ -1294,9 +1491,12 @@ function buildAssets(): SiteAssets {
   deckTex.repeat.set(5, 1);
   deckTex.anisotropy = 4;
   const padTex = makeCanvasTexture(512, 512, (ctx, w) => paintPad(ctx, w, rng));
-  const waterTex = makeCanvasTexture(1024, 1024, (ctx, w, h) => paintWater(ctx, w, h, rng));
-  const moonTex = makeCanvasTexture(256, 256, paintMoonGlow);
-  const streakTex = makeCanvasTexture(256, 256, paintStreak);
+  // Texture budget: the atlas doubled its variant count (8 → 16) at the SAME
+  // 1024², paid for by shrinking the surfaces that are seen at a glancing
+  // angle or are pure soft gradients — the lake 1024² → 512² and the moon
+  // path 256² → 128². Net budget DOWN ~30% (2.92 Mpx → 2.04 Mpx).
+  const waterTex = makeCanvasTexture(512, 512, (ctx, w, h) => paintWater(ctx, w, h, rng));
+  const streakTex = makeCanvasTexture(128, 128, paintStreak);
   const atlasTex = makeCanvasTexture(ATLAS_PX, ATLAS_PX, (ctx) => paintWindowAtlas(ctx, rng));
   atlasTex.anisotropy = 4;
   const hazeTex = makeCanvasTexture(256, 128, (ctx, w, h) => paintHaze(ctx, w, h));
@@ -1457,113 +1657,175 @@ function buildAssets(): SiteAssets {
     arch.push(cap);
   }
 
-  /* -- 5. shore band + the Chicago skyline -------------------------------- */
-  boxTo(arch, rng, 30, 3.2, 340, -186, -1.9, 0, 0x232b36, 0.08); // dark shoreline band
+  /* -- 5. shoreline + the Chicago skyline --------------------------------- */
 
   const winParts: THREE.BufferGeometry[] = []; // every atlas-windowed facade
   const refl: { z: number; w: number; s: number }[] = []; // reflection seeds
+  const UV_RED = swUV(SW_RED);
+  const UV_WARM = swUV(SW_WARM);
+  const BILLBOARD_UV = [swUV(SW_CYAN), swUV(SW_WARM), swUV(SW_MAG)] as const;
 
-  // 5a. two depth rows of varied background towers with setbacks: the near
-  // row darker/cooler, the far row lifted slightly by the city haze and
-  // sampling the atlas' dimmed variants. Real skylines are layered, not a
-  // picket fence. Night: both rows stay deep blue-grey; the windows carry it.
-  const NEAR_PAL = [0x232b36, 0x27303c, 0x1f2731, 0x2b3441] as const;
-  const FAR_PAL = [0x2c3140, 0x323848, 0x2a3040, 0x343a4c] as const;
-  let spikes = 0;
-  for (let row = 0; row < 2; row++) {
-    const count = row === 0 ? SKYLINE_NEAR_COUNT : SKYLINE_FAR_COUNT;
-    const rMin = row === 0 ? TOWER_R_MIN : FAR_R_MIN;
-    const rSpan = row === 0 ? TOWER_R_SPAN : FAR_R_SPAN;
-    const arc = row === 0 ? 2.1 : 2.4;
-    const pal = row === 0 ? NEAR_PAL : FAR_PAL;
-    for (let i = 0; i < count; i++) {
-      const fu = (i + 0.5) / count;
-      const phi = (fu - 0.5) * arc + (rng() - 0.5) * 0.1;
-      const R = rMin + rng() * rSpan;
-      const w = 7 + rng() * 11; // facade width
-      const d = 6 + rng() * 9; // depth toward the camera
-      const h = 11 + Math.pow(rng(), 1.3) * (row === 0 ? 30 : 33);
+  // 5a. the shoreline. A continuous faceted embankment so the city stands on
+  // LAND: one box per chord facet (boxes keep every face front-facing inside
+  // the single opaque batch — an open cylinder would need DoubleSide and
+  // double the fill), a lighter quay lip at the waterline, and piers and
+  // detached breakwaters poking into the lake so the edge is not a clean arc.
+  {
+    const step = SHORE_ARC / SHORE_SEGS;
+    const rMid = SHORE_R + SHORE_DEPTH / 2;
+    for (let i = 0; i < SHORE_SEGS; i++) {
+      const phi = (i + 0.5 - SHORE_SEGS / 2) * step;
+      const chord = step * rMid * 1.14; // overlap: no slivers between facets
+      const px = -Math.cos(phi) * rMid;
+      const pz = Math.sin(phi) * rMid;
+      boxTo(arch, rng, SHORE_DEPTH, 3.8, chord, px, SHORE_TOP - 1.9, pz, 0x151b23, 0.1, phi);
+      // quay lip at the waterline, a shade lighter so the city point light
+      // catches it and the land edge reads as built, not as a cut.
+      const lx = -Math.cos(phi) * (SHORE_R + 1.1);
+      const lz = Math.sin(phi) * (SHORE_R + 1.1);
+      boxTo(arch, rng, 2.4, 1.1, chord * 0.99, lx, SHORE_TOP - 0.2, lz, 0x2b3444, 0.09, phi);
+    }
+    // piers / jetties reaching out over the water toward the pad
+    for (let i = 0; i < SHORE_PIERS; i++) {
+      const phi = (rng() - 0.5) * SHORE_ARC * 0.82;
+      const len = 20 + rng() * 18;
+      const R = SHORE_R - len / 2;
+      boxTo(arch, rng, len, 1.1, 4 + rng() * 3, -Math.cos(phi) * R, -2.7, Math.sin(phi) * R, 0x1b222c, 0.1, phi);
+      emitQuadTo(winParts, rng, 0.9, 0.7, -Math.cos(phi) * (R - len / 2 + 1), -1.4, Math.sin(phi) * (R - len / 2 + 1), phi, UV_WARM);
+    }
+    // detached breakwaters lying across the swell
+    for (let i = 0; i < SHORE_BREAKS; i++) {
+      const phi = (rng() - 0.5) * SHORE_ARC * 0.7;
+      const R = SHORE_R - 16 - rng() * 16;
+      boxTo(arch, rng, 3.4, 1.0, 34 + rng() * 26, -Math.cos(phi) * R, -2.7, Math.sin(phi) * R, 0x141a22, 0.12, phi + (rng() - 0.5) * 0.25);
+    }
+    // a sparse string of street-level lights along the waterfront: the base of
+    // a night city is a line of little dots, and without them the towers look
+    // like they are standing in a void.
+    for (let i = 0; i < SHORE_LAMPS; i++) {
+      if (rng() < 0.22) continue; // sparse, not a runway
+      const phi = (i + 0.5 - SHORE_LAMPS / 2) * (SHORE_ARC * 0.96 / SHORE_LAMPS) + (rng() - 0.5) * 0.012;
+      const R = SHORE_R - 0.4 + rng() * 2.5;
+      emitQuadTo(winParts, rng, 0.75 + rng() * 0.5, 0.6, -Math.cos(phi) * R, SHORE_TOP + 0.6 + rng() * 0.5, Math.sin(phi) * R, phi, UV_WARM);
+    }
+  }
+
+  // 5b. FOUR depth rows of background towers. Row 0 is a continuous mid-rise
+  // waterfront wall (facade width is forced to at least the angular slot's
+  // chord, so the row closes and no sky shows at the base); rows 1–2 carry the
+  // bulk of the towers with stepped setbacks and a few degrees of off-grid
+  // yaw; row 3 is tallest and haziest. Real skylines are layered masses, not a
+  // picket fence — and the layering is also what hides the horizon behind
+  // opaque depth-writing geometry instead of another transparent pass.
+  let beacons = 0;
+  let boards = 0;
+  for (let row = 0; row < SKY_ROWS.length; row++) {
+    const R0 = SKY_ROWS[row];
+    if (!R0) continue;
+    const step = R0.arc / R0.count;
+    for (let i = 0; i < R0.count; i++) {
+      const phi = (i + 0.5 - R0.count / 2) * step + (rng() - 0.5) * step * R0.jit;
+      const R = R0.rMin + rng() * R0.rSpan;
+      const w = R0.fill > 0 ? step * R * (R0.fill + rng() * R0.wSpan) : R0.wMin + rng() * R0.wSpan;
+      const d = R0.dMin + rng() * R0.dSpan;
+      const h = R0.hMin + Math.pow(rng(), R0.hPow) * R0.hSpan;
       const px = -Math.cos(phi) * R;
       const pz = Math.sin(phi) * R;
-      const hex = pal[i % pal.length] ?? 0x232b36;
-      const v = variantAt(row * 4 + Math.floor(rng() * 4));
-      towerTo(winParts, rng, d, h, w, px, SHORE_Y, pz, hex, v, phi, 0.14);
+      const hex = R0.pal[i % R0.pal.length] ?? 0x232b36;
+      const v = variantAt(R0.vBase + Math.floor(rng() * R0.vSpan));
+      const yaw = phi + (rng() - 0.5) * R0.yaw;
+      towerTo(winParts, rng, d, h, w, px, SHORE_Y, pz, hex, v, yaw, 0.13);
       let topY = SHORE_Y + h;
       let tw = w;
       let td = d;
-      if (rng() < 0.5) {
+      if (rng() < R0.setback) {
         // setbacks: stacked shrinking boxes, slightly offset off-axis
-        const tiers = rng() < 0.3 ? 2 : 1;
+        const tiers = rng() < 0.32 ? 2 : 1;
         for (let s2 = 0; s2 < tiers; s2++) {
           tw *= 0.55 + rng() * 0.2;
           td *= 0.6 + rng() * 0.2;
           const th = h * (0.16 + rng() * 0.2);
-          const o = rotXZ((rng() - 0.5) * 1.2, (rng() - 0.5) * 2.4, phi);
-          towerTo(winParts, rng, td, th, tw, px + o.x, topY, pz + o.z, hex, v, phi, 0.1);
+          const o = rotXZ((rng() - 0.5) * 1.2, (rng() - 0.5) * 2.4, yaw);
+          towerTo(winParts, rng, td, th, tw, px + o.x, topY, pz + o.z, hex, v, yaw, 0.1);
           topY += th;
         }
       }
-      // rooflines: mechanical penthouses, a few antenna spikes with steady
-      // RED aircraft-warning beacons merged into the glow batch.
-      if (rng() < 0.6) {
+      // rooflines: mechanical penthouses, bulkheads and water tanks.
+      if (rng() < 0.62) {
         const ph = 1.2 + rng() * 1.8;
-        const o = rotXZ((rng() - 0.5) * td * 0.3, (rng() - 0.5) * tw * 0.3, phi);
-        const mechHex = row === 0 ? 0x1a2028 : 0x272d3a;
-        boxTo(arch, rng, td * 0.42, ph, tw * 0.4, px + o.x, topY + ph / 2, pz + o.z, mechHex, 0.08, phi);
+        const o = rotXZ((rng() - 0.5) * td * 0.3, (rng() - 0.5) * tw * 0.3, yaw);
+        const mechHex = row < 2 ? 0x161c24 : 0x272d3a;
+        boxTo(arch, rng, td * 0.42, ph, tw * 0.4, px + o.x, topY + ph / 2, pz + o.z, mechHex, 0.08, yaw);
       }
-      if (spikes < 4 && h > 26 && rng() < 0.45) {
-        spikes++;
+      if (row < 2 && rng() < 0.3) {
+        const o = rotXZ((rng() - 0.5) * td * 0.4, (rng() - 0.5) * tw * 0.4, yaw);
+        boxTo(arch, rng, 1.5, 1.5 + rng() * 1.1, 1.5, px + o.x, topY + 1.1, pz + o.z, 0x11161d, 0.1, yaw);
+      }
+      // a handful of antenna spikes with steady RED aircraft-warning beacons —
+      // the beacons are emissive quads in the WINDOW batch, so the whole city
+      // still costs exactly two merged meshes.
+      if (beacons < 7 && h > 34 && rng() < 0.5) {
+        beacons++;
         const ah = 4 + rng() * 4;
-        boxTo(arch, rng, 0.22, ah, 0.22, px, topY + ah / 2, pz, 0x1e242e, 0, phi);
-        bulbTo(glow, rng, px, topY + ah + 0.3, pz, 0xff2a1e, 0.4);
+        boxTo(arch, rng, 0.22, ah, 0.22, px, topY + ah / 2, pz, 0x1e242e, 0, yaw);
+        emitQuadTo(winParts, rng, 0.7, 0.7, px, topY + ah + 0.35, pz, yaw, UV_RED);
       }
-      refl.push({ z: pz, w, s: Math.min(1, h / 40) * (row === 0 ? 0.85 : 0.35) });
+      // 2–3 rooftop billboards as tiny emissive rectangles on the near rows.
+      if (boards < 3 && row <= 1 && h > 15 && rng() < 0.14) {
+        const bu = BILLBOARD_UV[boards] ?? UV_WARM;
+        boards++;
+        emitQuadTo(winParts, rng, 4.6 + rng() * 2, 2.0, px, topY + 1.5, pz, yaw, bu);
+      }
+      if (R0.refl > 0) refl.push({ z: pz, w, s: Math.min(1, h / 42) * R0.refl });
     }
   }
 
-  // 5b. signature silhouettes, adapted from river-racer landmarks.js.
+  // 5c. signature silhouettes, adapted from river-racer landmarks.js. Every
+  // one is taller than the fill rows' ceiling (row 3 tops out at 52) so the
+  // buildout behind them never swallows the skyline's recognisable shapes.
   // Willis-like: bundled dark tubes at staggered heights (9→7→5→2 collapsed
   // to four masses) + two white antennas of DIFFERENT lengths — the RR
   // builder's most-photographed detail — on the city (south/-z) side.
+  const WILLIS_H = 68;
   {
     const phi = -0.34;
-    const R = 210;
+    const R = 206;
     const px = -Math.cos(phi) * R;
     const pz = Math.sin(phi) * R;
-    const v = variantAt(4); // dim grid: it silhouettes against the city glow
+    const v = variantAt(6); // dim grid: it silhouettes against the city glow
     const hex = 0x1d222c;
-    towerTo(winParts, rng, 13, 27, 15, px, SHORE_Y, pz, hex, v, phi, 0.04);
-    towerTo(winParts, rng, 10.5, 44, 12, px, SHORE_Y, pz, hex, v, phi, 0.04);
-    const oT = rotXZ(0, 1.8, phi);
-    towerTo(winParts, rng, 8, 60, 7.5, px + oT.x, SHORE_Y, pz + oT.z, hex, v, phi, 0.04);
-    const oB = rotXZ(0, -2.8, phi);
-    towerTo(winParts, rng, 8.5, 52, 6.5, px + oB.x, SHORE_Y, pz + oB.z, hex, v, phi, 0.04);
+    towerTo(winParts, rng, 15, 30, 17, px, SHORE_Y, pz, hex, v, phi, 0.04);
+    towerTo(winParts, rng, 12, 50, 13.5, px, SHORE_Y, pz, hex, v, phi, 0.04);
+    const oT = rotXZ(0, 2.0, phi);
+    towerTo(winParts, rng, 9, WILLIS_H, 8.5, px + oT.x, SHORE_Y, pz + oT.z, hex, v, phi, 0.04);
+    const oB = rotXZ(0, -3.1, phi);
+    towerTo(winParts, rng, 9.5, 59, 7.5, px + oB.x, SHORE_Y, pz + oB.z, hex, v, phi, 0.04);
     for (const [zo, ah] of [
-      [0.6, 12.5],
-      [3.0, 10.6],
+      [0.6, 13.5],
+      [3.2, 11.4],
     ] as const) {
       const o = rotXZ(0, zo, phi);
       const g = new THREE.CylinderGeometry(0.14, 0.3, ah, 5);
-      g.translate(px + o.x, SHORE_Y + 60 + ah / 2, pz + o.z);
+      g.translate(px + o.x, SHORE_Y + WILLIS_H + ah / 2, pz + o.z);
       tintGeom(g, 0xe8eaec, 0, rng);
       arch.push(g);
-      bulbTo(glow, rng, px + o.x, SHORE_Y + 60 + ah + 0.3, pz + o.z, 0xff2a1e, 0.42);
+      emitQuadTo(winParts, rng, 0.8, 0.8, px + o.x, SHORE_Y + WILLIS_H + ah + 0.35, pz + o.z, phi, UV_RED);
     }
-    refl.push({ z: pz, w: 15, s: 0.95 });
+    refl.push({ z: pz, w: 17, s: 0.95 });
   }
 
   // Hancock-like: broad-shouldered tapered obelisk (five shrinking sections,
   // as in the RR builder) with a two-antenna crown, north (+z) of the pier.
   {
     const phi = 0.52;
-    const R = 240;
+    const R = 238;
     const px = -Math.cos(phi) * R;
     const pz = Math.sin(phi) * R;
-    const v = variantAt(6);
+    const v = variantAt(10);
     const hex = 0x232733;
-    const H = 52;
-    const W0 = 16;
-    const D0 = 11;
+    const H = 60;
+    const W0 = 17;
+    const D0 = 12;
     const secs = [
       [1, 1, 0, 0.3],
       [0.85, 0.88, 0.3, 0.55],
@@ -1580,63 +1842,63 @@ function buildAssets(): SiteAssets {
       g.translate(px + o.x, SHORE_Y + H + 4.5, pz + o.z);
       tintGeom(g, 0xe8eaec, 0, rng);
       arch.push(g);
-      bulbTo(glow, rng, px + o.x, SHORE_Y + H + 9.3, pz + o.z, 0xff2a1e, 0.4);
+      emitQuadTo(winParts, rng, 0.75, 0.75, px + o.x, SHORE_Y + H + 9.35, pz + o.z, phi, UV_RED);
     }
-    refl.push({ z: pz, w: 16, s: 0.8 });
+    refl.push({ z: pz, w: 17, s: 0.8 });
   }
 
   // Marina City-like: the twin scalloped concrete cylinders right at the
   // river mouth — a ribbed drum reads as the corncob at this distance.
   {
     const phi = -0.06;
-    const R = 190;
+    const R = 188;
     const cx = -Math.cos(phi) * R;
     const cz = Math.sin(phi) * R;
     for (const s of [-1, 1] as const) {
-      const o = rotXZ(0, s * 5.6, phi);
+      const o = rotXZ(0, s * 5.8, phi);
       const x = cx + o.x;
       const z = cz + o.z;
-      const core = new THREE.CylinderGeometry(3.1, 3.1, 26, 14);
-      core.translate(x, SHORE_Y + 13, z);
+      const core = new THREE.CylinderGeometry(3.2, 3.2, 31, 14);
+      core.translate(x, SHORE_Y + 15.5, z);
       tintGeom(core, 0x6b5f57, 0.05, rng);
       arch.push(core);
       for (let k = 0; k < 9; k++) {
         const a = (k / 9) * Math.PI * 2 + s;
-        const rib = new THREE.CylinderGeometry(0.62, 0.62, 24.4, 5);
-        rib.translate(x + Math.cos(a) * 3.0, SHORE_Y + 12.2, z + Math.sin(a) * 3.0);
+        const rib = new THREE.CylinderGeometry(0.64, 0.64, 29.2, 5);
+        rib.translate(x + Math.cos(a) * 3.1, SHORE_Y + 14.6, z + Math.sin(a) * 3.1);
         tintGeom(rib, 0x776a5f, 0.08, rng);
         arch.push(rib);
       }
-      const cap = new THREE.CylinderGeometry(2.6, 3.2, 1.4, 10);
-      cap.translate(x, SHORE_Y + 26.6, z);
+      const cap = new THREE.CylinderGeometry(2.7, 3.3, 1.4, 10);
+      cap.translate(x, SHORE_Y + 31.7, z);
       tintGeom(cap, 0x5a5049, 0, rng);
       arch.push(cap);
     }
-    refl.push({ z: cz, w: 9, s: 0.55 });
+    refl.push({ z: cz, w: 10, s: 0.55 });
   }
 
   // Aon-like: sheer pale shaft with the flat white crown, tall in the far
   // row where the haze lifts it.
   {
     const phi = -0.17;
-    const R = 235;
+    const R = 233;
     const px = -Math.cos(phi) * R;
     const pz = Math.sin(phi) * R;
-    towerTo(winParts, rng, 9.5, 47, 9.5, px, SHORE_Y, pz, 0x8b8088, variantAt(7), phi, 0.04);
-    boxTo(arch, rng, 10.3, 1.9, 10.3, px, SHORE_Y + 47 + 0.95, pz, 0xded6c6, 0.03, phi);
-    bulbTo(glow, rng, px, SHORE_Y + 49.4, pz, 0xff2a1e, 0.34);
-    refl.push({ z: pz, w: 9.5, s: 0.7 });
+    towerTo(winParts, rng, 10, 55, 10, px, SHORE_Y, pz, 0x8b8088, variantAt(3), phi, 0.04);
+    boxTo(arch, rng, 10.8, 1.9, 10.8, px, SHORE_Y + 55.95, pz, 0xded6c6, 0.03, phi);
+    emitQuadTo(winParts, rng, 0.7, 0.7, px, SHORE_Y + 57.4, pz, phi, UV_RED);
+    refl.push({ z: pz, w: 10, s: 0.7 });
   }
 
   // Crain-like: modest shaft with the sloped diamond top glinting at the sky.
   {
     const phi = 0.2;
-    const R = 198;
+    const R = 196;
     const px = -Math.cos(phi) * R;
     const pz = Math.sin(phi) * R;
-    const cw = 11; // facade width (and the wedge ridge length)
-    const cd = 8;
-    const ch = 24;
+    const cw = 12; // facade width (and the wedge ridge length)
+    const cd = 8.5;
+    const ch = 30;
     towerTo(winParts, rng, cd, ch, cw, px, SHORE_Y, pz, 0x2c3140, variantAt(1), phi, 0.05);
     const r = cd / 1.732; // triangular prism sized so its base spans the depth
     const k = 5.5 / (1.5 * r); // slope height 5.5 over the prism's natural 1.5r
@@ -1669,11 +1931,15 @@ function buildAssets(): SiteAssets {
   streakGeo.rotateX(-Math.PI / 2); // flat on the water, long axis on Z…
   streakGeo.rotateY(Math.atan2(MOON_AZ_X, MOON_AZ_Z)); // …swung onto the moon azimuth
 
-  const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.58);
+  // Sky dome: a BAND, not a cap. Everything above theta 0.21π had alpha 0 and
+  // was rasterizing transparent fragments for free every frame.
+  const domeGeo = new THREE.SphereGeometry(
+    DOME_RADIUS, 28, 10, 0, Math.PI * 2, DOME_THETA_START, DOME_THETA_LEN,
+  );
 
   // Horizon haze ring (open cylinder, seen from inside) + the reflection
   // plane lying just above the water: u runs toward the camera on it.
-  const hazeGeo = new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, 48, 1, true);
+  const hazeGeo = new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, HAZE_SEGS, 1, true);
   const reflGeo = new THREE.PlaneGeometry(REFL_W, REFL_SPAN);
   reflGeo.rotateX(-Math.PI / 2); // flat on the water: u → +x, v → -z
 
@@ -1693,27 +1959,30 @@ function buildAssets(): SiteAssets {
   const gullGeo = new THREE.BufferGeometry();
   gullGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(gullVerts), 3));
 
-  /* -- materials (all fade-ramped per frame, refs cached below) ----------- */
-  const deckMat = new THREE.MeshStandardMaterial({
+  /* -- materials (all fade-ramped per frame, refs cached below) -----------
+   *
+   * Everything that covers real screen area is MeshLambert, not MeshStandard.
+   * At roughness 0.8–0.9 / metalness 0 with no env map, Standard's GGX lobe
+   * and IBL path buy essentially nothing at night and cost a full PBR BRDF on
+   * every one of these fragments — the lake alone is a 260-unit disc. This is
+   * exactly the recipe the user's own river-racer city.js uses for its towers
+   * (MeshLambertMaterial + emissive 0xffffff + emissiveMap). Only the wheel
+   * steel (metalness 0.5) and the Crystal Gardens glass, both tiny on screen,
+   * stay Standard. */
+  const deckMat = new THREE.MeshLambertMaterial({
     map: deckTex,
-    roughness: 0.85,
-    metalness: 0,
     transparent: true,
     opacity: 0,
   });
-  const padMat = new THREE.MeshStandardMaterial({
+  const padMat = new THREE.MeshLambertMaterial({
     map: padTex,
-    roughness: 0.9,
-    metalness: 0,
     transparent: true,
     opacity: 0,
     polygonOffset: true,
     polygonOffsetFactor: -1,
   });
-  const archMat = new THREE.MeshStandardMaterial({
+  const archMat = new THREE.MeshLambertMaterial({
     vertexColors: true,
-    roughness: 0.8,
-    metalness: 0,
     transparent: true,
     opacity: 0,
   });
@@ -1725,13 +1994,14 @@ function buildAssets(): SiteAssets {
   });
   // The skyline: dark albedo from the per-tower vertex tints, lit window
   // grids from the shared emissive atlas — windows burn against the night.
-  const windowMat = new THREE.MeshStandardMaterial({
+  // emissive is WHITE and the warmth lives in the atlas paint (RR city.js
+  // does the same), so the utility swatches can carry a saturated red beacon
+  // and cyan/magenta billboards through the very same map.
+  const windowMat = new THREE.MeshLambertMaterial({
     vertexColors: true,
-    roughness: 0.85,
-    metalness: 0,
-    emissive: 0xffc9a0,
+    emissive: 0xffffff,
     emissiveMap: atlasTex,
-    emissiveIntensity: 2.1,
+    emissiveIntensity: 1.75,
     transparent: true,
     opacity: 0,
   });
@@ -1772,30 +2042,21 @@ function buildAssets(): SiteAssets {
     transparent: true,
     opacity: 0,
   });
-  const cabinMat = new THREE.MeshStandardMaterial({
+  const cabinMat = new THREE.MeshLambertMaterial({
     vertexColors: true,
-    roughness: 0.4,
-    metalness: 0.15,
     transparent: true,
     opacity: 0,
   });
-  const waterMat = new THREE.MeshStandardMaterial({
+  // The single biggest fragment bill in the scene (a 260-unit disc filling the
+  // lower half of the frame). The night lake's look lives in its texture and
+  // in the additive moon path lying on top of it, not in a PBR specular lobe.
+  const waterMat = new THREE.MeshLambertMaterial({
     map: waterTex,
-    roughness: 0.25,
-    metalness: 0.1,
     transparent: true,
     opacity: 0,
   });
   const streakMat = new THREE.MeshBasicMaterial({
     map: streakTex,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const moonMat = new THREE.SpriteMaterial({
-    map: moonTex,
     transparent: true,
     opacity: 0,
     blending: THREE.AdditiveBlending,
@@ -1811,6 +2072,9 @@ function buildAssets(): SiteAssets {
   const domeUniforms = {
     uOpacity: { value: 0 },
     uCityDir: { value: new THREE.Vector3(CITY_AZ_X, 0.05, CITY_AZ_Z).normalize() },
+    uMoonDir: {
+      value: new THREE.Vector3(MOON_AZ_X * MOON_R, MOON_ALT_Y, MOON_AZ_Z * MOON_R).normalize(),
+    },
   };
   const domeMat = new THREE.ShaderMaterial({
     vertexShader: DOME_VERT,
@@ -1828,7 +2092,7 @@ function buildAssets(): SiteAssets {
   // fade list to drive).
   const fw = buildFireworks();
 
-  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, moonTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
+  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
   const geometries: THREE.BufferGeometry[] = [
     deckGeo,
     padGeo,
@@ -1859,7 +2123,6 @@ function buildAssets(): SiteAssets {
     cabinMat,
     waterMat,
     streakMat,
-    moonMat,
     gullMat,
     domeMat,
     fw.mat,
@@ -1880,6 +2143,14 @@ function buildAssets(): SiteAssets {
     { m: reflMat, mul: REFL_OPACITY },
     { m: gullMat, mul: 0.9 },
   ];
+
+  // Materials whose alpha exists ONLY to serve the fade ramp: at rest they are
+  // solid. transparent:true costs the blend, forfeits early-Z and pushes them
+  // into the sorted transparent pass — for the deck, the whole city and the
+  // lake that is most of the frame. Once k saturates we flip them opaque (both
+  // program variants are precompiled at mount, so the flip never stalls).
+  const solid: THREE.Material[] = [deckMat, padMat, archMat, glowMat, windowMat, cabinMat, waterMat];
+  const solidState = { opaque: false };
 
   return {
     textures,
@@ -1911,11 +2182,12 @@ function buildAssets(): SiteAssets {
     cabinMat,
     waterMat,
     streakMat,
-    moonMat,
     domeMat,
     gullMat,
     domeUniforms,
     fade,
+    solid,
+    solidState,
     fw,
   };
 }
@@ -1995,6 +2267,21 @@ export function LandingSite({
     const wasVisible = g.visible;
     g.visible = true;
     gl.compile(g, camera);
+    // …and the OPAQUE variant of every fade-only material too. three bakes
+    // `transparent` into the program (#define OPAQUE), so the flip at full
+    // fade would otherwise compile a second program set at the exact moment
+    // the ship touches down. Warm both, then leave them transparent.
+    for (const m of assets.solid) {
+      m.transparent = false;
+      m.needsUpdate = true;
+    }
+    gl.compile(g, camera);
+    for (const m of assets.solid) {
+      m.transparent = true;
+      m.needsUpdate = true;
+    }
+    gl.compile(g, camera);
+    assets.solidState.opaque = false;
     for (const tex of assets.textures) gl.initTexture(tex);
     g.visible = wasVisible;
   }, [gl, camera, assets]);
@@ -2048,7 +2335,22 @@ export function LandingSite({
 
     const visible = ramp > VISIBLE_AT;
     group.visible = visible;
-    if (!visible) return;
+    if (!visible) {
+      // Hidden: make sure the fade-only materials are back on the transparent
+      // path. The flip below normally reverts on the way out, but a scrubbed
+      // MotionValue can jump the ramp straight past the gate in one frame —
+      // and coming back opaque would pop the whole site in at full strength
+      // instead of fading it up.
+      const s = assets.solidState;
+      if (s.opaque) {
+        s.opaque = false;
+        for (const m of assets.solid) {
+          m.transparent = true;
+          m.needsUpdate = true;
+        }
+      }
+      return;
+    }
 
     // Master opacity: flight ramp times how close the camera actually is —
     // the pier only exists once the descent is INSIDE its bubble.
@@ -2060,7 +2362,20 @@ export function LandingSite({
 
     for (const f of assets.fade) f.m.opacity = f.mul * k;
     assets.domeUniforms.uOpacity.value = kd;
-    assets.moonMat.opacity = MOON_SPRITE_OPACITY * kd;
+
+    // Once the ramp saturates, the fade-only materials go OPAQUE: early-Z
+    // comes back for the deck, the whole city and the lake, and they leave the
+    // sorted transparent pass. Hysteresis (0.999 up / 0.99 down) keeps it from
+    // chattering at the gate boundary; both programs are already compiled.
+    const st = assets.solidState;
+    const wantOpaque = st.opaque ? k >= 0.99 : k >= 0.999;
+    if (wantOpaque !== st.opaque) {
+      st.opaque = wantOpaque;
+      for (const m of assets.solid) {
+        m.transparent = !wantOpaque;
+        m.needsUpdate = true;
+      }
+    }
 
     const e = state.clock.elapsedTime;
     // Moon-path shimmer: a slow breathing of the specular streak. Parked
@@ -2099,17 +2414,23 @@ export function LandingSite({
 
         {/* 3. All opaque architecture: ONE merged vertex-colored draw
             (caisson, pilings, railings, lamp posts, wheel base+struts,
-            Crystal Gardens plinth+ribs, sheds, Head House, shore, tower
-            antennas/penthouses, Marina drums, the Crain wedge). */}
+            Crystal Gardens plinth+ribs, sheds, Head House, the whole
+            shoreline embankment + quay + piers + breakwaters, and every
+            tower's antennas/penthouses/water tanks, the Marina drums and
+            the Crain wedge). This is city batch 1 of 2. */}
         <mesh geometry={assets.archGeo} material={assets.archMat} />
 
         {/* 4. Every light that is ON: pier lamps, wheel hub, Crystal Gardens
             interior, red aircraft-warning beacons. ONE merged draw. */}
         <mesh geometry={assets.glowGeo} material={assets.glowMat} />
 
-        {/* 4b. The Chicago skyline: every facade in ONE merged mesh — dark
-            vertex-tinted albedo, lit window grids sampled from the shared
-            1024² emissive atlas, near/far depth rows, signature silhouettes. */}
+        {/* 4b. The Chicago skyline, city batch 2 of 2: every facade of all
+            ~90 buildings in ONE merged mesh — dark vertex-tinted albedo, lit
+            window grids sampled from the shared 1024²/16-variant emissive
+            atlas (per-building mood, so some towers blaze and some are near
+            black), four depth rows, the signature silhouettes, and the
+            street-level lights / red beacons / rooftop billboards riding the
+            same map through single-texel UVs. */}
         <mesh geometry={assets.windowGeo} material={assets.windowMat} />
 
         {/* 5. Crystal Gardens glass vault: translucent, drawn over the sky. */}
@@ -2151,21 +2472,17 @@ export function LandingSite({
             the real starfield shows through. */}
         <mesh geometry={assets.domeGeo} material={assets.domeMat} renderOrder={1} />
 
-        {/* 9b. Horizon haze: a soft additive ring where the skyline meets the
-            water, warmest toward the city — cheap aerial perspective. Drawn
-            after the dome (renderOrder 2) so it adds over the sky; the
-            depth-written pier and towers clip it where they stand in front. */}
+        {/* 9b. Horizon haze: a THIN warm additive band where the skyline meets
+            the water, warmest toward the city — cheap aerial perspective for a
+            fraction of the fill the old 26-unit skirt cost. Drawn after the
+            dome (renderOrder 2) so it adds over the sky; the depth-written
+            pier and towers clip it where they stand in front. */}
         <mesh geometry={assets.hazeGeo} material={assets.hazeMat} position={[0, HAZE_Y, 0]} renderOrder={2} />
 
-        {/* 10. The moon: one small cool disc glow, high over the lake on the
-            azimuth opposite the city. */}
-        <sprite
-          position={[MOON_AZ_X * 385, MOON_SPRITE_Y, MOON_AZ_Z * 385]}
-          scale={[MOON_SPRITE_SCALE, MOON_SPRITE_SCALE, 1]}
-          renderOrder={2}
-        >
-          <primitive object={assets.moonMat} attach="material" />
-        </sprite>
+        {/* 10. The moon is drawn BY the dome shader (uMoonDir) — it used to be
+            its own additive sprite, which cost a draw call, a material/program
+            and a 256² canvas for one small disc on a surface that was already
+            being rasterized behind it. */}
 
         {/* 10b. Fireworks over the water beside the skyline (adapted from the
             user's RR js/world/fireworks.js): ONE additive Points pool, armed

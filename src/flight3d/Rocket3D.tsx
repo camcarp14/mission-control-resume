@@ -1,29 +1,50 @@
 /* ==== ROCKET 3D — the hero prop ==============================================
  *
- * A Millennium-Falcon-style light freighter built entirely from primitives
- * and canvas textures: a flat weathered saucer-disc hull, two forward
- * mandible prongs with the notch between them, an offset cylindrical cockpit
- * tube on the starboard flank ending in a dark glazed canopy, a round radar
- * dish topside, panel-line greebles everywhere — and the signature: a
- * full-width curved engine strip across the stern glowing hyperdrive blue.
+ * A Millennium-Falcon-style light freighter built entirely from primitives and
+ * canvas textures. Fidelity pass — what actually makes the Falcon read:
  *
- * Contract (unchanged from the craft it replaces): renders at local origin,
- * nose (mandibles) along local -Z. Envelope: z in [-2.2, +2.2] (mandible
- * tips exactly at -2.2, stern band at +2.15), x in [-1.9, +1.9], y in
- * [-1.0, +1.1]. The PARENT drives position/quaternion/scale.
+ *   SILHOUETTE  the hull is not a smooth saucer: a flattened crown and belly
+ *               with a pronounced edge-on RIM BAND, and a top-view outline
+ *               that is a circle INTERRUPTED three ways — the mandible fork
+ *               forward, the cockpit corridor starboard-forward, and two
+ *               engine-deck cutouts flanking the stern band. The cutouts are
+ *               real geometry: the hull lathe is built as four arcs (stern
+ *               deck, main arc, two short-radius cutout arcs) with their UVs
+ *               remapped so the one hull texture still wraps continuously.
+ *   MANDIBLES   wide, flat, BLUNT-ENDED prongs (squared tips, not spikes) that
+ *               flare off the hull with a deep U notch between them — 0.60
+ *               wide, 0.81 deep. Stepped inner faces, raised dorsal spines.
+ *   COCKPIT     starboard, forward: a ribbed corridor that visibly LEAVES the
+ *               hull before the pod, and a flat-topped canopy of exactly five
+ *               trapezoid panes (a 5-facet frustum sector) in a dark frame.
+ *   FURNITURE   quad-laser turret bumps top AND bottom centre, sensor dish
+ *               offset port-forward, boarding-ramp plate under the front.
+ *   CLUTTER     dense merged greeble banks across the rear deck either side of
+ *               the engine band, plus conduit runs radiating from the core.
+ *   ENGINE      the blue strip, inset into a dark recessed housing framed by
+ *               deck lips above and below and by the two cutouts outboard.
  *
- * LANDING: this ship lands FLAT ON ITS BELLY. Three landing-gear pads hang
- * under the disc; their soles sit at exactly local y = -1.0 — the finale
- * stands the craft on that plane. No tail-sitting, no fins.
+ * Everything static is MERGED into five buffers (hull / grey / mid / dark /
+ * gear) so the whole freighter is a handful of draw calls.
+ *
+ * Contract: renders at local origin, nose (mandibles) along local -Z. Envelope
+ * z in [-2.2, +2.2] (mandible tips exactly -2.2, engine lip 2.145), x within
+ * +-1.95, y in [-1.0, +1.1]. The PARENT drives position/quaternion/scale.
+ *
+ * LANDING GEAR: gearRef.current is 0 = fully retracted (in flight) .. 1 =
+ * fully deployed (landed). At 1 every pad sole sits at EXACTLY local y = -1.0
+ * — the plane the finale stands the craft on. At 0 the legs are tucked and the
+ * whole gear group is .visible = false; the belly bay doors close flush.
  *
  * thrustRef is 0..1 (may spike ~1.2); `reduced` gates every continuous
  * animation (band flicker, dish sweep, trail) — value-tracking state (glow
- * intensity, sprite scale) still follows thrust.
+ * intensity, sprite scale, GEAR POSE) still follows its ref.
  * ========================================================================= */
 
 import * as THREE from 'three';
 import { forwardRef, useEffect, useMemo, useRef } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../engine';
 
 const TAU = Math.PI * 2;
@@ -32,47 +53,193 @@ const TAU = Math.PI * 2;
 const HYPER_CORE = '#7db8ff';
 const HYPER_HOT = '#b9dcff';
 
-/* ---- saucer disc -----------------------------------------------------------
- * One lathe (axis = local Y, no mesh rotation needed) sweeps the whole
- * profile: bottom centre -> bottom shell -> rim edge -> top shell -> top
- * centre. Thickness 0.75 at the core tapering to 0.35 at the rim, with a
- * near-flat crown and a straight conic slope — the Falcon read, not a lens.
+/* ---- build-time geometry helpers -------------------------------------------
+ * Everything below runs ONCE at module load. `put` normalises to non-indexed
+ * (mergeGeometries refuses a mixed batch) and bakes a transform in; `bake`
+ * collapses a bucket into a single buffer and drops the intermediates.
  */
-const DISC_R = 1.8;
-const DISC_CORE_HALF = 0.375;
-const DISC_RIM_HALF = 0.175;
-const DISC_N = 20; // segments per shell
-const DISC_LAST = DISC_N * 2 + 4; // last profile index (45 points total)
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const _v = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _s = new THREE.Vector3();
+
+function trs(
+  px: number,
+  py: number,
+  pz: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+  sx = 1,
+  sy = 1,
+  sz = 1,
+): THREE.Matrix4 {
+  return new THREE.Matrix4().compose(
+    _v.set(px, py, pz),
+    _q.setFromEuler(_e.set(rx, ry, rz)),
+    _s.set(sx, sy, sz),
+  );
+}
+
+function mul(a: THREE.Matrix4, b: THREE.Matrix4): THREE.Matrix4 {
+  return new THREE.Matrix4().multiplyMatrices(a, b);
+}
+
+function put(out: THREE.BufferGeometry[], geo: THREE.BufferGeometry, m?: THREE.Matrix4): void {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  if (m) g.applyMatrix4(m);
+  out.push(g);
+}
+
+function bake(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged: THREE.BufferGeometry | null = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  return merged ?? new THREE.BufferGeometry();
+}
+
+/** Axis-aligned box helper (the greeble workhorse), optional yaw. */
+function box(
+  out: THREE.BufferGeometry[],
+  x: number,
+  y: number,
+  z: number,
+  sx: number,
+  sy: number,
+  sz: number,
+  ry = 0,
+): void {
+  put(out, UNIT_BOX, trs(x, y, z, 0, ry, 0, sx, sy, sz));
+}
+
+/* ---- hull profile ----------------------------------------------------------
+ * Half-height of the top shell at radius fraction u. Flat crown out to u=0.34,
+ * two straight conic breaks, then a near-flat shoulder into the rim band. The
+ * bottom mirrors it: the Falcon is a flattened plate, not a lens.
+ */
+/* Hull disc 3.24 across against a 4.4 overall length — the real ship's 1.36:1
+ * length:beam — and its centre pushed AFT so the mandible notch reads deep. */
+const DISC_R = 1.62;
+const DISC_CZ = 0.4;
+const DISC_N = 14; // profile samples per shell
+
+/** Rim band: a near-vertical wrap 0.25 tall with a faint equator bulge. */
+const RIM_PROFILE: ReadonlyArray<readonly [number, number]> = [
+  [DISC_R + 0.006, -0.098],
+  [DISC_R + 0.02, -0.046],
+  [DISC_R + 0.022, 0.046],
+  [DISC_R + 0.006, 0.098],
+];
+const DISC_LAST = DISC_N * 2 + RIM_PROFILE.length + 1; // last profile index
 
 function discY(u: number): number {
-  if (u <= 0.3) return DISC_CORE_HALF - u * 0.1; // near-flat crown
-  const w = (u - 0.3) / 0.7;
-  return DISC_CORE_HALF - 0.03 - (DISC_CORE_HALF - 0.03 - DISC_RIM_HALF) * w; // conic slope
+  if (u <= 0.34) return 0.33; // flat crown
+  if (u <= 0.72) return 0.33 - 0.095 * ((u - 0.34) / 0.38); // shallow slope
+  if (u <= 0.955) return 0.235 - 0.103 * ((u - 0.72) / 0.235); // steeper break
+  return 0.132 - 0.007 * ((u - 0.955) / 0.045); // rim shoulder
 }
 
-function makeDiscGeometry(): THREE.LatheGeometry {
+/** Surface height of the hull at a ship-space (x, z) — greebles ride on it. */
+function surfaceY(x: number, z: number): number {
+  const r = Math.hypot(x, z - DISC_CZ);
+  return discY(Math.min(1, r / DISC_R));
+}
+
+/**
+ * Closed lathe profile out to radius fraction uMax. At uMax = 1 it ends in the
+ * real rim band; short of that it ends in a rounded edge cap — that cap is the
+ * inner face of an engine-deck cutout.
+ */
+function discProfileTo(uMax: number): THREE.Vector2[] {
   const pts: THREE.Vector2[] = [];
   for (let i = 0; i <= DISC_N; i++) {
-    const u = i / DISC_N;
+    const u = (i / DISC_N) * uMax;
     pts.push(new THREE.Vector2(Math.max(0.001, u * DISC_R), -discY(u)));
   }
-  // Rim edge with a subtle equator bulge.
-  pts.push(new THREE.Vector2(DISC_R + 0.015, -0.09));
-  pts.push(new THREE.Vector2(DISC_R + 0.028, 0));
-  pts.push(new THREE.Vector2(DISC_R + 0.015, 0.09));
+  if (uMax > 0.999) {
+    for (const [r, y] of RIM_PROFILE) pts.push(new THREE.Vector2(r, y));
+  } else {
+    const rE = uMax * DISC_R;
+    const hE = discY(uMax);
+    pts.push(new THREE.Vector2(rE + 0.006, -hE * 0.74));
+    pts.push(new THREE.Vector2(rE + 0.014, -hE * 0.3));
+    pts.push(new THREE.Vector2(rE + 0.014, hE * 0.3));
+    pts.push(new THREE.Vector2(rE + 0.006, hE * 0.74));
+  }
   for (let i = DISC_N; i >= 0; i--) {
-    const u = i / DISC_N;
+    const u = (i / DISC_N) * uMax;
     pts.push(new THREE.Vector2(Math.max(0.001, u * DISC_R), discY(u)));
   }
-  return new THREE.LatheGeometry(pts, 96);
+  return pts;
 }
-const DISC_GEO = makeDiscGeometry();
+
+/**
+ * One arc of the hull. LatheGeometry hands back u = i/segments over the arc's
+ * OWN sweep, so we remap it onto the arc's true share of the circle — that is
+ * what lets four separate arcs share one seamless wrapped hull texture.
+ * phi = 0 is +Z (the stern), matching CylinderGeometry's theta.
+ */
+function makeDiscArc(
+  uMax: number,
+  phiStart: number,
+  phiLength: number,
+  segs: number,
+): THREE.BufferGeometry {
+  const g: THREE.BufferGeometry = new THREE.LatheGeometry(
+    discProfileTo(uMax),
+    segs,
+    phiStart,
+    phiLength,
+  );
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  const u0 = phiStart / TAU;
+  const du = phiLength / TAU;
+  for (let i = 0; i < uv.count; i++) uv.setX(i, u0 + uv.getX(i) * du);
+  uv.needsUpdate = true;
+  g.translate(0, 0, DISC_CZ);
+  return g;
+}
+
+/* Cutout sweep: inboard edge of each bite at CUT_A, outboard at CUT_B, and the
+ * hull only reaches CUT_U of full radius inside them. */
+const CUT_A = 0.7;
+const CUT_B = 1.06;
+const CUT_U = 0.76;
+
+const HULL_GEO = ((): THREE.BufferGeometry => {
+  const parts: THREE.BufferGeometry[] = [];
+  put(parts, makeDiscArc(1, -CUT_A, CUT_A * 2, 22)); // stern engine deck
+  put(parts, makeDiscArc(1, CUT_B, TAU - CUT_B * 2, 64)); // main body arc
+  put(parts, makeDiscArc(CUT_U, CUT_A, CUT_B - CUT_A, 6)); // starboard cutout
+  put(parts, makeDiscArc(CUT_U, -CUT_B, CUT_B - CUT_A, 6)); // port cutout
+  return bake(parts);
+})();
+
+/** Flat cross-section of the hull between the cutout radius and the rim — the
+ *  wall that closes each cutout's open lathe edge. Rendered double-sided. */
+function cutoutWallShape(): THREE.Shape {
+  const s = new THREE.Shape();
+  const step = (1 - CUT_U) / 6;
+  s.moveTo(CUT_U * DISC_R, -discY(CUT_U));
+  for (let i = 1; i <= 6; i++) {
+    const u = CUT_U + step * i;
+    s.lineTo(u * DISC_R, -discY(u));
+  }
+  for (const [r, y] of RIM_PROFILE) s.lineTo(r, y);
+  for (let i = 6; i >= 0; i--) {
+    const u = CUT_U + step * i;
+    s.lineTo(u * DISC_R, discY(u));
+  }
+  s.closePath();
+  return s;
+}
+const CUT_WALL_GEO = new THREE.ShapeGeometry(cutoutWallShape());
 
 /* ---- hull texture ----------------------------------------------------------
- * Lathe UVs: u wraps the azimuth (canvas x -> radial seams), v runs along
- * the profile (canvas y -> ring seams at constant radius, mirrored across
- * the rim band in the middle of the canvas). Light warm grey, panel grid,
- * darker patches, rust hints, scorch streaks, greeble dots — lived-in.
+ * Lathe UVs: u wraps the azimuth (canvas x -> radial seams), v runs along the
+ * profile (canvas y -> ring seams at constant radius, mirrored across the rim
+ * band in the middle of the canvas). Light warm grey, panel grid, darker
+ * patches, rust hints, scorch streaks, greeble dots — lived-in.
  */
 let hullCache: THREE.CanvasTexture | null = null;
 function hullTexture(): THREE.CanvasTexture {
@@ -104,7 +271,7 @@ function hullTexture(): THREE.CanvasTexture {
   const RING_US = [0.14, 0.28, 0.42, 0.56, 0.7, 0.84, 0.97];
 
   // Darker replacement panels snapped to the seam grid, both shells.
-  for (let i = 0; i < 52; i++) {
+  for (let i = 0; i < 58; i++) {
     const bi = Math.floor(rand() * (RING_US.length - 1));
     const u1 = RING_US[bi] ?? 0.2;
     const u2 = RING_US[bi + 1] ?? 0.9;
@@ -164,7 +331,18 @@ function hullTexture(): THREE.CanvasTexture {
   ctx.fillStyle = 'rgba(40, 46, 54, 0.35)';
   for (let i = 0; i < 64; i++) {
     if (rand() < 0.35) continue;
-    ctx.fillRect(i * 16 + 5, rimA + 10 + rand() * 40, 6, 34 + rand() * 30);
+    ctx.fillRect(i * 16 + 5, rimA + 8 + rand() * 32, 6, 30 + rand() * 26);
+  }
+
+  // Dense machine clutter painted along the outer decks, both shells — the
+  // Falcon's charm is that nothing out there is a clean surface.
+  for (let i = 0; i < 300; i++) {
+    const topHalf = rand() < 0.5;
+    const u = 0.5 + rand() * 0.45;
+    const y = topHalf ? topY(u) : botY(u);
+    const x = rand() * S;
+    ctx.fillStyle = `rgba(60, 66, 76, ${(0.1 + rand() * 0.24).toFixed(3)})`;
+    ctx.fillRect(x, y, 3 + rand() * 16, 2 + rand() * 7);
   }
 
   // Greeble dots and short ticks scattered everywhere.
@@ -190,8 +368,9 @@ function hullTexture(): THREE.CanvasTexture {
 }
 
 /* ---- cockpit canopy texture ------------------------------------------------
- * Near-black glaze with thin pale frame lines: u wraps the cone, so vertical
- * canvas lines become the pane mullions.
+ * Near-black glaze in a pale frame. The canopy is a FIVE-segment frustum
+ * sector, so its u splits into exactly five equal facets: put a mullion on
+ * every fifth of the canvas and each facet becomes one trapezoid pane.
  */
 let canopyCache: THREE.CanvasTexture | null = null;
 function canopyTexture(): THREE.CanvasTexture {
@@ -201,29 +380,36 @@ function canopyTexture(): THREE.CanvasTexture {
   canvas.width = S;
   canvas.height = S;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  ctx.fillStyle = '#10141a';
+
+  // Dark frame everywhere, glass punched into it.
+  ctx.fillStyle = '#2b3038';
   ctx.fillRect(0, 0, S, S);
+  const pane = S / 5;
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = '#0e1218';
+    ctx.fillRect(i * pane + 7, 30, pane - 14, S - 74);
+  }
   const sheen = ctx.createLinearGradient(0, 0, 0, S);
-  sheen.addColorStop(0, 'rgba(140, 180, 220, 0.1)');
-  sheen.addColorStop(0.5, 'rgba(140, 180, 220, 0.02)');
-  sheen.addColorStop(1, 'rgba(140, 180, 220, 0.08)');
+  sheen.addColorStop(0, 'rgba(150, 190, 230, 0.16)');
+  sheen.addColorStop(0.45, 'rgba(150, 190, 230, 0.03)');
+  sheen.addColorStop(1, 'rgba(150, 190, 230, 0.1)');
   ctx.fillStyle = sheen;
-  ctx.fillRect(0, 0, S, S);
-  ctx.strokeStyle = 'rgba(150, 160, 175, 0.8)';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 8; i++) {
-    const x = i * 32 + 16;
+  ctx.fillRect(0, 30, S, S - 74);
+
+  // Mullions on the facet boundaries + top/bottom frame rails.
+  ctx.strokeStyle = 'rgba(168, 176, 188, 0.9)';
+  ctx.lineWidth = 5;
+  for (let i = 0; i <= 5; i++) {
+    const x = i * pane;
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, S);
+    ctx.moveTo(x, 24);
+    ctx.lineTo(x, S - 40);
     ctx.stroke();
   }
-  for (const y of [86, 170]) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(S, y);
-    ctx.stroke();
-  }
+  ctx.fillStyle = 'rgba(150, 158, 170, 0.85)';
+  ctx.fillRect(0, 20, S, 10);
+  ctx.fillRect(0, S - 50, S, 12);
+
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
@@ -254,98 +440,431 @@ function glowTexture(): THREE.CanvasTexture {
 }
 
 /* ---- mandibles -------------------------------------------------------------
- * Two tapered prongs extruded in the (x, forward) plane, thickness 0.3 in y,
- * rooted inside the disc at z = -1.0 and running to tips at exactly -2.2.
- * Gap between inner faces: 0.5 (x = +-0.25 .. +-0.70 at the root).
+ * Flat slabs in the (x, z) plane, 0.28 thick, roots buried in the hull at
+ * z = -1.02 and tips SQUARED OFF at exactly z = -2.20. Inner faces are
+ * parallel at x = +-0.30, so the U notch is 0.60 wide; the hull's front edge
+ * sits at z = -1.393, making the notch 0.807 deep — deeper than it is wide,
+ * which is the proportion that reads.
+ *
+ * Shape space: sx = ship x, sy = ship -z (so +sy is forward). NOTE three's
+ * extrude bevel pushes the MID section out by bevelSize and leaves the caps on
+ * the contour, so the outline is authored 0.02 shy of where it must land.
  */
-function makeMandibleGeometry(): THREE.ExtrudeGeometry {
-  const s = new THREE.Shape();
-  s.moveTo(-0.225, 0);
-  s.lineTo(0.225, 0);
-  s.lineTo(0.19, 1.06);
-  s.quadraticCurveTo(0.17, 1.2, 0.1, 1.2);
-  s.lineTo(-0.1, 1.2);
-  s.quadraticCurveTo(-0.17, 1.2, -0.19, 1.06);
-  s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, { depth: 0.3, bevelEnabled: false });
-  g.translate(0, 0, -0.15); // center the thickness
-  return g;
-}
-const MANDIBLE_GEO = makeMandibleGeometry();
-
-/* ---- cockpit tube ---------------------------------------------------------- */
-const COCKPIT_ANGLE = -0.205; // yawed slightly outboard, like the real thing
-const COCKPIT_TUBE_GEO = new THREE.CylinderGeometry(0.26, 0.285, 1.04, 18);
-const COCKPIT_RING_GEO = new THREE.TorusGeometry(0.285, 0.022, 8, 22);
-const CANOPY_GEO = new THREE.CylinderGeometry(0.14, 0.26, 0.32, 14, 1, true);
-const CANOPY_TIP_GEO = new THREE.SphereGeometry(0.14, 14, 10);
-
-/* ---- topside / belly furniture --------------------------------------------- */
-const CORE_DISC_GEO = new THREE.CylinderGeometry(0.55, 0.64, 0.16, 28);
-const CORE_DOME_GEO = new THREE.SphereGeometry(0.24, 20, 14);
-const GUN_GEO = new THREE.CylinderGeometry(0.022, 0.032, 0.34, 8);
-const BELLY_TURRET_GEO = new THREE.CylinderGeometry(0.3, 0.34, 0.12, 20);
-const BELLY_DOME_GEO = new THREE.SphereGeometry(0.2, 16, 12);
-const DISH_POST_GEO = new THREE.CylinderGeometry(0.03, 0.04, 0.16, 8);
-const DISH_GEO = new THREE.ConeGeometry(0.28, 0.1, 22, 1, true);
-const DISH_FEED_GEO = new THREE.CylinderGeometry(0.014, 0.014, 0.16, 6);
-const DOCK_GEO = new THREE.CylinderGeometry(0.2, 0.2, 0.34, 16);
-const DOCK_RING_GEO = new THREE.TorusGeometry(0.2, 0.028, 8, 22);
-const GREEBLE_GEO = new THREE.BoxGeometry(1, 1, 1);
-
-/* Scattered hull greebles — seeded, identical every visit. */
-type Greeble = { x: number; y: number; z: number; ry: number; sx: number; sy: number; sz: number };
-const GREEBLES: Greeble[] = [];
-{
-  const rand = mulberry32(0x0fa1c05);
-  for (let i = 0; i < 16; i++) {
-    const a = rand() * TAU;
-    const rr = 0.45 + rand() * 1.0;
-    const top = i < 11;
-    GREEBLES.push({
-      x: Math.cos(a) * rr,
-      y: (top ? 1 : -1) * discY(rr / DISC_R),
-      z: Math.sin(a) * rr,
-      ry: a,
-      sx: 0.08 + rand() * 0.2,
-      sy: 0.05 + rand() * 0.08,
-      sz: 0.08 + rand() * 0.26,
-    });
-  }
-}
-
-/* ---- landing gear ----------------------------------------------------------
- * Three pads under the disc: one forward, two aft. Foot boxes are 0.10 tall,
- * centered at y = -0.95, so every sole sits at EXACTLY local y = -1.0 — the
- * belly-landing plane the finale stands on. Struts bury into the lower shell.
- */
-const GEAR_STRUT_GEO = new THREE.BoxGeometry(0.15, 0.68, 0.2); // y -0.22 .. -0.90
-const GEAR_KNEE_GEO = new THREE.BoxGeometry(0.26, 0.14, 0.3);
-const GEAR_FOOT_GEO = new THREE.BoxGeometry(0.46, 0.1, 0.58); // sole at -1.0
-const GEAR_POS: Array<[number, number]> = [
-  [0, -0.85],
-  [-1.0, 0.8],
-  [1.0, 0.8],
+const MANDIBLE_PTS: ReadonlyArray<readonly [number, number]> = [
+  [0.3, 0.8],
+  [1.04, 0.8],
+  [1.0, 1.12],
+  [0.9, 1.52],
+  [0.855, 1.99],
+  [0.83, 2.09],
+  [0.76, 2.16],
+  [0.38, 2.16],
+  [0.3, 2.08],
 ];
 
-/* ---- the hyperdrive strip --------------------------------------------------
- * A curved band wrapped along the disc's rear arc, standing just proud of
- * the rim: dark backing wall + top/bottom deck plates bridging to the hull,
- * with the emissive core band (and a hotter centre stripe) as the outermost
- * rear-facing surface. Chord width ~2.6 (x +-1.3), rear-most z = 2.15.
- */
-const BAND_HALF = 0.66; // asin(1.3 / 2.10)
-const WALL_HALF = BAND_HALF + 0.04;
-const ENGINE_WALL_GEO = new THREE.CylinderGeometry(2.04, 2.04, 0.44, 40, 1, true, -WALL_HALF, 2 * WALL_HALF);
-const ENGINE_CORE_GEO = new THREE.CylinderGeometry(2.1, 2.1, 0.26, 40, 1, true, -BAND_HALF, 2 * BAND_HALF);
-const ENGINE_HOT_GEO = new THREE.CylinderGeometry(2.13, 2.13, 0.11, 32, 1, true, -0.5, 1.0);
-const ENGINE_PLATE_GEO = new THREE.RingGeometry(1.66, 2.15, 30, 1, -Math.PI / 2 - WALL_HALF, 2 * WALL_HALF);
-const ENGINE_CAP_GEO = new THREE.BoxGeometry(0.1, 0.44, 0.36);
+function makeMandibleGeometry(side: 1 | -1): THREE.ExtrudeGeometry {
+  const s = new THREE.Shape();
+  const pts = side === 1 ? MANDIBLE_PTS : [...MANDIBLE_PTS].reverse();
+  pts.forEach(([x, y], i) => {
+    if (i === 0) s.moveTo(x * side, y);
+    else s.lineTo(x * side, y);
+  });
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: 0.24,
+    bevelEnabled: true,
+    bevelThickness: 0.02,
+    bevelSize: 0.02,
+    bevelSegments: 1,
+  });
+  g.translate(0, 0, -0.12); // centre the 0.28 total thickness on z = 0
+  g.rotateX(-Math.PI / 2); // (sx, sy, d) -> (x, y, -z): +sy becomes forward
+  return g;
+}
 
-const GLOW_POS: Array<[number, number, number]> = [
-  [-0.85, 0, 2.06],
-  [0, 0, 2.3],
-  [0.85, 0, 2.06],
+/* ---- engine housing --------------------------------------------------------
+ * The band is INSET: a dark back wall and grille bars sit at r 1.735-1.82, the
+ * emissive core at r 1.80, and deck lip rings reach out to r 1.865 above and
+ * below — so the glow reads as recessed under a lip, framed outboard by the
+ * two engine-deck cutouts. Rear-most solid: DISC_CZ + 1.865 = 2.145.
+ */
+const BAND_HALF = 0.6;
+const HOUSE_HALF = 0.665;
+const ENG_R_BACK = 1.655;
+const ENG_R_CORE = 1.72;
+const ENG_R_HOT = 1.745;
+const ENG_R_LIP = 1.785;
+
+const ENGINE_CORE_GEO = new THREE.CylinderGeometry(
+  ENG_R_CORE,
+  ENG_R_CORE,
+  0.23,
+  30,
+  1,
+  true,
+  -BAND_HALF,
+  2 * BAND_HALF,
+).translate(0, 0, DISC_CZ);
+const ENGINE_HOT_GEO = new THREE.CylinderGeometry(
+  ENG_R_HOT,
+  ENG_R_HOT,
+  0.095,
+  24,
+  1,
+  true,
+  -0.42,
+  0.84,
+).translate(0, 0, DISC_CZ);
+
+/* ---- cockpit ---------------------------------------------------------------
+ * Root buried at (1.38, 0.03, -0.10) and yawed 0.17 rad outboard, so the tube
+ * leaves the hull around local z = -0.5 and runs another 0.55 in clear air
+ * before the pod — it reads as an attached CORRIDOR, not a fairing.
+ */
+const COCKPIT_ROOT: readonly [number, number, number] = [1.34, 0.03, -0.1];
+const COCKPIT_YAW = -0.17;
+const COCKPIT_M = trs(COCKPIT_ROOT[0], COCKPIT_ROOT[1], COCKPIT_ROOT[2], 0, COCKPIT_YAW, 0);
+
+/** Five equal facets wrapping 216 deg about "up" = five trapezoid panes. The
+ *  cone is deliberately steep (34 deg) so the panes face FORWARD, not out. */
+const CANOPY_GEO = ((): THREE.BufferGeometry => {
+  const g = new THREE.CylinderGeometry(0.115, 0.3, 0.27, 5, 1, true, -1.885, 3.77);
+  g.rotateX(-Math.PI / 2); // axis along -Z (forward); theta 0 points up
+  g.applyMatrix4(mul(COCKPIT_M, trs(0, 0, -1.445)));
+  return g;
+})();
+
+/* ---- sensor dish (the one animated sub-assembly) --------------------------- */
+const DISH_GEO = ((): THREE.BufferGeometry => {
+  const parts: THREE.BufferGeometry[] = [];
+  const dish = new THREE.ConeGeometry(0.27, 0.1, 20, 1, true);
+  put(parts, dish, trs(0, 0, 0, Math.PI, 0, 0));
+  dish.dispose();
+  const feed = new THREE.CylinderGeometry(0.014, 0.014, 0.17, 6);
+  put(parts, feed, trs(0, 0.075, 0));
+  feed.dispose();
+  const horn = new THREE.SphereGeometry(0.032, 8, 6);
+  put(parts, horn, trs(0, 0.15, 0));
+  horn.dispose();
+  return bake(parts);
+})();
+const DISH_PIVOT: readonly [number, number, number] = [-0.66, 0.43, -0.3];
+
+/* ---- landing gear ----------------------------------------------------------
+ * Three legs: one forward, two aft. Authored in the DEPLOYED pose, so every
+ * pad sole is at exactly y = -1.0. Retraction is a pure translation of the one
+ * shared gear group along local -Y by GEAR_TUCK, which lifts the soles to
+ * y = -0.58 (tucked) before the group is hidden outright below gear 0.02.
+ */
+const GEAR_TUCK = 0.42;
+const GEAR_POS: ReadonlyArray<readonly [number, number]> = [
+  [0, -0.66],
+  [-1.02, 1.02],
+  [1.02, 1.02],
+];
+/** Per-leg upper-strut top, tucked just under that leg's local hull surface. */
+const GEAR_TOP: readonly number[] = [-0.24, -0.2, -0.2];
+
+const { GEAR_MID_GEO, GEAR_DARK_GEO } = ((): {
+  GEAR_MID_GEO: THREE.BufferGeometry;
+  GEAR_DARK_GEO: THREE.BufferGeometry;
+} => {
+  const mid: THREE.BufferGeometry[] = [];
+  const dark: THREE.BufferGeometry[] = [];
+  GEAR_POS.forEach(([gx, gz], i) => {
+    const top = GEAR_TOP[i] ?? -0.22;
+    const kneeY = -0.63;
+    box(mid, gx, (top + kneeY) / 2, gz, 0.13, kneeY - top, 0.15); // upper strut
+    box(mid, gx, kneeY, gz, 0.19, 0.11, 0.2); // knee / shock collar
+    box(dark, gx, -0.79, gz, 0.1, 0.3, 0.12); // lower strut
+    box(mid, gx, -0.9, gz, 0.3, 0.05, 0.36); // pad yoke
+    box(dark, gx, -0.95, gz, 0.44, 0.1, 0.52); // foot pad, sole at -1.00
+    box(dark, gx - 0.15, -0.985, gz, 0.06, 0.03, 0.44); // cleats, also at -1.00
+    box(dark, gx + 0.15, -0.985, gz, 0.06, 0.03, 0.44);
+  });
+  return { GEAR_MID_GEO: bake(mid), GEAR_DARK_GEO: bake(dark) };
+})();
+
+/* Bay doors: two per bay, hinged on the outboard edge, swinging down/out.
+ * Left doors take +rotation.z, right doors -rotation.z. */
+const DOOR_MAX = 1.5;
+const DOOR_HALF = 0.33;
+const DOOR_L_GEO = new THREE.BoxGeometry(DOOR_HALF, 0.03, 0.56).translate(-DOOR_HALF / 2, 0, 0);
+const DOOR_R_GEO = new THREE.BoxGeometry(DOOR_HALF, 0.03, 0.56).translate(DOOR_HALF / 2, 0, 0);
+/** [x, y, z] of every door hinge, ordered left, right, left, right, ... */
+const DOOR_SLOTS: ReadonlyArray<readonly [number, number, number]> = GEAR_POS.flatMap(
+  ([gx, gz]) => {
+    const y = -surfaceY(gx, gz) - 0.012;
+    return [
+      [gx - DOOR_HALF, y, gz] as const,
+      [gx + DOOR_HALF, y, gz] as const,
+    ];
+  },
+);
+
+/* ---- every static detail, merged into three buffers ------------------------ */
+const { GREY_GEO, MID_GEO, DARK_GEO } = ((): {
+  GREY_GEO: THREE.BufferGeometry;
+  MID_GEO: THREE.BufferGeometry;
+  DARK_GEO: THREE.BufferGeometry;
+} => {
+  const grey: THREE.BufferGeometry[] = [];
+  const mid: THREE.BufferGeometry[] = [];
+  const dark: THREE.BufferGeometry[] = [];
+  const scrap: THREE.BufferGeometry[] = []; // sources to dispose after baking
+
+  const src = <T extends THREE.BufferGeometry>(g: T): T => {
+    scrap.push(g);
+    return g;
+  };
+
+  /* --- MANDIBLES ---------------------------------------------------------- */
+  for (const side of [1, -1] as const) {
+    put(grey, src(makeMandibleGeometry(side)));
+    const sx = side;
+    // Raised dorsal spine, stepped in two tiers.
+    box(mid, sx * 0.66, 0.155, -1.56, 0.3, 0.05, 1.18);
+    box(grey, sx * 0.66, 0.195, -1.66, 0.17, 0.05, 0.92);
+    // Shallow ventral keel.
+    box(mid, sx * 0.64, -0.155, -1.55, 0.24, 0.05, 1.06);
+    // Stepped inner face: two tiers standing proud of the flush mid-face at
+    // x = +-0.28, so the notch wall reads as machined, not as a slab edge.
+    box(grey, sx * 0.252, 0.075, -1.62, 0.065, 0.09, 1.1);
+    box(dark, sx * 0.268, -0.085, -1.62, 0.05, 0.075, 1.1);
+    // Outer-face conduit run.
+    box(dark, sx * 0.9, 0.0, -1.62, 0.05, 0.12, 1.0);
+    // Squared-off blunt tip: pale cap plate so the dark U notch reads against
+    // it head-on. Its front face is at exactly z = -2.20.
+    box(mid, sx * 0.57, 0, -2.185, 0.36, 0.24, 0.03);
+    box(dark, sx * 0.57, 0, -2.17, 0.16, 0.13, 0.05);
+    box(mid, sx * 0.6, 0.135, -2.02, 0.2, 0.06, 0.2);
+    box(dark, sx * 0.48, -0.135, -1.93, 0.14, 0.05, 0.3);
+    // Root blister where the prong swallows into the hull.
+    box(mid, sx * 0.82, 0.13, -0.95, 0.28, 0.09, 0.3);
+  }
+  // Dark bulkhead across the back of the U notch, at the hull's front edge.
+  box(dark, 0, 0, -1.28, 0.5, 0.2, 0.16);
+  box(mid, 0, 0.12, -1.24, 0.4, 0.07, 0.2);
+
+  /* --- ENGINE-DECK CUTOUT WALLS ------------------------------------------- */
+  for (const th of [CUT_A, CUT_B, -CUT_A, -CUT_B]) {
+    put(dark, CUT_WALL_GEO, trs(0, 0, DISC_CZ, 0, th - Math.PI / 2, 0));
+  }
+
+  /* --- ENGINE HOUSING ------------------------------------------------------ */
+  put(
+    dark,
+    src(
+      new THREE.CylinderGeometry(
+        ENG_R_BACK,
+        ENG_R_BACK,
+        0.34,
+        26,
+        1,
+        true,
+        -HOUSE_HALF,
+        2 * HOUSE_HALF,
+      ),
+    ),
+    trs(0, 0, DISC_CZ),
+  );
+  const lip = src(
+    new THREE.RingGeometry(1.45, ENG_R_LIP, 22, 1, -Math.PI / 2 - HOUSE_HALF, 2 * HOUSE_HALF),
+  );
+  put(dark, lip, trs(0, 0.155, DISC_CZ, -Math.PI / 2, 0, 0));
+  put(dark, lip, trs(0, -0.155, DISC_CZ, -Math.PI / 2, 0, 0));
+  for (const s of [1, -1] as const) {
+    const th = s * HOUSE_HALF;
+    box(dark, 1.66 * Math.sin(th), 0, DISC_CZ + 1.66 * Math.cos(th), 0.05, 0.34, 0.24, th);
+  }
+  // Grille bars breaking the strip up, and deck ribs above/below it.
+  for (const th of [-0.44, -0.21, 0.21, 0.44]) {
+    box(dark, 1.735 * Math.sin(th), 0, DISC_CZ + 1.735 * Math.cos(th), 0.035, 0.26, 0.05, th);
+  }
+  for (const th of [-0.52, -0.3, 0, 0.3, 0.52]) {
+    for (const sy of [1, -1] as const) {
+      box(
+        mid,
+        1.58 * Math.sin(th),
+        sy * 0.175,
+        DISC_CZ + 1.58 * Math.cos(th),
+        0.09,
+        0.05,
+        0.22,
+        th,
+      );
+    }
+  }
+
+  /* --- TOP QUAD-LASER TURRET ---------------------------------------------- */
+  const TURRET_Z = DISC_CZ + 0.05;
+  // Low lip ring around the flat crown.
+  put(grey, src(new THREE.CylinderGeometry(0.52, 0.56, 0.06, 26)), trs(0, 0.335, DISC_CZ));
+  put(grey, src(new THREE.CylinderGeometry(0.3, 0.34, 0.14, 20)), trs(0, 0.4, TURRET_Z));
+  put(
+    mid,
+    src(new THREE.SphereGeometry(0.24, 18, 12)),
+    trs(0, 0.47, TURRET_Z, 0, 0, 0, 1, 0.68, 1),
+  );
+  box(dark, 0, 0.56, TURRET_Z - 0.02, 0.32, 0.08, 0.11);
+  for (const s of [1, -1] as const) {
+    put(
+      dark,
+      src(new THREE.CylinderGeometry(0.026, 0.034, 0.36, 8)),
+      trs(s * 0.075, 0.6, TURRET_Z - 0.06, -1.15, 0, 0),
+    );
+  }
+
+  /* --- BELLY QUAD-LASER TURRET -------------------------------------------- */
+  put(grey, src(new THREE.CylinderGeometry(0.34, 0.3, 0.14, 20)), trs(0, -0.4, TURRET_Z));
+  put(
+    mid,
+    src(new THREE.SphereGeometry(0.22, 16, 10)),
+    trs(0, -0.47, TURRET_Z, 0, 0, 0, 1, 0.7, 1),
+  );
+  box(dark, 0, -0.55, TURRET_Z - 0.02, 0.3, 0.07, 0.1);
+  for (const s of [1, -1] as const) {
+    put(
+      dark,
+      src(new THREE.CylinderGeometry(0.024, 0.032, 0.32, 8)),
+      trs(s * 0.07, -0.58, TURRET_Z - 0.06, 1.15, 0, 0),
+    );
+  }
+
+  /* --- SENSOR DISH MOUNT (port-forward) ----------------------------------- */
+  put(dark, src(new THREE.CylinderGeometry(0.035, 0.05, 0.2, 8)), trs(-0.66, 0.34, -0.3));
+  box(mid, -0.66, 0.27, -0.3, 0.2, 0.06, 0.2);
+
+  /* --- COCKPIT: collar, ribbed corridor, pod, canopy frame ----------------- */
+  const cp = (px: number, py: number, pz: number, rx = 0): THREE.Matrix4 =>
+    mul(COCKPIT_M, trs(px, py, pz, rx, 0, 0));
+  put(grey, src(new THREE.CylinderGeometry(0.3, 0.33, 0.18, 16)), cp(0, 0, 0.02, -Math.PI / 2));
+  put(grey, src(new THREE.CylinderGeometry(0.235, 0.27, 1.04, 16)), cp(0, 0, -0.53, -Math.PI / 2));
+  const rib = src(new THREE.TorusGeometry(0.256, 0.026, 6, 18));
+  for (const z of [-0.2, -0.46, -0.72, -0.96]) put(mid, rib, cp(0, 0, z));
+  // Pod body, then the shell under the canopy sector, then the nose cap.
+  put(grey, src(new THREE.CylinderGeometry(0.295, 0.3, 0.26, 16)), cp(0, 0, -1.18, -Math.PI / 2));
+  put(
+    grey,
+    src(new THREE.CylinderGeometry(0.115, 0.3, 0.27, 8, 1, true, 1.885, TAU - 3.77)),
+    cp(0, 0, -1.445, -Math.PI / 2),
+  );
+  put(
+    mid,
+    src(new THREE.SphereGeometry(0.115, 12, 8)),
+    mul(COCKPIT_M, trs(0, 0, -1.58, 0, 0, 0, 1, 1, 0.6)),
+  );
+  // Flat dark brow capping the canopy, and a frame rail at its base.
+  put(dark, UNIT_BOX, mul(COCKPIT_M, trs(0, 0.215, -1.4, -0.5, 0, 0, 0.28, 0.04, 0.3)));
+  put(dark, src(new THREE.TorusGeometry(0.3, 0.026, 6, 18)), cp(0, 0, -1.31));
+  put(dark, UNIT_BOX, mul(COCKPIT_M, trs(0.2, 0.16, -1.2, 0, 0, 0, 0.1, 0.07, 0.22)));
+  put(dark, UNIT_BOX, mul(COCKPIT_M, trs(-0.2, 0.16, -1.2, 0, 0, 0, 0.1, 0.07, 0.22)));
+
+  /* --- DOCKING RINGS, both flanks ----------------------------------------- */
+  for (const s of [1, -1] as const) {
+    const dx = s * 1.52;
+    const dz = s === 1 ? 0.72 : 0.34;
+    put(grey, src(new THREE.CylinderGeometry(0.2, 0.2, 0.34, 14)), trs(dx, 0, dz, 0, 0, Math.PI / 2));
+    put(mid, src(new THREE.TorusGeometry(0.2, 0.03, 8, 20)), trs(dx + s * 0.15, 0, dz, 0, Math.PI / 2, 0));
+  }
+
+  /* --- BOARDING RAMP PLATE, underside front-centre ------------------------- */
+  const rampY = -surfaceY(0, -0.55);
+  put(dark, UNIT_BOX, trs(0, rampY - 0.008, -0.55, 0.14, 0, 0, 0.46, 0.05, 0.72));
+  put(mid, UNIT_BOX, trs(0, rampY + 0.008, -0.55, 0.14, 0, 0, 0.54, 0.04, 0.8));
+
+  /* --- LANDING-GEAR BAYS: dark recess + hinge rails (static) --------------- */
+  GEAR_POS.forEach(([gx, gz]) => {
+    const sy = -surfaceY(gx, gz);
+    box(dark, gx, sy + 0.105, gz, 0.62, 0.2, 0.54);
+    box(mid, gx - DOOR_HALF, sy + 0.02, gz, 0.05, 0.05, 0.58);
+    box(mid, gx + DOOR_HALF, sy + 0.02, gz, 0.05, 0.05, 0.58);
+  });
+
+  /* --- REAR-DECK GREEBLE BANK + CONDUIT RUNS ------------------------------- */
+  const rand = mulberry32(0x0fa1c05);
+
+  // Dense mechanical clutter across the rear deck, both sides of the band.
+  for (let i = 0; i < 34; i++) {
+    const s = i % 2 === 0 ? 1 : -1;
+    const th = s * (0.14 + rand() * 0.52);
+    const rr = 0.78 + rand() * 0.6;
+    const up = rand() < 0.62;
+    const x = rr * Math.sin(th);
+    const z = DISC_CZ + rr * Math.cos(th);
+    const h = 0.04 + rand() * 0.07;
+    const y = (up ? 1 : -1) * (surfaceY(x, z) + h * 0.35);
+    const roll = rand();
+    box(
+      roll < 0.34 ? dark : roll < 0.7 ? mid : grey,
+      x,
+      y,
+      z,
+      0.08 + rand() * 0.18,
+      h,
+      0.09 + rand() * 0.26,
+      th,
+    );
+  }
+
+  // A few upright tanks / vents standing on the rear deck.
+  for (const th of [-0.5, -0.28, 0.28, 0.5]) {
+    const rr = 1.06 + (th > 0 ? 0.08 : 0);
+    const x = rr * Math.sin(th);
+    const z = DISC_CZ + rr * Math.cos(th);
+    put(mid, src(new THREE.CylinderGeometry(0.055, 0.065, 0.11, 10)), trs(x, surfaceY(x, z) + 0.04, z));
+  }
+
+  // Larger conduit runs radiating from the core, top and bottom.
+  for (const [th, up] of [
+    [2.25, 1],
+    [-2.25, 1],
+    [1.55, 1],
+    [-1.55, -1],
+    [2.7, -1],
+    [-2.7, -1],
+  ] as ReadonlyArray<readonly [number, number]>) {
+    const rr = 1.02;
+    const x = rr * Math.sin(th);
+    const z = DISC_CZ + rr * Math.cos(th);
+    const y = up * (surfaceY(x, z) + 0.035);
+    box(mid, x, y, z, 0.09, 0.08, 0.82, th);
+    box(dark, x, y + up * 0.05, z, 0.05, 0.04, 0.68, th);
+    const xe = 0.62 * Math.sin(th);
+    const ze = DISC_CZ + 0.62 * Math.cos(th);
+    box(dark, xe, up * (surfaceY(xe, ze) + 0.05), ze, 0.16, 0.1, 0.16, th);
+  }
+
+  // Scattered half-buried machinery across the rest of the hull.
+  for (let i = 0; i < 22; i++) {
+    const a = rand() * TAU;
+    const rr = 0.48 + rand() * 0.92;
+    const up = i < 14;
+    const x = rr * Math.sin(a);
+    const z = DISC_CZ + rr * Math.cos(a);
+    const h = 0.04 + rand() * 0.07;
+    box(
+      i % 3 === 0 ? dark : i % 3 === 1 ? mid : grey,
+      x,
+      (up ? 1 : -1) * (surfaceY(x, z) + h * 0.3),
+      z,
+      0.08 + rand() * 0.2,
+      h,
+      0.08 + rand() * 0.26,
+      a,
+    );
+  }
+
+  const out = { GREY_GEO: bake(grey), MID_GEO: bake(mid), DARK_GEO: bake(dark) };
+  for (const g of scrap) g.dispose();
+  return out;
+})();
+
+/* Stern glow sprites, sitting on the band's arc. */
+const GLOW_POS: ReadonlyArray<readonly [number, number, number]> = [
+  [-0.72, 0, 1.96],
+  [0, 0, 2.12],
+  [0.72, 0, 1.96],
 ];
 const GLOW_BASE = [0.85, 1.3, 0.85];
 
@@ -353,9 +872,8 @@ const GLOW_BASE = [0.85, 1.3, 0.85];
  * The signature system, kept exactly in architecture: points live in SCENE
  * space (portal) so the wash arcs along the flight path; ring buffer recycled
  * in place; real-metre projected sizing via uH; screen-space smear along
- * travel RELATIVE to the camera. Re-tuned: emission spread across the stern
- * strip (+-1.1 local x, following the band's arc), white-blue aging, 2.4 s
- * life, alpha peak ~0.45 — hyperdrive wash, not fire.
+ * travel RELATIVE to the camera. Emission is spread across the stern strip
+ * following the band's arc — white-blue aging, 2.4 s life, alpha peak ~0.45.
  */
 const T_COUNT = 260;
 const T_LIFE = 2.4;
@@ -379,10 +897,10 @@ const T_EMIT = new Float32Array(T_COUNT * 3); // local emit point along the ster
     T_SIZE[i] = 0.16 + rand() * 0.24;
     T_SOFT[i] = 0.22 + rand() * 0.36;
     T_SEED[i] = rand() * 6.283;
-    const ex = (rand() - 0.5) * 2.2; // spread across the strip, +-1.1
+    const ex = (rand() - 0.5) * 1.68; // spread across the strip, +-0.84
     T_EMIT[i * 3] = ex;
     T_EMIT[i * 3 + 1] = (rand() - 0.5) * 0.16;
-    T_EMIT[i * 3 + 2] = Math.sqrt(2.12 * 2.12 - ex * ex) + 0.05; // just behind the band's arc
+    T_EMIT[i * 3 + 2] = DISC_CZ + Math.sqrt(Math.max(0.04, 1.8 * 1.8 - ex * ex));
   }
 }
 
@@ -493,17 +1011,22 @@ function makeTrailState(): TrailState {
 type Rocket3DProps = {
   /** 0..1 burn intensity (may spike ~1.2), written by the parent each frame. */
   thrustRef: { current: number };
-  /** True gates ALL continuous animation; value-tracking state still follows thrust. */
+  /** 0 = gear fully retracted (in flight) .. 1 = fully deployed (landed). */
+  gearRef?: { current: number };
+  /** True gates ALL continuous animation; value-tracking state still follows its ref. */
   reduced: boolean;
 };
 
 export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D(
-  { thrustRef, reduced },
+  { thrustRef, gearRef, reduced },
   ref,
 ) {
   const scene = useThree((s) => s.scene);
   const groupRef = useRef<THREE.Group | null>(null);
   const dishRef = useRef<THREE.Group | null>(null);
+  const gearGroupRef = useRef<THREE.Group | null>(null);
+  const doorRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null, null, null]);
+  const gearPrev = useRef(-1);
   const glowRefs = useRef<Array<THREE.Sprite | null>>([null, null, null]);
   const lightRef = useRef<THREE.PointLight | null>(null);
   const trail = useMemo(makeTrailState, []);
@@ -549,12 +1072,7 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
           emissiveIntensity: 0.45,
           roughness: 0.18,
           metalness: 0.25,
-        }),
-        glassDark: new THREE.MeshStandardMaterial({
-          color: '#10141a',
-          roughness: 0.15,
-          metalness: 0.3,
-          envMapIntensity: 1.0,
+          side: THREE.DoubleSide,
         }),
         engineCore: new THREE.MeshStandardMaterial({
           color: '#0b111c',
@@ -637,10 +1155,32 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     // ---- belly repulsor under-glow: fades in above thrust 0.6 (landing read).
     mats.underGlow.opacity = thrust > 0.6 ? Math.min(0.5, (thrust - 0.6) * 1.2) : 0;
 
+    // ---- LANDING GEAR: pure value-tracking off gearRef, so it still poses
+    // correctly under reduced motion. 0 = stowed (hidden), 1 = soles at -1.0.
+    const raw = gearRef ? gearRef.current : 0;
+    // Written so a NaN falls through to 0 rather than poisoning the transform.
+    const gear = raw > 0 ? (raw < 1 ? raw : 1) : 0;
+    if (gear !== gearPrev.current) {
+      gearPrev.current = gear;
+      const gg = gearGroupRef.current;
+      if (gg) {
+        const shown = gear > 0.02;
+        gg.visible = shown;
+        if (shown) gg.position.y = (1 - gear) * GEAR_TUCK;
+      }
+      // Doors lead the legs: fully open by gear 0.4, smoothstepped.
+      const o = Math.min(1, gear / 0.4);
+      const angle = o * o * (3 - 2 * o) * DOOR_MAX;
+      for (let i = 0; i < 6; i++) {
+        const d = doorRefs.current[i];
+        if (d) d.rotation.z = i % 2 === 0 ? angle : -angle;
+      }
+    }
+
     // Everything past here is pure motion — parked entirely under reduced.
     if (reduced) return;
 
-    // ---- radar dish: slow 0.1 rad/s sweep.
+    // ---- sensor dish: slow 0.1 rad/s sweep.
     const dish = dishRef.current;
     if (dish) dish.rotation.y = (dish.rotation.y + 0.1 * dt) % TAU;
 
@@ -723,131 +1263,65 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         else if (ref) ref.current = g;
       }}
     >
-      {/* Saucer disc — lathe axis is already local Y, no rotation needed. */}
-      <mesh geometry={DISC_GEO} material={mats.hull} />
+      {/* Hull: four lathe arcs merged into one textured shell — main body,
+          stern engine deck, and the two short-radius engine-deck cutouts that
+          bite the top-view outline either side of the band. */}
+      <mesh geometry={HULL_GEO} material={mats.hull} />
 
-      {/* Raised core disc + dome + gun stubs at top centre. */}
-      <mesh geometry={CORE_DISC_GEO} material={mats.grey} position={[0, 0.43, 0]} />
-      <mesh geometry={CORE_DOME_GEO} material={mats.greyDark} position={[0, 0.53, 0]} scale={[1, 0.75, 1]} />
-      {([-1, 1] as const).map((s) => (
-        <mesh
-          key={s}
-          geometry={GUN_GEO}
-          material={mats.dark}
-          position={[s * 0.05, 0.64, -0.08]}
-          rotation={[-1.0, 0, s * 0.12]}
-        />
-      ))}
+      {/* Everything static: mandibles, cockpit corridor + pod, turret bumps,
+          docking rings, ramp plate, cutout walls, engine housing, greebles. */}
+      <mesh geometry={GREY_GEO} material={mats.grey} />
+      <mesh geometry={MID_GEO} material={mats.greyDark} />
+      <mesh geometry={DARK_GEO} material={mats.dark} />
 
-      {/* Belly turret bump at bottom centre. */}
-      <group position={[0, -0.42, 0]}>
-        <mesh geometry={BELLY_TURRET_GEO} material={mats.grey} />
-        <mesh geometry={BELLY_DOME_GEO} material={mats.greyDark} position={[0, -0.07, 0]} scale={[1, 0.7, 1]} />
-      </group>
+      {/* Five trapezoid panes in a dark frame, flat across the top. */}
+      <mesh geometry={CANOPY_GEO} material={mats.canopy} />
 
-      {/* Mandibles: tapered prongs, roots buried in the disc at z = -1.0,
-          tips at exactly -2.2, notch 0.5 wide between the inner faces. */}
-      {([-1, 1] as const).map((s) => (
-        <group key={s} position={[s * 0.475, 0, -1.0]}>
-          <mesh geometry={MANDIBLE_GEO} material={mats.grey} rotation={[-Math.PI / 2, 0, 0]} />
-          {/* Inner detail plate facing the notch. */}
-          <mesh
-            geometry={GREEBLE_GEO}
-            material={mats.greyDark}
-            position={[-s * 0.24, 0, -0.62]}
-            scale={[0.05, 0.2, 0.85]}
-          />
-          {/* Jaw pad at the tip, pointing at its twin. */}
-          <mesh
-            geometry={GREEBLE_GEO}
-            material={mats.dark}
-            position={[-s * 0.19, 0, -1.08]}
-            scale={[0.09, 0.31, 0.2]}
-          />
-          {/* Greeble boxes along the top and bottom faces. */}
-          <mesh geometry={GREEBLE_GEO} material={mats.greyDark} position={[0, 0.16, -0.32]} scale={[0.2, 0.07, 0.3]} />
-          <mesh
-            geometry={GREEBLE_GEO}
-            material={mats.dark}
-            position={[-s * 0.05, 0.16, -0.72]}
-            scale={[0.14, 0.05, 0.2]}
-          />
-          <mesh
-            geometry={GREEBLE_GEO}
-            material={mats.greyDark}
-            position={[s * 0.04, -0.16, -0.5]}
-            scale={[0.16, 0.05, 0.22]}
-          />
-        </group>
-      ))}
-
-      {/* Cockpit: starboard tube yawed slightly outboard, dark glazed canopy
-          cone + tip cap overhanging the front-starboard rim. */}
-      <group position={[1.3, 0.02, 0.3]} rotation={[0, COCKPIT_ANGLE, 0]}>
-        <mesh geometry={COCKPIT_TUBE_GEO} material={mats.grey} position={[0, 0, -0.52]} rotation={[-Math.PI / 2, 0, 0]} />
-        <mesh geometry={COCKPIT_RING_GEO} material={mats.greyDark} position={[0, 0, -0.28]} />
-        <mesh geometry={COCKPIT_RING_GEO} material={mats.greyDark} position={[0, 0, -0.72]} />
-        <mesh geometry={CANOPY_GEO} material={mats.canopy} position={[0, 0, -1.2]} rotation={[-Math.PI / 2, 0, 0]} />
-        <mesh geometry={CANOPY_TIP_GEO} material={mats.glassDark} position={[0, 0, -1.36]} scale={[1, 1, 0.55]} />
-      </group>
-
-      {/* Port-side docking ring stub, balancing the cockpit. */}
-      <group position={[-1.72, 0, 0.1]}>
-        <mesh geometry={DOCK_GEO} material={mats.grey} rotation={[0, 0, Math.PI / 2]} />
-        <mesh geometry={DOCK_RING_GEO} material={mats.greyDark} position={[-0.14, 0, 0]} rotation={[0, Math.PI / 2, 0]} />
-      </group>
-
-      {/* Radar dish: slow sweep (parked under reduced), slight tilt. */}
-      <group position={[-0.6, 0.32, -0.2]}>
-        <mesh geometry={DISH_POST_GEO} material={mats.dark} position={[0, 0.07, 0]} />
+      {/* Sensor dish: slow sweep (parked under reduced), offset port-forward. */}
+      <group position={[DISH_PIVOT[0], DISH_PIVOT[1], DISH_PIVOT[2]]}>
         <group
           ref={(g: THREE.Group | null) => {
             dishRef.current = g;
           }}
-          position={[0, 0.17, 0]}
         >
-          <group rotation={[-0.6, 0, 0]}>
-            <mesh geometry={DISH_GEO} material={mats.dark} rotation={[Math.PI, 0, 0]} />
-            <mesh geometry={DISH_FEED_GEO} material={mats.dark} position={[0, 0.07, 0]} />
+          <group rotation={[-0.62, 0, 0]}>
+            <mesh geometry={DISH_GEO} material={mats.dark} />
           </group>
         </group>
       </group>
 
-      {/* Scattered hull greebles, seeded — half-buried machinery boxes. */}
-      {GREEBLES.map((g, i) => (
-        <mesh
-          key={i}
-          geometry={GREEBLE_GEO}
-          material={i % 3 === 0 ? mats.dark : i % 3 === 1 ? mats.greyDark : mats.grey}
-          position={[g.x, g.y, g.z]}
-          rotation={[0, g.ry, 0]}
-          scale={[g.sx, g.sy, g.sz]}
-        />
-      ))}
-
-      {/* Landing gear: three pads, soles at EXACTLY y = -1.0. */}
-      {GEAR_POS.map(([gx, gz], i) => (
-        <group key={i} position={[gx, 0, gz]}>
-          <mesh geometry={GEAR_STRUT_GEO} material={mats.dark} position={[0, -0.56, 0]} />
-          <mesh geometry={GEAR_KNEE_GEO} material={mats.greyDark} position={[0, -0.3, 0]} />
-          <mesh geometry={GEAR_FOOT_GEO} material={mats.dark} position={[0, -0.95, 0]} />
-        </group>
-      ))}
-
-      {/* THE HYPERDRIVE: curved stern band along the rear arc — dark housing,
-          deck plates bridging to the rim, emissive core + hotter centre. */}
-      <mesh geometry={ENGINE_WALL_GEO} material={mats.dark} />
-      <mesh geometry={ENGINE_PLATE_GEO} material={mats.dark} position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]} />
-      <mesh geometry={ENGINE_PLATE_GEO} material={mats.dark} position={[0, -0.19, 0]} rotation={[-Math.PI / 2, 0, 0]} />
+      {/* THE HYPERDRIVE: the emissive strip, inset behind the housing lips. */}
       <mesh geometry={ENGINE_CORE_GEO} material={mats.engineCore} />
       <mesh geometry={ENGINE_HOT_GEO} material={mats.engineHot} />
-      {([-1, 1] as const).map((s) => (
+
+      {/* Landing gear: one translating group, three legs, soles at EXACTLY
+          y = -1.0 when gearRef is 1; hidden entirely below 0.02. */}
+      <group
+        ref={(g: THREE.Group | null) => {
+          gearGroupRef.current = g;
+          if (g) {
+            // Pose imperatively, never declaratively — a re-render must not
+            // stomp the gear back to stowed mid-deployment.
+            g.visible = false;
+            g.position.y = GEAR_TUCK;
+          }
+          gearPrev.current = -1; // force the next frame to re-apply gearRef
+        }}
+      >
+        <mesh geometry={GEAR_MID_GEO} material={mats.greyDark} />
+        <mesh geometry={GEAR_DARK_GEO} material={mats.dark} />
+      </group>
+
+      {/* Bay doors: hinged outboard, swinging down as the gear comes out. */}
+      {DOOR_SLOTS.map((p, i) => (
         <mesh
-          key={s}
-          geometry={ENGINE_CAP_GEO}
-          material={mats.dark}
-          position={[s * 1.31, 0, 1.62]}
-          rotation={[0, s * 0.7, 0]}
+          key={i}
+          geometry={i % 2 === 0 ? DOOR_L_GEO : DOOR_R_GEO}
+          material={mats.greyDark}
+          position={[p[0], p[1], p[2]]}
+          ref={(m: THREE.Mesh | null) => {
+            doorRefs.current[i] = m;
+          }}
         />
       ))}
 
@@ -856,7 +1330,7 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         <sprite
           key={i}
           material={mats.glow}
-          position={p}
+          position={[p[0], p[1], p[2]]}
           ref={(s: THREE.Sprite | null) => {
             glowRefs.current[i] = s;
           }}
@@ -869,14 +1343,14 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         intensity={0}
         distance={26}
         decay={2}
-        position={[0, 0, 2.35]}
+        position={[0, 0, 2.15]}
         ref={(l) => {
           lightRef.current = l;
         }}
       />
 
       {/* Faint repulsor under-glow beneath the hull, thrust > 0.6 only. */}
-      <sprite material={mats.underGlow} position={[0, -0.72, 0.1]} scale={[2.6, 1.3, 1]} />
+      <sprite material={mats.underGlow} position={[0, -0.72, 0.3]} scale={[2.5, 1.25, 1]} />
 
       {/* World-space trail: portaled to the scene root so particles stay
           where they were emitted and the wash arcs along the flight path.

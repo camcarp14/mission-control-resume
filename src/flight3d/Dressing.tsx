@@ -20,11 +20,9 @@ import { mulberry32 } from '../engine';
 import type { Vec3, Waypoint } from '../engine';
 
 const ASTRONAUT_URL = '/models/astronaut.glb';
-const SPACESHIP_URL = '/models/spaceship.glb';
 const MOON_TEXTURE_URL = '/textures/2k_moon.webp'; // same vendored map SolarBodies uses
 
 useGLTF.preload(ASTRONAUT_URL);
-useGLTF.preload(SPACESHIP_URL);
 useTexture.preload(MOON_TEXTURE_URL);
 
 /* ---- tunables ----------------------------------------------------------- */
@@ -55,13 +53,48 @@ const GLOW_COLOR = '#4cc9f0'; // permitted cool cyan, kept faint
 const GLOW_OPACITY = 0.3;
 const GLOW_SCALE = 5.5;
 
-// Flyby: a silhouette ship crossing the deep background near mid-voyage.
+// Flyby: a small satellite crossing the deep background near mid-voyage.
+//
+// This used to be spaceship.glb — a cartoon low-poly rocket ("Spaceship_
+// FinnTheFrog") on a single Phong texture atlas with no PBR channels. No
+// material pass rescues that silhouette; against the photoreal moon it read
+// as clip-art. It is replaced by a procedural satellite built the same way as
+// SolarBodies' relay station (foil bus + deployed arrays + parabolic dish) at
+// roughly a quarter the mass of geometry, and the GLB is no longer loaded at
+// all. Path, timing, bank and reduced-motion parking are unchanged.
 const FLYBY_CROSS_S = 90; // seconds to cross
 const FLYBY_REST_S = 46; // unseen pause before it loops
 const FLYBY_PERIOD_S = FLYBY_CROSS_S + FLYBY_REST_S;
-const FLYBY_SIZE = 4; // silhouette scale in world units
 const FLYBY_BANK = 0.42; // rad of roll along its direction
 const FLYBY_PARK = 0.4; // reduced-motion park fraction along the path
+// Array tip-to-tip span in world units. The old GLB was fitted to a 4-unit
+// max dimension; a satellite is a smaller class of object, and at ~80 units of
+// lateral standoff this still resolves as a recognisable craft rather than a
+// speck. Every other dimension below is a fraction of the half-span.
+const FLYBY_SPAN = 2.6;
+const FSAT = {
+  busW: 0.5, // × half-span, across the boom axis
+  busH: 0.6,
+  busD: 0.44,
+  boomLen: 0.17,
+  boomR: 0.026,
+  wingLen: 0.84,
+  wingH: 0.34,
+  wingT: 0.014,
+  wingSegs: 2, // cell-map repeats → two deployed panel segments per wing
+  mastH: 0.2,
+  mastR: 0.03,
+  dishR: 0.3,
+  dishDepth: 0.1,
+  whipLen: 0.5,
+  whipR: 0.012,
+  beaconR: 0.036,
+} as const;
+// A fixed presentation pose inside the flight quaternion: the craft crosses
+// nose-first with its arrays raked toward the lens, so the panels catch the
+// key light instead of edging on to it.
+const FLYBY_POSE: Vec3 = [0.28, 0.34, 0.1];
+const FLYBY_MLI_SEED = 0x7a21;
 
 // Rock clusters: seeded 30% chance per mid-voyage leg, always 25-40 units off
 // the flight line so the corridor itself stays clear.
@@ -354,6 +387,154 @@ function getGlowTexture(): THREE.CanvasTexture {
   return glowTexture;
 }
 
+/* ---- spacecraft surface maps ---------------------------------------------
+ * Canvas maps for the flyby satellite, painted once and cached at module
+ * scope exactly like getGlowTexture above. Seeded through mulberry32, so the
+ * craft is pixel-identical on every visit. SolarBodies carries the same
+ * technique for its relay station; the two files deliberately do not import
+ * each other's internals. 256px is power-of-two, so mipmaps and
+ * RepeatWrapping both behave. */
+
+let mliTexture: THREE.CanvasTexture | null = null;
+/** Gold multi-layer insulation: an amber base under seeded crinkle facets
+ *  that alternately catch light and fold into shadow, plus crease hairlines
+ *  and aluminised tape bands. Doubles as its own bumpMap. */
+function getMliTexture(): THREE.CanvasTexture {
+  if (mliTexture) return mliTexture;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const rng = mulberry32(FLYBY_MLI_SEED);
+    const base = ctx.createLinearGradient(0, 0, size, size);
+    base.addColorStop(0, '#a87c26');
+    base.addColorStop(0.45, '#e3b054');
+    base.addColorStop(1, '#8a6420');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, size, size);
+
+    for (let i = 0; i < 200; i++) {
+      const cx = rng() * size;
+      const cy = rng() * size;
+      const rr = size * (0.03 + rng() * 0.1);
+      const sides = 3 + Math.floor(rng() * 3);
+      ctx.beginPath();
+      for (let s = 0; s < sides; s++) {
+        const a = (s / sides) * Math.PI * 2 + rng() * 0.8;
+        const d = rr * (0.4 + rng() * 0.8);
+        const px = cx + Math.cos(a) * d;
+        const py = cy + Math.sin(a) * d;
+        if (s === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle =
+        rng() > 0.5
+          ? `rgba(255,236,180,${0.06 + rng() * 0.15})`
+          : `rgba(62,40,8,${0.06 + rng() * 0.15})`;
+      ctx.fill();
+    }
+
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 110; i++) {
+      const x = rng() * size;
+      const y = rng() * size;
+      const a = rng() * Math.PI * 2;
+      const len = size * (0.05 + rng() * 0.2);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.strokeStyle = rng() > 0.45 ? 'rgba(255,246,214,0.32)' : 'rgba(48,30,4,0.3)';
+      ctx.lineWidth = 0.6 + rng() * 1.4;
+      ctx.stroke();
+    }
+
+    for (let b = 0; b < 3; b++) {
+      const y = size * (0.17 + b * 0.31);
+      const h = size * 0.036;
+      ctx.fillStyle = 'rgba(228,226,216,0.32)';
+      ctx.fillRect(0, y, size, h);
+      ctx.fillStyle = 'rgba(58,42,12,0.34)';
+      ctx.fillRect(0, y + h, size, 1.5);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  mliTexture = tex;
+  return tex;
+}
+
+let cellTexture: THREE.CanvasTexture | null = null;
+/** Solar array face: dark blue-violet cells on a thin silver grid with two
+ *  busbars each, and a dark seam down both tile edges so the FSAT.wingSegs
+ *  repeat reads as hinged panel segments rather than a smeared grid. */
+function getCellTexture(): THREE.CanvasTexture {
+  if (cellTexture) return cellTexture;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#12162e';
+    ctx.fillRect(0, 0, size, size);
+    const cols = 5;
+    const rows = 3;
+    const cw = size / cols;
+    const ch = size / rows;
+    for (let cx = 0; cx < cols; cx++) {
+      for (let cy = 0; cy < rows; cy++) {
+        const x = cx * cw + 2.5;
+        const y = cy * ch + 2.5;
+        const w = cw - 5;
+        const h = ch - 5;
+        const g = ctx.createLinearGradient(x, y, x + w, y + h);
+        g.addColorStop(0, '#3b4189');
+        g.addColorStop(0.45, '#242a63');
+        g.addColorStop(1, '#161b42');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = 'rgba(196,206,222,0.45)';
+        ctx.fillRect(x + w * 0.32, y, 1.2, h);
+        ctx.fillRect(x + w * 0.68, y, 1.2, h);
+      }
+    }
+    ctx.strokeStyle = 'rgba(172,184,202,0.4)';
+    ctx.lineWidth = 1;
+    for (let cx = 0; cx <= cols; cx++) {
+      ctx.beginPath();
+      ctx.moveTo(cx * cw, 0);
+      ctx.lineTo(cx * cw, size);
+      ctx.stroke();
+    }
+    for (let cy = 0; cy <= rows; cy++) {
+      ctx.beginPath();
+      ctx.moveTo(0, cy * ch);
+      ctx.lineTo(size, cy * ch);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(8,10,22,0.92)';
+    ctx.fillRect(0, 0, 3.5, size);
+    ctx.fillRect(size - 3.5, 0, 3.5, size);
+    ctx.fillStyle = 'rgba(158,168,186,0.4)';
+    ctx.fillRect(3.5, 0, 1.5, size);
+    ctx.fillRect(size - 5, 0, 1.5, size);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(FSAT.wingSegs, 1); // the wings are this map's only consumer
+  tex.anisotropy = 8;
+  cellTexture = tex;
+  return tex;
+}
+
 /* ---- GLB fitting -------------------------------------------------------- */
 
 const preparedScenes = new WeakSet<THREE.Object3D>();
@@ -487,11 +668,158 @@ function LostAstronaut({ anchor, reduced }: { anchor: Waypoint; reduced: boolean
   );
 }
 
-/* ---- 3. distant ship flyby ---------------------------------------------- */
+/* ---- 3. distant satellite flyby ----------------------------------------- */
+
+/** Parabolic dish shell (y = depth·(x/R)²) — a true paraboloid, not a cone.
+ *  The curved profile is what catches the key light as a bright crescent
+ *  across the bowl, which is the tell that reads as "antenna" at distance. */
+function makeDishGeometry(radius: number, depth: number): THREE.LatheGeometry {
+  const pts: THREE.Vector2[] = [];
+  const steps = 12;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    // Never exactly zero: a degenerate lathe pole yields NaN normals.
+    pts.push(new THREE.Vector2(Math.max(radius * t, radius * 1e-3), depth * t * t));
+  }
+  return new THREE.LatheGeometry(pts, 32);
+}
+
+/** The flyby craft: a foil-wrapped bus, two deployed solar arrays on short
+ *  booms, a gimballed parabolic dish and a pair of whip antennas — twelve
+ *  meshes against four shared materials. Built in half-span units and scaled
+ *  once by the group, so FLYBY_SPAN is the only size knob. */
+function SmallSatellite() {
+  const h = FLYBY_SPAN / 2;
+  const mli = getMliTexture();
+  const cells = getCellTexture();
+
+  const dishGeo = useMemo(() => makeDishGeometry(h * FSAT.dishR, h * FSAT.dishDepth), [h]);
+
+  const mats = useMemo(() => {
+    // Each material carries a small emissive: the scene's key is one
+    // directional and the env map is a night HDRI, so an unlit metal at this
+    // distance photographs as a hole rather than a craft.
+    const foil = new THREE.MeshStandardMaterial({
+      map: mli,
+      bumpMap: mli,
+      bumpScale: 0.25,
+      emissiveMap: mli,
+      emissive: '#ffd489',
+      emissiveIntensity: 0.15,
+      metalness: 0.72,
+      roughness: 0.38,
+      envMapIntensity: 1.1,
+    });
+    const cellFace = new THREE.MeshStandardMaterial({
+      map: cells,
+      emissiveMap: cells,
+      emissive: '#3d4a96',
+      emissiveIntensity: 0.18,
+      metalness: 0.34,
+      roughness: 0.22,
+      envMapIntensity: 0.95,
+    });
+    const alloy = new THREE.MeshStandardMaterial({
+      color: '#b9bec6',
+      emissive: '#43494f',
+      emissiveIntensity: 0.22,
+      metalness: 0.85,
+      roughness: 0.42,
+      envMapIntensity: ENV_MAP_INTENSITY,
+    });
+    const paint = new THREE.MeshStandardMaterial({
+      color: '#eef1f5',
+      emissive: '#93a4b6',
+      emissiveIntensity: 0.16,
+      metalness: 0.05,
+      roughness: 0.55,
+      side: THREE.DoubleSide, // the dish is a shell: both faces must light
+      envMapIntensity: 0.9,
+    });
+    return { foil, cellFace, alloy, paint };
+  }, [mli, cells]);
+
+  // R3F auto-disposes JSX-created geometry; the memoized lathe and the shared
+  // materials clean up after themselves.
+  useEffect(
+    () => () => {
+      dishGeo.dispose();
+      for (const m of Object.values(mats)) m.dispose();
+    },
+    [dishGeo, mats],
+  );
+
+  const boomX = h * (FSAT.busW / 2 + FSAT.boomLen / 2);
+  const wingX = h * (FSAT.busW / 2 + FSAT.boomLen + FSAT.wingLen / 2);
+
+  return (
+    <group rotation={FLYBY_POSE}>
+      <mesh material={mats.foil}>
+        <boxGeometry args={[h * FSAT.busW, h * FSAT.busH, h * FSAT.busD]} />
+      </mesh>
+      {[1, -1].map((side) => (
+        <group key={side}>
+          <mesh material={mats.alloy} position={[side * boomX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[h * FSAT.boomR, h * FSAT.boomR, h * FSAT.boomLen, 8]} />
+          </mesh>
+          {/* Array normal is +Z — the same axis the dish looks down. */}
+          <mesh material={mats.cellFace} position={[side * wingX, 0, 0]}>
+            <boxGeometry args={[h * FSAT.wingLen, h * FSAT.wingH, h * FSAT.wingT]} />
+          </mesh>
+          <mesh material={mats.alloy} position={[side * wingX, 0, -h * FSAT.wingT * 1.5]}>
+            <boxGeometry args={[h * FSAT.wingLen, h * FSAT.wingH * 0.07, h * FSAT.wingT * 1.6]} />
+          </mesh>
+        </group>
+      ))}
+      {/* Gimballed high-gain dish. rotation.x = π/2 turns the lathe's +Y
+          opening onto +Z; the extra tilt keeps the bowl three-dimensional on
+          camera instead of presenting as a flat white circle. */}
+      <mesh material={mats.foil} position={[0, h * (FSAT.busH / 2 + FSAT.mastH / 2), 0]}>
+        <cylinderGeometry args={[h * FSAT.mastR, h * FSAT.mastR * 1.3, h * FSAT.mastH, 10]} />
+      </mesh>
+      <group
+        position={[0, h * (FSAT.busH / 2 + FSAT.mastH + FSAT.dishR * 0.2), 0]}
+        rotation={[Math.PI / 2 - 0.3, 0.24, 0]}
+      >
+        <mesh geometry={dishGeo} material={mats.paint} />
+        <mesh
+          material={mats.alloy}
+          position={[0, h * FSAT.dishDepth, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <torusGeometry args={[h * FSAT.dishR, h * FSAT.dishR * 0.03, 6, 28]} />
+        </mesh>
+        {/* Prime-focus feed: a stub mast with a horn on the end. A bare strut
+            across the bowl photographs as a scratch on the paint. */}
+        <mesh material={mats.alloy} position={[0, h * FSAT.dishR * 0.24, 0]}>
+          <cylinderGeometry args={[h * 0.022, h * 0.022, h * FSAT.dishR * 0.48, 6]} />
+        </mesh>
+        <mesh material={mats.paint} position={[0, h * FSAT.dishR * 0.52, 0]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[h * FSAT.dishR * 0.17, h * FSAT.dishR * 0.2, 12, 1, true]} />
+        </mesh>
+      </group>
+      {/* Two splayed whip omnis — never a symmetric pair of pins. The tilt
+          lives on a GROUP so each whip pivots at the bus; rotating the mesh
+          itself would swing it about its own midpoint and float the root. */}
+      {[0.44, -0.5].map((tilt, i) => (
+        <group key={i} rotation={[0, 0, tilt]}>
+          <mesh material={mats.alloy} position={[0, h * (FSAT.busH / 2 + FSAT.whipLen / 2), 0]}>
+            <cylinderGeometry args={[h * FSAT.whipR * 0.5, h * FSAT.whipR, h * FSAT.whipLen, 6]} />
+          </mesh>
+        </group>
+      ))}
+      {/* Nav beacon: unlit emissive, no useFrame — this craft is 80+ units
+          out, where a blink would read as a flicker artefact, and a steady
+          lamp needs no reduced-motion gate. */}
+      <mesh position={[0, -h * (FSAT.busH / 2 + FSAT.beaconR * 0.8), h * FSAT.busD * 0.3]}>
+        <sphereGeometry args={[h * FSAT.beaconR, 10, 8]} />
+        <meshStandardMaterial color="#111111" emissive="#ffffff" emissiveIntensity={1.6} />
+      </mesh>
+    </group>
+  );
+}
 
 function DeepFlyby({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boolean }) {
-  const { scene } = useGLTF(SPACESHIP_URL);
-  const fit = useMemo(() => fitGltfScene(scene, FLYBY_SIZE, false), [scene]);
   const groupRef = useRef<THREE.Group>(null);
 
   const path = useMemo(() => {
@@ -538,7 +866,7 @@ function DeepFlyby({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boo
 
   return (
     <group ref={groupRef} position={path.park} quaternion={path.quaternion}>
-      <primitive object={scene} scale={fit.scale} position={fit.offset} />
+      <SmallSatellite />
     </group>
   );
 }
@@ -1028,11 +1356,13 @@ export function Dressing({ waypoints, reduced }: { waypoints: Waypoint[]; reduce
         <RockCluster key={spec.key} spec={spec} reduced={reduced} />
       ))}
       <HeroNeighborhood waypoints={waypoints} reduced={reduced} />
-      {/* GLBs suspend while loading; the dust and rocks above must not wait
-          on the network, so the model props get their own boundary. */}
+      {/* The flyby satellite is fully procedural now, so it sits OUTSIDE the
+          model boundary — it must never be held back by the astronaut GLB. */}
+      <DeepFlyby waypoints={waypoints} reduced={reduced} />
+      {/* GLBs suspend while loading; everything above must not wait on the
+          network, so the one remaining model prop gets its own boundary. */}
       <Suspense fallback={null}>
         {outpost ? <LostAstronaut anchor={outpost} reduced={reduced} /> : null}
-        <DeepFlyby waypoints={waypoints} reduced={reduced} />
       </Suspense>
     </group>
   );

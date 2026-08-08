@@ -73,6 +73,9 @@ function Rig({
   thrustRef,
   boostRef,
   landingRef,
+  gearRef,
+  deepSpaceRef,
+  detailRef,
   anchors,
   tetherLine,
   tetherDot,
@@ -86,6 +89,9 @@ function Rig({
   thrustRef: { current: number };
   boostRef: { current: number };
   landingRef: { current: number };
+  gearRef: { current: number };
+  deepSpaceRef: { current: THREE.Group | null };
+  detailRef: { current: THREE.Group | null };
   anchors?: { current: Map<number, HTMLDivElement> } | undefined;
   tetherLine?: { current: SVGLineElement | null } | undefined;
   tetherDot?: { current: SVGCircleElement | null } | undefined;
@@ -514,15 +520,88 @@ function Rig({
     thrustRef.current = thrust;
     boostRef.current = sunApproach(n, tv);
     landingRef.current = ramp;
+    // Gear: a freighter flies clean and drops its legs on final approach.
+    gearRef.current = smooth(ramp, 0.7, 0.94);
+
+    // ==== DEEP-SPACE CULL — the fix for "the return to chicago lagged a
+    // ton". Measured on the descent: 42 draw calls / 41k triangles / 958ms
+    // a frame at the worst pose, against 14 / 6.5k docked. The solar system
+    // was drawing at full cost behind a night scene that already occludes
+    // it. Two stages, earliest-safe first:
+    //   · detail (labels, meteors, dust, decor bodies) goes at 0.74 — the
+    //     camera is diving at a planet surface, none of it is in frame;
+    //   · the bodies themselves go at 0.90, by which point the ground disc
+    //     is opaque and the dome has the sky.
+    // The starfield is deliberately NOT culled: the dome stays translucent
+    // at the zenith so real stars show over the city. ====
+    const det = detailRef.current;
+    if (det) {
+      // Aligned with the site's FADE_START: the instant ground appears
+      // beneath the dive, the incidental space detail is done contributing.
+      const want = ramp < 0.62;
+      if (det.visible !== want) det.visible = want;
+    }
+    const ds = deepSpaceRef.current;
+    if (ds) {
+      // Just past the ground's full opacity (0.78) — never sooner, or space
+      // would show THROUGH the half-faded terrain as a black hole.
+      const want = ramp < 0.82;
+      if (ds.visible !== want) ds.visible = want;
+    }
   });
 
-  return <Rocket3D ref={rocketRef} thrustRef={thrustRef} reduced={reduced} />;
+  return <Rocket3D ref={rocketRef} thrustRef={thrustRef} gearRef={gearRef} reduced={reduced} />;
 }
 
 /** Under frameloop='demand' (reduced motion), render exactly one new frame
  *  whenever the station snaps. */
 function InvalidateOnT({ t }: { t: MotionValue<number> }) {
   useEffect(() => t.on('change', () => invalidate()), [t]);
+  return null;
+}
+
+/** Dev-only render telemetry for the scripted review harness: draw calls,
+ *  triangles and a rolling frame time on `window.__perf`. Compiled out of
+ *  production entirely — the whole component is behind import.meta.env.DEV
+ *  at the call site. Guessing at where a frame goes is how you end up
+ *  optimizing the wrong thing. */
+function PerfProbe() {
+  const gl = useThree((s) => s.gl);
+  const acc = useRef({ frames: 0, ms: 0, last: 0 });
+  // autoReset clears the counters at the START of every renderer.render(),
+  // and the post chain renders several times per frame — so the default
+  // reading is just the composer's final fullscreen quad. Own the reset and
+  // the totals become the whole frame's real cost.
+  useEffect(() => {
+    gl.info.autoReset = false;
+    return () => {
+      gl.info.autoReset = true;
+    };
+  }, [gl]);
+  useFrame(() => {
+    const a = acc.current;
+    const now = performance.now();
+    if (a.last > 0) {
+      a.ms += now - a.last;
+      a.frames += 1;
+    }
+    a.last = now;
+    // Short window: this harness runs on a software rasteriser where a frame
+    // can cost half a second, and a 20-frame window would report data older
+    // than the pose being measured.
+    if (a.frames >= 4) {
+      const info = gl.info.render;
+      (window as unknown as { __perf?: unknown }).__perf = {
+        fps: +((1000 * a.frames) / a.ms).toFixed(1),
+        ms: +(a.ms / a.frames).toFixed(1),
+        calls: Math.round(info.calls / a.frames),
+        tris: Math.round(info.triangles / a.frames),
+      };
+      a.frames = 0;
+      a.ms = 0;
+    }
+    gl.info.reset();
+  });
   return null;
 }
 
@@ -553,6 +632,9 @@ export function Scene3D({
   const thrustRef = useRef(0);
   const boostRef = useRef(0);
   const landingRef = useRef(0);
+  const gearRef = useRef(0);
+  const deepSpaceRef = useRef<THREE.Group>(null);
+  const detailRef = useRef<THREE.Group>(null);
   const points = useMemo(() => voyage(n), [n]);
   const sunPos = (points[n - 1]?.bodyPos ?? [0, 0, 0]) as [number, number, number];
 
@@ -573,14 +655,29 @@ export function Scene3D({
             planet dark sides. Lighting only, never the background. */}
         <Environment files="/hdri/dikhololo_night_1k.hdr" />
         <SpaceEnvironment reduced={reduced} sunPos={sunPos} starCount={mobile ? 3200 : 6400} />
-        <SolarBodies waypoints={points} reduced={reduced} landingRef={landingRef} />
-        {/* Floating section labels beside each body — the "ABOUT ME in space"
-            read. Static world objects, so they render on every rung. */}
-        <StationLabels waypoints={points} reduced={reduced} />
-        {/* Comet streaks + velocity warp lines are pure motion — absent
-            entirely under reduced. */}
-        {!reduced && <Meteors vel={vel} extent={(n - 1) * STEP + 60} />}
-        <Dressing waypoints={points} reduced={reduced} />
+        {/* DEEP SPACE — everything the night sky and the ground DISC hide once
+            the landing site is planted. The Rig switches this whole group off
+            at touchdown: eleven textured bodies (Earth alone carries three 4k
+            maps), ten label billboards, the meteor layer and the dressing
+            were all still drawing behind an opaque scene, which is most of
+            why the return "lagged a ton" (verbatim). The starfield stays —
+            the dome is deliberately translucent at the zenith. */}
+        <group ref={deepSpaceRef}>
+          <SolarBodies waypoints={points} reduced={reduced} landingRef={landingRef} />
+        </group>
+        {/* Incidental deep-space detail — labels, comet streaks, dust, the
+            decor neighbourhood. Culled EARLIER than the bodies: once the
+            descent is diving at a planet surface, none of it is in frame,
+            and it is a third of the draw calls. */}
+        <group ref={detailRef}>
+          {/* Floating section labels beside each body — the "ABOUT ME in
+              space" read. Static world objects, so they render on every rung. */}
+          <StationLabels waypoints={points} reduced={reduced} />
+          {/* Comet streaks + velocity warp lines are pure motion — absent
+              entirely under reduced. */}
+          {!reduced && <Meteors vel={vel} extent={(n - 1) * STEP + 60} />}
+          <Dressing waypoints={points} reduced={reduced} />
+        </group>
         {/* The homecoming's ground truth: pad, terrain, sky — fades in over
             the final approach so touchdown happens in a real place. */}
         <LandingSite waypoints={points} t={t} reduced={reduced} />
@@ -594,6 +691,9 @@ export function Scene3D({
           thrustRef={thrustRef}
           boostRef={boostRef}
           landingRef={landingRef}
+          gearRef={gearRef}
+          deepSpaceRef={deepSpaceRef}
+          detailRef={detailRef}
           anchors={anchors}
           tetherLine={tetherLine}
           tetherDot={tetherDot}
@@ -601,6 +701,7 @@ export function Scene3D({
         <Effects reduced={reduced} getBoost={() => boostRef.current} />
       </Suspense>
       {reduced && <InvalidateOnT t={t} />}
+      {import.meta.env.DEV && <PerfProbe />}
     </Canvas>
   );
 }
