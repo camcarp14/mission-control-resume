@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "gate": "bash scripts/verify-gate.sh",
     "e2e": "node scripts/e2e/run-all.mjs",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "ready": "node scripts/ready-check.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

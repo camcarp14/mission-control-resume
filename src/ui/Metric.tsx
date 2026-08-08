@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Num } from './primitives';
 
 export type MetricSpec = {
@@ -32,12 +33,22 @@ export function Metric({ label, value, format, offTarget, sub, title }: MetricSp
 }
 
 /**
- * The instrument row. Fixed cell count so the skeleton (SkInstrumentRow) resolves
- * into exactly this layout with zero shift.
+ * The instrument row.
+ *
+ * The wide tier used to be a hard `lg:grid-cols-7` while the only caller fed
+ * it four metrics, so a third of the strip was empty panel colour with the
+ * hairline grid still running through it — it read as three readouts that had
+ * failed to load rather than a row that had never been told how many it was
+ * holding. The column count is data, so it travels with the data: --cells is
+ * consumed by the .instrumentrow rule in polish.css at >=1024px. The two
+ * narrow tiers stay in Tailwind because 2-then-4 is right for any count.
  */
 export function InstrumentRow({ metrics }: { metrics: MetricSpec[] }) {
   return (
-    <div className="grid grid-cols-2 gap-px border border-rule bg-rule sm:grid-cols-4 lg:grid-cols-7">
+    <div
+      className="instrumentrow grid grid-cols-2 gap-px overflow-hidden rounded-md border border-rule bg-rule sm:grid-cols-4"
+      style={{ '--cells': Math.max(1, metrics.length) } as CSSProperties}
+    >
       {metrics.map((m) => (
         <Metric key={m.label} {...m} />
       ))}

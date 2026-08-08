@@ -28,7 +28,10 @@ const HAIR_SPACE = ' '; // simulated letterspacing for the display line
 const CANVAS_MAX_W = 1600;
 const PAD_X = 56; // side padding — also glow bleed room
 const PAD_TOP = 44;
-const PAD_BOTTOM = 40;
+// The bottom padding carries the plate's feathered edge (PLATE_FEATHER) as
+// well as the type — at the old 40 that soft edge clipped square against the
+// canvas floor, which is exactly the hard black box the plate exists to avoid.
+const PAD_BOTTOM = 56;
 const MAIN_BLOCK_H = 128; // main line box (textBaseline 'top' at PAD_TOP)
 const BAR_GAP = 18; // main line -> underline bar
 const BAR_H = 4;
@@ -37,7 +40,35 @@ const DIAMOND_R = 7; // half-diagonal of the rotated square
 const SUB_GAP = 44; // bar -> sub-line top
 const SUB_BLOCK_H = 40;
 
-const LABEL_OPACITY = 0.92;
+/* Legibility over BRIGHT bodies. Reported twice from the live site ("the title
+ * is sort of hard to read there as well") and still failing at the sun, where
+ * white type with a cyan halo is white on white and the bloom pass eats what
+ * little edge is left. Three things fix it together, and none of them alone:
+ * a plate opaque enough to be a surface rather than a tint, a FEATHERED edge
+ * so that opacity does not read as a black box over deep space, and a dark
+ * contour stroked around the glyphs themselves so the type survives even where
+ * the plate is at its most transparent. */
+const PLATE_TOP = 'rgba(4, 8, 14, 0.94)'; // behind the display line — the worst case
+const PLATE_BOTTOM = 'rgba(4, 8, 14, 0.76)'; // eased off under the sub-line, not abandoned
+const PLATE_FEATHER = 18; // soft outer falloff, in canvas px
+const PLATE_EDGE = 'rgba(154, 220, 255, 0.22)'; // the HUD hairline that names it a chip
+const GLYPH_CONTOUR = 'rgba(3, 7, 13, 0.94)';
+const MAIN_CONTOUR_W = 15; // stroke is centre-aligned, so ~7px bites into a 120px glyph
+const SUB_CONTOUR_W = 5;
+// The WIDE halo pass is deliberately weaker than the tight one. At the sun the
+// label's own halo clears the bloom threshold, so the post chain re-adds it as
+// a haze on top of the plate that was supposed to hold the type — the label
+// was washing itself out. The tight core pass keeps the HUD glow; the wide
+// pass now only softens the edge.
+const HALO_COLOR = 'rgba(124,200,255,0.42)';
+
+// The material's own alpha scales EVERYTHING the canvas painted, plate
+// included, so it is the last multiplier standing between the type and the
+// sun. Held at 0.92 it capped the plate at 0.86 of what it was authored for,
+// which over a bright body is the difference between a surface and a tint.
+// There is no cost over deep space: a near-black plate on a near-black sky is
+// invisible whatever its alpha — only the hairline and the feather show.
+const LABEL_OPACITY = 0.98;
 const FLOAT_AMP = 0.4;
 const FLOAT_FREQ = 0.5;
 // Distance fade: full strength through the current leg, gone before two legs
@@ -80,7 +111,7 @@ const dockRay = new THREE.Vector3();
 function paintLabel(main: string, sub: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  const spaced = main.split('').join(HAIR_SPACE);
+  let spaced = main.split('').join(HAIR_SPACE);
 
   // Measure first (canvas resize wipes ctx state, so fonts are set twice).
   let mainW = 200;
@@ -88,11 +119,20 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   if (ctx) {
     ctx.font = MAIN_FONT;
     mainW = ctx.measureText(spaced).width;
+    // Letterspacing is a look, not a requirement. The longest station name is
+    // "CERTS & INSTRUMENTS" at 19 glyphs, and hair-spacing it runs past the
+    // canvas cap — answering that with a horizontal squeeze alone would render
+    // the one longest label in a visibly condensed face while its neighbours
+    // stay wide. Give the tracking up first; squeeze only if still over.
+    if (mainW > CANVAS_MAX_W - PAD_X * 2) {
+      spaced = main;
+      mainW = ctx.measureText(spaced).width;
+    }
     ctx.font = SUB_FONT;
     subW = ctx.measureText(sub).width;
   }
 
-  // Long titles squeeze horizontally instead of overflowing the cap.
+  // Anything still past the cap squeezes horizontally rather than overflowing.
   const squeeze = Math.min(1, (CANVAS_MAX_W - PAD_X * 2) / Math.max(1, mainW));
   const innerW = Math.max(mainW * squeeze, subW);
   const w = Math.min(CANVAS_MAX_W, Math.ceil(innerW) + PAD_X * 2);
@@ -104,10 +144,12 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   if (!c) return canvas;
   const cx = w / 2;
 
-  // Backing plate: a soft dark HUD chip behind the type. Against the sun's
-  // disc the bare glow text washed out completely ("the title is sort of
-  // hard to read there", verbatim) — the plate guarantees contrast on any
-  // background while staying quiet over dark sky.
+  // Backing plate: a dark HUD chip behind the type, top-heavy and feathered.
+  // The gradient puts the weight where the display line is and eases off under
+  // the sub-line, and the shadow pass blurs the chip's own edge outward — which
+  // is what lets it be nearly opaque and still read as a scrim rather than a
+  // slab. The previous flat 0.52 fill was invisible against Saturn, the sun and
+  // Jupiter, which is exactly where the complaint keeps coming from.
   {
     const padX = 34;
     const padY = 22;
@@ -116,27 +158,49 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
     const plateW = w - padX * 2;
     const plateH = PAD_TOP + MAIN_BLOCK_H + BAR_GAP + BAR_H + SUB_GAP + SUB_BLOCK_H + padY * 1.5 - plateY;
     const r = 20;
+    const scrim = c.createLinearGradient(0, plateY, 0, plateY + plateH);
+    scrim.addColorStop(0, PLATE_TOP);
+    scrim.addColorStop(0.58, PLATE_TOP);
+    scrim.addColorStop(1, PLATE_BOTTOM);
+    c.save();
     c.beginPath();
     c.roundRect(plateX, plateY, plateW, plateH, r);
-    c.fillStyle = 'rgba(5, 9, 15, 0.52)';
+    c.shadowColor = 'rgba(2, 4, 8, 0.72)';
+    c.shadowBlur = PLATE_FEATHER;
+    c.fillStyle = scrim;
     c.fill();
-    c.strokeStyle = 'rgba(154, 220, 255, 0.18)';
+    c.restore();
+    c.beginPath();
+    c.roundRect(plateX, plateY, plateW, plateH, r);
+    c.strokeStyle = PLATE_EDGE;
     c.lineWidth = 2;
     c.stroke();
   }
 
-  // Main line: two glow passes — a wide soft halo, then a tight hot core.
+  // Main line, three passes, and the ORDER is the fix. Wide cyan halo first,
+  // then a dark contour stroked around the glyphs, then the hot white core on
+  // top. Over deep space the halo is what you see; over the sun's disc the
+  // contour is a hard dark edge that neither the bright body nor the bloom
+  // pass can eat, because it does not depend on the plate underneath it.
   c.textAlign = 'center';
   c.textBaseline = 'top';
   c.font = MAIN_FONT;
-  c.fillStyle = '#ffffff';
-  c.shadowColor = GLOW_COLOR;
+  c.lineJoin = 'round';
+  c.miterLimit = 2;
   c.save();
   c.translate(cx, PAD_TOP);
   c.scale(squeeze, 1);
-  c.shadowBlur = 30;
+  c.fillStyle = '#ffffff';
+  c.shadowColor = HALO_COLOR;
+  c.shadowBlur = 26;
   c.fillText(spaced, 0, 0);
+  c.strokeStyle = GLYPH_CONTOUR;
+  c.lineWidth = MAIN_CONTOUR_W;
+  c.shadowColor = 'rgba(2, 4, 8, 0.92)';
   c.shadowBlur = 12;
+  c.strokeText(spaced, 0, 0);
+  c.shadowColor = GLOW_COLOR;
+  c.shadowBlur = 10;
   c.fillText(spaced, 0, 0);
   c.restore();
 
@@ -159,16 +223,43 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   c.fillRect(-DIAMOND_R, -DIAMOND_R, DIAMOND_R * 2, DIAMOND_R * 2);
   c.restore();
 
-  // Sub-line: station code + index in the mono stack.
+  // Sub-line: station code and how far into the mission it sits. Contoured
+  // like the display line — at 34px over Saturn's pale disc the mono stack
+  // was the first thing to disappear.
+  const subY = barY + BAR_H + SUB_GAP;
   c.font = SUB_FONT;
+  c.shadowColor = 'rgba(2, 4, 8, 0.9)';
+  c.shadowBlur = 6;
+  c.strokeStyle = GLYPH_CONTOUR;
+  c.lineWidth = SUB_CONTOUR_W;
+  c.strokeText(sub, cx, subY);
   c.fillStyle = SUB_COLOR;
+  c.shadowColor = GLOW_COLOR;
   c.shadowBlur = 8;
-  c.fillText(sub, cx, barY + BAR_H + SUB_GAP);
+  c.fillText(sub, cx, subY);
 
   return canvas;
 }
 
 /* ---- specs -------------------------------------------------------------- */
+
+/**
+ * Signage text for one station. This is the largest piece of type anywhere in
+ * the product, so it has to be the station's NAME. Deriving it from the
+ * machine id printed "CERTS INSTRUMENTS" across the sun — the ampersand was
+ * never in `certs-instruments` to begin with — and rendered everything else as
+ * a de-hyphenated slug rather than the title on the panel beside it.
+ *
+ * Titles are "Head — Subtitle": the head is the signage, the subtitle is panel
+ * copy and has no business at 120px. Splitting on the em dash leaves the head
+ * with a trailing space, and titles that carry an ampersand already have
+ * spaces around it, so the run collapse is what keeps a stray double space out
+ * of a line that is about to be letterspaced glyph by glyph.
+ */
+function signage(title: string): string {
+  const head = title.split(/\s*[—–]\s*/)[0] ?? title;
+  return head.replace(/\s+/g, ' ').trim().toUpperCase();
+}
 
 type LabelSpec = {
   index: number;
@@ -189,9 +280,13 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
     // name straight through the headline (screenshot finding).
     if (wp.index === 0) continue;
     const station = stations[wp.index];
-    const main = (station?.id ?? '').replace(/-/g, ' ').toUpperCase();
+    const main = signage(station?.title ?? '');
     if (!main) continue;
-    const sub = `${station?.code ?? 'STN'} // ${(wp.index + 1).toString().padStart(2, '0')}`;
+    // The code already ENDS in the station number, so pairing it with the same
+    // number printed the count twice ("STN 09 // 9"). The second half now says
+    // something the first half does not: how many stations there are, so the
+    // line reads as a position in the mission rather than a stutter.
+    const sub = `${station?.code ?? 'STN'} // ${stations.length.toString().padStart(2, '0')}`;
 
     const canvas = paintLabel(main, sub);
     const texture = new THREE.CanvasTexture(canvas);

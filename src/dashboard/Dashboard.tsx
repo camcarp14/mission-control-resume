@@ -158,7 +158,7 @@ export default function Dashboard() {
       <div className="stagger space-y-8">
         <InstrumentRow metrics={metrics} />
 
-        <section className="section border border-rule bg-panel">
+        <section className="section overflow-hidden rounded-md border border-rule bg-panel">
           <header className="flex items-center justify-between border-b border-rule px-4 py-2.5">
             <h2 className="text-xs font-medium uppercase tracking-widest text-dim">Visits</h2>
             <button type="button" className="btn border border-rule px-2.5 py-1 text-2xs text-dim" onClick={() => void load()}>
@@ -200,7 +200,11 @@ export default function Dashboard() {
                           <span className="num font-mono text-xs text-ink">
                             {v.furthest_station + 1}/{v.station_count ?? '—'}
                           </span>
-                          <span className="h-1 w-16 overflow-hidden rounded-full bg-raised">
+                          {/* rounded-sm, not rounded-full: at 4px tall a 999px
+                              radius computes to the same 2px the ramp's
+                              micro-chrome step gives, so this is pixel-identical
+                              and stops being an exception to explain. */}
+                          <span className="h-1 w-16 overflow-hidden rounded-sm bg-raised">
                             <span
                               className="block h-full bg-dim"
                               style={{ width: `${Math.round(depthPct(v) * 100)}%` }}
@@ -218,7 +222,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="section border border-rule bg-panel">
+        <section className="section overflow-hidden rounded-md border border-rule bg-panel">
           <header className="border-b border-rule px-4 py-2.5">
             <h2 className="text-xs font-medium uppercase tracking-widest text-dim">By access code</h2>
           </header>

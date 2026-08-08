@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"
+     role="img" aria-label="Mission Control">
+  <!--
+    The tab mark. A recruiter comparing candidates has a dozen tabs open, so
+    this is judged at SIXTEEN pixels and nowhere else — every choice here is
+    a 16px choice, checked at that raster rather than at this viewBox.
+
+    A CC monogram and a stroked flight arc were both drawn and both turned to
+    mud at 16px: two counters of a letterform, or a 2px curve, survive
+    downsampling as grey smear. A SOLID delta does not — it is one silhouette
+    with one hole, so the rasteriser has nothing to average away. The notch in
+    the base is what keeps it from reading as a generic "up" chevron: it is a
+    nose cone under thrust, which is the whole site in one glyph.
+
+    Ground is the app's own #08090b rather than transparency: on a light tab
+    strip a transparent mark leaves the orange delta floating with no ground,
+    and the site is dark-only by construction. The 6/32 corner radius echoes
+    the panels' 3px at their rendered size.
+  -->
+  <rect width="32" height="32" rx="6" fill="#08090b"/>
+  <path d="M16 5.2 L26.4 27.2 L16 21.2 L5.6 27.2 Z" fill="#ff5c37"/>
+</svg>

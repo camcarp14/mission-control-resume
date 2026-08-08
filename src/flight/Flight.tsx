@@ -40,6 +40,51 @@ const KICK = 7;
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/* Remembering "I chose the static version" is a nicety; blanking the whole
+ * unlocked experience is not. In several real configurations — Safari with
+ * cookies blocked, a partitioned third-party context, some corporate managed
+ * profiles — merely TOUCHING sessionStorage throws, and the read below runs
+ * inside a useState initializer, i.e. during render. So both sides are
+ * wrapped, matching the guarded pattern src/lib/gate.ts already uses for the
+ * visit token. The failure mode degrades to "the toggle doesn't persist",
+ * which nobody will notice. */
+function readMode(): string | null {
+  try {
+    return sessionStorage.getItem('mc.mode');
+  } catch {
+    return null;
+  }
+}
+
+function writeMode(v: string): void {
+  try {
+    sessionStorage.setItem('mc.mode', v);
+  } catch {
+    /* ignore — the session simply won't remember the choice */
+  }
+}
+
+/** The keyboard affordance, and its invisible twin. `mirror` renders the same
+ *  box on the right of the control strip so the rail — which centres inside
+ *  whatever space Back and Advance leave it — is centred on the VIEWPORT and
+ *  not on the leftover. `invisible` keeps the box in layout; `hidden` would
+ *  defeat the entire point. */
+function KbdHint({ mirror = false }: { mirror?: boolean }) {
+  return (
+    <div
+      className={`pointer-events-none hidden select-none items-center gap-1.5 lg:flex ${
+        mirror ? 'invisible' : ''
+      }`}
+      aria-hidden="true"
+    >
+      <kbd>space</kbd>
+      <span className="text-2xs text-faint">advance</span>
+      <kbd>←</kbd>
+      <span className="text-2xs text-faint">back</span>
+    </div>
+  );
+}
+
 function useViewport() {
   const [v, setV] = useState({ vw: window.innerWidth, vh: window.innerHeight });
   useEffect(() => {
@@ -66,7 +111,7 @@ export default function Flight({
   const mobile = vw < MOBILE_BREAKPOINT;
 
   const [mode, setMode] = useState<'flight' | 'static'>(() =>
-    sessionStorage.getItem('mc.mode') === 'static' ? 'static' : 'flight',
+    readMode() === 'static' ? 'static' : 'flight',
   );
   // Flat-mode station changes fade through the ground colour instead of hard
   // cutting — a cut-fade is the canonical reduced-motion transition, and a
@@ -296,7 +341,7 @@ export default function Flight({
   const toggleMode = useCallback(() => {
     setMode((prev) => {
       const next = prev === 'flight' ? 'static' : 'flight';
-      sessionStorage.setItem('mc.mode', next);
+      writeMode(next);
       return next;
     });
   }, []);
@@ -388,15 +433,23 @@ export default function Flight({
           {webgl && <BootSequence />}
 
           <div className="hudbar">
-            <div className="mr-2 hidden items-center gap-1.5 lg:flex" aria-hidden="true">
-              <kbd>space</kbd>
-              <span className="text-2xs text-faint">advance</span>
-              <kbd>←</kbd>
-              <span className="text-2xs text-faint">back</span>
-            </div>
+            {/* This hint used to be the row's only left-hand item, which stole
+                ~71px from the span the rail centres itself in and pushed the
+                whole instrument strip visibly right of the viewport's centre —
+                the kind of thing nobody can name but everybody sees. Taking it
+                out of flow fixed the centring and immediately created a worse
+                bug (it printed straight through the Back button), so instead
+                it stays in flow and gets an invisible twin on the far side.
+                Mirroring the ELEMENT rather than reserving a measured width is
+                what keeps this correct when the copy or the font changes. */}
+            <KbdHint />
+            {/* Equal minimum widths so the rail's flex-1 span is symmetric
+                about the centre line: "← Back" and "Advance →" are different
+                lengths, and without this the difference lands straight in the
+                rail's centring. */}
             <button
               type="button"
-              className="btn border border-rule bg-panel px-3.5 py-2 text-xs text-dim disabled:cursor-default disabled:opacity-40"
+              className="btn border border-rule bg-panel px-3.5 py-2 text-xs text-dim disabled:cursor-default disabled:opacity-40 sm:min-w-[104px]"
               onClick={back}
               disabled={current === 0}
             >
@@ -405,12 +458,13 @@ export default function Flight({
             <Rail current={current} visited={visited} onJump={goTo} />
             <button
               type="button"
-              className="btn primary border border-rule-strong bg-raised px-3.5 py-2 text-xs text-ink disabled:cursor-default disabled:opacity-40"
+              className="btn primary border border-rule-strong bg-raised px-3.5 py-2 text-xs text-ink disabled:cursor-default disabled:opacity-40 sm:min-w-[104px]"
               onClick={advance}
               disabled={current === N - 1}
             >
               <span className="hidden sm:inline">Advance</span> →
             </button>
+            <KbdHint mirror />
           </div>
         </>
       )}

@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { logStation, restore } from '../lib/gate';
 import { ErrorState, SkLine } from '../ui/primitives';
-import { Gate } from './Gate';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { Gate, GateSky } from './Gate';
 
 /**
  * The unlock state machine. The flight module is lazy AND only ever rendered
@@ -36,7 +37,8 @@ export function Experience() {
   if (phase.s === 'unreachable') {
     return (
       <main className="grid min-h-dvh place-items-center px-5 py-12">
-        <div className="pagefade w-full max-w-lg">
+        <GateSky />
+        <div className="pagefade relative z-10 w-full max-w-lg">
           <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
           <div className="mt-6">
             <ErrorState
@@ -60,10 +62,18 @@ export function Experience() {
     return <Gate onUnlocked={() => setPhase({ s: 'unlocked', furthest: 0 })} />;
   }
 
+  // The boundary sits OUTSIDE the Suspense on purpose: a lazy chunk that never
+  // arrives rejects the import, and React re-throws that rejection past the
+  // fallback — Suspense can only wait, it cannot recover. Without this, a
+  // dropped download on hotel wifi (or a chunk hash that Netlify redeployed
+  // over while the tab sat open) blanked the page to white with the visitor's
+  // code already spent.
   return (
-    <Suspense fallback={<SplashSkeleton />}>
-      <Flight initialStation={phase.furthest} onStationReached={logStation} />
-    </Suspense>
+    <ErrorBoundary what="The flight">
+      <Suspense fallback={<SplashSkeleton />}>
+        <Flight initialStation={phase.furthest} onStationReached={logStation} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -74,7 +84,8 @@ export function Experience() {
 function SplashSkeleton() {
   return (
     <main className="grid min-h-dvh place-items-center px-5 py-12">
-      <div className="w-full max-w-lg">
+      <GateSky />
+      <div className="relative z-10 w-full max-w-lg">
         <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
           A résumé you pilot.

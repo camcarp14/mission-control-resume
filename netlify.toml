@@ -19,10 +19,77 @@
   to = "/index.html"
   status = 200
 
+# Vite emits content-hashed filenames into /assets, so a byte change is always
+# a NAME change and `immutable` costs nothing.
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# THE MEDIA — the HDRI, planet maps, models and display face (1.4MB across 14
+# files, down from 4.4MB). None of it lives under /assets, so all of it was
+# inheriting Netlify's default `max-age=0, must-revalidate`: a conditional
+# request per file on EVERY repeat visit before the flight can start. Fourteen
+# round trips is a bad trade at any file size, and it lands squarely on the
+# traffic pattern this whole site exists for — the recruiter who re-opens the
+# link days later to walk a hiring manager through it.
+#
+# 30 days, deliberately NOT `immutable`, and here is the tradeoff written down:
+# these filenames are hand-maintained and NOT content-hashed, so the cache key
+# does not move when the bytes do. The audit round that added this header also
+# replaced dikhololo_night_1k.hdr, astronaut.glb and four planet maps IN PLACE
+# at their existing names — the hazard is demonstrated, not hypothetical. A
+# year of `immutable` would have stranded every returning visitor on the old
+# 1.7MB HDRI with no way to push a correction; 30 days bounds that to one
+# hiring cycle. `stale-while-revalidate` then buys back the repeat-visit speed
+# at the far edge: after the month is up the visitor still paints instantly
+# from cache while the new bytes stream in behind them.
+#
+# If a swap ever needs to land NOW, rename the file (and its references) or
+# hang a ?v= on the URL — do not shorten this header for one deploy.
+[[headers]]
+  for = "/hdri/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/textures/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+# THE SHARE SURFACE — the unfurl card and the tab icons. A day, not a month:
+# these are the assets most likely to be regenerated on a whim (a better
+# flight frame, a reworked mark), and LinkedIn and Slack cache an unfurl hard
+# enough already without an origin header helping them hold a stale one.
+[[headers]]
+  for = "/og.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/favicon.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/favicon.ico"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/apple-touch-icon.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
 
 [[headers]]
   for = "/*"

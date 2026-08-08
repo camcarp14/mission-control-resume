@@ -103,6 +103,7 @@ npm run gate          # + typecheck, Netlify-identical function bundles, build, 
 npm run e2e           # the browser bar: frames, axe+keyboard, breakpoints,
                       #   gate-breach, reduced-motion, pdf, lighthouse
 RUN_E2E=1 npm run gate  # everything
+npm run ready         # the CONTENT gate — run this before sending anyone the link
 ```
 
 The e2e suite runs a real production build against a mocked Supabase wire
@@ -113,6 +114,22 @@ phone; the Lighthouse check asserts performance ≥ 90 with FCP and LCP under
 `scripts/e2e/gate-breach.mjs` additionally probes a *live* Supabase (direct
 REST reads must come back permission-denied) whenever real env vars are
 present — and says loudly that it skipped otherwise.
+
+### `npm run ready` — the other kind of correct
+
+Everything above proves the *software* works. All of it passed green on the day
+an audit found the site was serving a résumé PDF whose visible text reads "Your
+Name", a contact button pointing at `you@example.com`, and thirty bullets of
+`[BRACKETED]` template copy. No test suite can catch that; every one of them is
+the first thing a hiring manager would see.
+
+`npm run ready` is that second gate. It fails on unfilled bracket slots,
+placeholder links and contact addresses, a stub `resume.pdf`, artifact diagrams
+with unfilled figures, a debug affordance rendering on the visitor-facing gate,
+and a missing share surface (og:image / favicon / a `<title>` carrying your
+name). It is deliberately **not** part of `npm run gate`: it is red until the
+content is written, and a permanently-red CI check is a check everyone learns to
+ignore. Run it in the sixty seconds before the link goes into a DM.
 
 ## What the gate is, honestly
 
@@ -130,16 +147,22 @@ visit's own progress row, so replay is harmless by construction.
   Scope](https://www.solarsystemscope.com/textures/), licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vendored under
   `public/textures/`.
-- **Astronaut and distant-ship models** — [Quaternius Ultimate Space
-  Kit](https://quaternius.com) (CC0). Vendored under `public/models/`.
+- **Astronaut model** — [Quaternius Ultimate Space Kit](https://quaternius.com)
+  (CC0). Vendored under `public/models/`, mesh-compressed with
+  `EXT_meshopt_compression` and stripped of the eighteen animation clips
+  nothing plays. (The distant ship used to be a second Quaternius model; it is
+  procedural now — see `src/flight3d/Dressing.tsx`.)
 - **HDRI lighting** — "Dikhololo Night" from [Poly Haven](https://polyhaven.com)
   (CC0), used for image-based lighting only, never as a backdrop. Vendored
-  under `public/hdri/`.
+  under `public/hdri/` at 256×128: three.js prefilters it through PMREM before
+  it lights anything, so the 1k source was 1.7 MB of resolution thrown away
+  before use. See `scripts/assets/`.
 - **Display typeface** — [Space Grotesk](https://github.com/floriankarsten/space-grotesk)
   by Florian Karsten, licensed under the
   [SIL Open Font License 1.1](https://openfontlicense.org). Vendored under
-  `public/fonts/` and loaded lazily after the gate — the entry chunk stays on
-  the system stack.
+  `public/fonts/` as a 27 KB WOFF2 subset (Latin-1 plus the punctuation and
+  arrows the copy actually uses, wght 300–700 axis intact) and loaded lazily
+  after the gate — the entry chunk stays on the system stack.
 - Everything else on screen — the crew shuttle, asteroid fields, nebula, relay
   outpost, star cluster, dust, HUD — is generated procedurally in this repo's
   code.

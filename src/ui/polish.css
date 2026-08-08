@@ -3,12 +3,22 @@
 @tailwind utilities;
 
 /* Display face for the hero identity and HUD flourishes. Vendored (OFL,
-   see README credits); variable weight so one 136KB file covers 300-700.
+   see README credits); variable weight, so one 27KB file still covers the
+   whole 300-700 range — the wght axis is preserved rather than instanced,
+   because flattening it to a single weight would silently collapse the type
+   hierarchy everywhere this face is used.
    font-display: swap + no preload = the file is only fetched when the first
-   post-gate surface uses it — the gate's FCP budget never pays for it. */
+   post-gate surface uses it — the gate's FCP budget never pays for it.
+
+   WOFF2 only, no TrueType fallback: the source was a 136KB uncompressed TTF
+   (Brotli-free by format), and shipping both would have kept that file in
+   the deploy to serve browsers that have not existed for a decade. Subset to
+   the ranges the site actually renders — which was checked against every
+   string in src/ and index.html, not guessed, because the copy leans on
+   "résumé", the · separator, arrows and an em dash. */
 @font-face {
   font-family: 'Space Grotesk';
-  src: url('/fonts/SpaceGrotesk.ttf') format('truetype');
+  src: url('/fonts/SpaceGrotesk.woff2') format('woff2');
   font-weight: 300 700;
   font-style: normal;
   font-display: swap;
@@ -46,6 +56,33 @@
   --hud: #9adcff;
   --cyan: #4cc9f0;
   --cyan-bright: #7df9ff;
+
+  /* ---- RADIUS: one ramp, three steps, chosen by the SIZE of the box -------
+     The audit caught four different answers sharing a single screen — a
+     999px pill CTA in the top bar, a 0px button in the bottom bar, a 3px
+     input on the gate, a 4px panel between them. None of them was wrong on
+     its own; having all four is what read as "assembled" rather than
+     "designed", because a radius is a material property and a console is
+     made of one material.
+
+     The ramp below is deliberately the one that legitimises the majority
+     (the gate's inputs were already 3px, the panel already 4px) so bringing
+     the rest in line is a subtraction, not a redesign:
+
+       --r-1  micro-chrome under ~24px — kbd caps, meter tracks, skeleton lines
+       --r-2  controls and inset surfaces — anything hand-sized holding a label
+       --r-3  containers — panels, cards, sections, figures
+
+     --r-round is the ONE documented exception and it is about MEANING, not
+     size: shapes whose roundness is the information (status dots, the
+     key-travel glyph, a scrollbar thumb). It is never allowed on a surface
+     that carries a label — that is precisely what made the top bar's pill
+     read as a different product from the square button beside it.
+     Mirrored in tailwind.config.js as rounded-sm / rounded / rounded-md. */
+  --r-1: 2px;
+  --r-2: 3px;
+  --r-3: 4px;
+  --r-round: 999px;
 }
 
 /* numbers behave like instruments; headings balance; details read as designed */
@@ -57,7 +94,7 @@ h1, h2, h3 { text-wrap: balance; }
 ::selection { background: rgba(255, 92, 55, 0.28); color: var(--ink); }
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
-*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: var(--r-round); }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
 /* focus is always visible — keyboard-first means the keyboard can see itself.
@@ -94,7 +131,7 @@ a.card:hover, .task:hover { border-color: var(--rule-strong); transform: transla
 .stagger > *:nth-child(5){--i:4}.stagger > *:nth-child(6){--i:5}.stagger > *:nth-child(7){--i:6}.stagger > *:nth-child(8){--i:7}
 
 /* skeletons: pages develop instead of arriving */
-.sk { position: relative; overflow: hidden; background: rgba(255,255,255,0.045); border-radius: 3px; }
+.sk { position: relative; overflow: hidden; background: rgba(255,255,255,0.045); border-radius: var(--r-1); }
 .sk::after {
   content: ''; position: absolute; inset: 0; transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.045), transparent);
@@ -118,7 +155,7 @@ a.card:hover, .task:hover { border-color: var(--rule-strong); transform: transla
 }
 .toast {
   pointer-events: auto; background: var(--raised); border: 1px solid var(--rule-strong);
-  color: var(--ink); border-radius: 3px; padding: 10px 14px; font-size: 12.5px;
+  color: var(--ink); border-radius: var(--r-2); padding: 10px 14px; font-size: 12.5px;
   box-shadow: 0 10px 34px rgba(0,0,0,0.6); animation: toastin var(--dur-3) var(--ease-spring) both;
   display: flex; gap: 10px; align-items: center; font-variant-numeric: tabular-nums;
 }
@@ -131,7 +168,7 @@ a.card:hover, .task:hover { border-color: var(--rule-strong); transform: transla
 /* key hints (the HUD teaches its own controls) */
 kbd {
   font-family: ui-monospace, monospace; font-size: 10px; border: 1px solid var(--rule-strong);
-  border-bottom-width: 2px; border-radius: 3px; padding: 1px 4px; color: var(--dim);
+  border-bottom-width: 2px; border-radius: var(--r-1); padding: 1px 4px; color: var(--dim);
 }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
@@ -147,7 +184,11 @@ kbd {
   touch-action: none; /* the stage owns its gestures — advance is deliberate, never scrolled */
   user-select: none;
 }
-.panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; padding: 76px 16px calc(96px + env(safe-area-inset-bottom)); }
+/* Every clearance below is in rem, not px, because the chrome it clears is
+   rem-sized too — see the large-display step at the bottom of this file. At
+   the 16px root that every viewport under 1920px uses, these are the same
+   76/16/96 pixels they always were. */
+.panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; padding: 4.75rem 1rem calc(6rem + env(safe-area-inset-bottom)); }
 .panelwrap > * { pointer-events: auto; }
 /* World-anchored panels (desktop flight mode): the wrap stops centering and
    the .anchorpos child is pinned to its planet — the Rig projects a point
@@ -157,30 +198,140 @@ kbd {
 .panelwrap.anchored { display: block; padding: 0; }
 .anchorpos {
   position: absolute; left: 0; top: 0;
-  width: min(560px, calc(100vw - 32px));
+  width: min(35rem, calc(100vw - 2rem));
   transform: translate3d(56vw, 44vh, 0) translateY(-50%);
   will-change: transform;
 }
-.panelwrap.anchored .panel { max-height: calc(100vh - 210px); }
+.panelwrap.anchored .panel { max-height: calc(100vh - 13.125rem); }
 /* the callout tether: panel -> planet limb. Attribute-driven (no animation);
    sits between the canvas and the panels. */
 .tether { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .tether line { stroke: var(--cyan); stroke-width: 1; }
 .tether circle { fill: var(--cyan-bright); }
-.panel {
-  width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto;
-  background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
+/* ---- the panel's SURFACE lives on its wrapper, not on the panel ----------
+   The panel has to be masked (see .panel below) and a mask takes the whole
+   element's rendering with it — background, border and shadow included — so
+   masking the panel in place punched a translucent notch through the card and
+   let Saturn show through the bottom of the résumé. The surface therefore
+   sits one level out, on whatever element directly wraps the panel, where no
+   mask reaches it.
+
+   :has(> .panel) is what makes that safe to write from here: StationPanel
+   docks the panel three different ways (world-anchored, mobile slide, flat
+   cross-fade) with a different wrapper each time, and this file has no
+   business knowing which. The selector asks the question directly — "the
+   element whose child is the panel" — and is correct in all three without
+   naming any of them. Every wrapper is exactly the panel's box (width:100%,
+   height auto), so the surface lands pixel-for-pixel where it used to be. */
+.panelwrap :has(> .panel) {
+  background: var(--panel);
+  border: 1px solid var(--rule);
   /* instrument-glass edge: a cyan hairline catching "light" on the top
      edge + a faint cold glow lifting the panel off the scene */
   border-top-color: rgba(76, 201, 240, 0.32);
+  border-radius: var(--r-3);
   box-shadow: 0 -1px 18px rgba(76, 201, 240, 0.05), 0 14px 44px rgba(0, 0, 0, 0.5);
-  padding: 22px 24px 24px; user-select: text;
+}
+.panel {
+  /* 35rem, not 560px, and the padding with it: the measure and the type ramp
+     are ONE decision. Because both are rem, the large-display step at the
+     bottom of this file grows the card and the type by the same percentage,
+     so the line length stays at the ~64 characters it is here no matter how
+     big the display gets. Letting the panel widen on its own would have
+     traded a small card for an unreadable one. */
+  width: 100%; max-width: 35rem; max-height: 100%; overflow-y: auto;
+  border-radius: var(--r-3);
+  padding: 1.375rem 1.5rem 1.5rem; user-select: text;
+  /* A wheel that runs out of panel must not start scrolling whatever is
+     behind it — the flight deck has no page scroll to give. */
+  overscroll-behavior: contain;
+  /* ---- the "there is more" affordance ------------------------------------
+     At 1280x720 the panel's max-height cut 138px off STN 05 and STN 06 and
+     said nothing about it — the bullets and the artifact were sliced flat at
+     the edge, so a laptop visitor read a truncated résumé and never knew
+     (measured on both, not guessed).
+
+     The mask is the fix, and the reason it needs no JS is a geometric one:
+     the fade bands are exactly the panel's own padding. Padding-bottom is
+     part of a scroller's scrollable area, so when there is nothing more to
+     read — a short station, or a long one scrolled to its end — the bands
+     contain nothing but padding and the fade is invisible. The moment
+     content overflows, that same content passes under the band and dissolves
+     into the edge. One declaration, correct in every state, re-evaluated by
+     the compositor for free.
+
+     mask-clip: no-clip is load-bearing, which is why the mask lives behind an
+     @supports below rather than here. The default border-box painting area
+     throws away everything outside the box, and that took the panel's drop
+     shadow with it (verified side by side before this line existed) — so an
+     engine that took the mask but not the clip would trade the truncation
+     bug for a flat, unlifted card. Where no-clip is missing the panel simply
+     keeps the rest of the ladder.
+
+     The cyan bands below are the second part of the signal and hide
+     themselves by a different trick that needs nothing modern: the two cover
+     layers are attached `local` so they ride with the content and cap each
+     cue at the extreme where there is genuinely nothing past it, while the
+     cue layers are attached to the box and hold still.
+
+     Keyboard: .panel is the scroll container AND the element Flight focuses
+     on arrival, so Arrow Up/Down scroll it the moment a station docks —
+     Flight's key handler claims Space/PageUp/PageDown but never the arrows.
+     Verified in Playwright (138px of STN 06 recovered in 8 presses), not
+     assumed. Splitting the scroller out into a child would have cost that:
+     focus would have landed on a frame that no longer scrolls. */
+  background:
+    linear-gradient(var(--panel) 62%, rgba(13, 15, 19, 0)) top / 100% 1.25rem no-repeat local,
+    linear-gradient(rgba(13, 15, 19, 0), var(--panel) 38%) bottom / 100% 1.625rem no-repeat local,
+    linear-gradient(rgba(76, 201, 240, 0.34), rgba(76, 201, 240, 0)) top / 100% 0.75rem no-repeat,
+    linear-gradient(rgba(76, 201, 240, 0), rgba(76, 201, 240, 0.34)) bottom / 100% 0.875rem no-repeat;
+  /* the thumb is the third part of the signal, so it is not the
+     near-invisible global one — inside a panel it is a readout of how much
+     is left to read */
+  scrollbar-color: rgba(154, 220, 255, 0.45) transparent;
   /* Far neighbours mount off-viewport mid-transition; letting the browser
      defer their layout/paint keeps that mount out of the interaction budget
      (a measured borderline-50ms task under 4x CPU throttle). */
   content-visibility: auto; contain-intrinsic-size: 512px 480px;
 }
-@media (min-width: 768px) { .panelwrap { padding-left: 96px; } .panel { transform: translateX(9vw); } }
+/* The content fade itself — all of it, gated together. Both halves of the
+   pair have to land or neither should: see the note above about what a mask
+   without no-clip does to the panel's shadow. */
+@supports (mask-clip: no-clip) or (-webkit-mask-clip: no-clip) {
+  .panel {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0, #000 1.375rem,
+      #000 calc(100% - 1.5rem), transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0, #000 1.375rem,
+      #000 calc(100% - 1.5rem), transparent 100%
+    );
+    -webkit-mask-clip: no-clip;
+    mask-clip: no-clip;
+  }
+}
+/* The 9vw seat-right has to move off .panel, because the panel's surface now
+   sits on the panel's WRAPPER (see .panelwrap :has(> .panel) above) and a
+   transform on the panel alone would slide the content out from under its
+   own card.
+
+   It moves onto .xfade specifically, and that is not arbitrary: measuring
+   the transform chain to relocate this rule turned up that `.panel {
+   transform: translateX(9vw) }` was only ever taking effect in FLAT mode.
+   Everywhere else the panel also carries .pagefade, whose keyframes end on
+   `transform: none` with fill-mode `both` — and a running/filling animation
+   outranks a normal declaration, so it quietly cancelled the seat-right for
+   the whole 3D deck. The anchored panels were being placed entirely by the
+   rig, which is why they always looked right. Scoping the rule to the flat
+   wrapper reproduces the shipped geometry exactly instead of "fixing" a
+   shift the desktop flight has never actually had. */
+@media (min-width: 768px) {
+  .panelwrap { padding-left: 6rem; }
+  .panelwrap > .xfade { transform: translateX(9vw); }
+}
 .xfade { animation: fadein var(--dur-3) var(--ease-out) both; }
 /* flat-mode station changes fade through the ground colour — opacity only,
    so it stays legitimate under prefers-reduced-motion (it IS that mode's
@@ -222,6 +373,29 @@ kbd {
 }
 .rail button.visited .dot { border-color: var(--dim); background: rgba(139,146,156,0.35); }
 .rail button:hover .dot { border-color: var(--hud); }
+/* Focus on the rail is the one place the systemized :focus-visible rule was
+   wrong: it drew a 2px ring around the BUTTON, and the button is a 20x42
+   tap column wrapped around a 7px diamond — so the indicator was a tall
+   rectangle enclosing mostly nothing, pointing at a target the eye then had
+   to find inside it. The fix is two-part and both parts are load-bearing.
+   The dot gets the real indicator: an outline on an element that is itself
+   rotated 45° is rotated with it, so the ring is a DIAMOND around a diamond
+   — it traces the visible target exactly. The button keeps a genuine
+   outline of its own (never `outline: none`) because the tap column is real
+   and a keyboard user should see which one they are on; it is pulled onto
+   the button's own edge and filled, so it reads as a lit instrument key
+   rather than a stray box. The generic rule at the top of this file is
+   untouched — everything else on the site still inherits it. */
+.rail button:focus-visible {
+  outline: 1px solid rgba(154, 220, 255, 0.5);
+  outline-offset: -1px;
+  border-radius: var(--r-2);
+  background: rgba(154, 220, 255, 0.1);
+}
+.rail button:focus-visible .dot {
+  outline: 2px solid var(--hud);
+  outline-offset: 3px;
+}
 .rail button[aria-current='step'] .dot {
   border-color: var(--cyan); background: var(--cyan);
   box-shadow: 0 0 10px rgba(76,201,240,0.8);
@@ -234,9 +408,15 @@ kbd {
   input, select, textarea { font-size: 16px; } /* iOS zooms focused inputs under 16px */
   .toasts { bottom: calc(14px + env(safe-area-inset-bottom)); }
   .rail button { padding: 17px 5px; }
-  .panel { padding: 18px 16px 20px; }
-  /* clear the rocket's berth at the top of the vertical flight */
-  .panelwrap { padding-top: 132px; }
+  .panel { padding: 1.125rem 1rem 1.25rem; }
+  /* Clears the rocket's berth AND, at station 0, the hero identity column.
+     The old 132px let the hero's role line print straight across the panel's
+     headline at 320px (screenshot finding); the compacted mobile hero in
+     Hero.tsx now measures 100px from a 62px top, so 164px is the first value
+     that clears it with a margin. The 96px bottom bought that back: the
+     .hudbar is 62px tall there, so 80px is still 18px of clearance and the
+     panel keeps almost exactly the height it had. */
+  .panelwrap { padding-top: 10.25rem; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
 }
 
 /* the mandate: everything above is optional to the user's nervous system.
@@ -289,8 +469,19 @@ kbd {
 /* the name: a crisp gradient-glass layer over a blurred glow copy.
    Sized so the left-anchored desktop headline ends before the station
    panel's left edge at common widths. */
+/* The floor came DOWN from 40px to 34px, in rem: the mobile hero has to fit
+   the band above the station panel, and those 6px are what closed the last
+   of the overlap at 320px.
+   The 92px ceiling stays in PIXELS, deliberately, and is the one thing in
+   this file that does NOT join the large-display step below. It is not a
+   typographic choice, it is a clearance: it is what keeps the left-anchored
+   headline off Earth's lit limb and clear of the station panel. Letting it
+   ride the root to 109px was tried and screenshotted at 2560x1200 — the
+   name ran a further 70px into the planet and the last glyphs lost their
+   ground. A constraint that comes from the scene has to be measured against
+   the scene, not scaled with the text. */
 .hero-name, .hero-name-glow {
-  font-size: clamp(40px, 7vw, 92px);
+  font-size: clamp(2.125rem, 7vw, 92px);
   letter-spacing: 0.04em;
   white-space: nowrap;
   text-align: center;
@@ -357,13 +548,17 @@ kbd {
   pointer-events: none;
 }
 
-/* the PDF CTA as a cyan-outline pill. Appended after .btn.primary on
-   purpose: equal specificity, later in the file, so the glow hover wins. */
+/* the cyan-outline PDF CTA. Appended after .btn.primary on purpose: equal
+   specificity, later in the file, so the glow hover wins. It was a 999px
+   pill until the radius audit — a pill three inches from the bottom bar's
+   0px buttons is the single clearest "two people built this" tell on the
+   flight deck. It is a control that holds a label, so it takes --r-2 like
+   every other control. */
 .btn.hudcta {
   border-color: rgba(76,201,240,0.6);
   background: transparent;
   color: var(--cyan-bright);
-  border-radius: 999px;
+  border-radius: var(--r-2);
 }
 .btn.hudcta:hover:not(:disabled) {
   background: rgba(76,201,240,0.1);
@@ -371,4 +566,47 @@ kbd {
   color: var(--cyan-bright);
   transform: translateY(-1px);
   box-shadow: 0 0 24px rgba(76,201,240,0.35);
+}
+
+/* ==== THE INSTRUMENT ROW ==================================================
+   The row's column count is DATA, not layout. It was pinned at
+   lg:grid-cols-7 while the dashboard fed it four metrics, so a third of the
+   strip was an empty slab of panel colour with a hairline running through
+   it — the most expensive kind of mistake, because it looks like a feature
+   that failed to load rather than a grid that was never told how wide it
+   was. The two narrow tiers stay in Tailwind (2 then 4 is right for any
+   count); at lg the count comes from the caller as --cells. */
+@media (min-width: 1024px) {
+  .instrumentrow { grid-template-columns: repeat(var(--cells, 4), minmax(0, 1fr)); }
+}
+
+/* ==== THE LARGE-DISPLAY STEP ==============================================
+   Below 1920px nothing here applies and every computed pixel is exactly what
+   it was — the whole ramp is authored in rem against a 16px root precisely
+   so this block can be the ONLY place a big display is handled.
+
+   The complaint it answers, from a 2560x1200 screenshot: the panel was 22%
+   of the width, the type never moved off its 14/12.5px ramp, and the whole
+   console read as a small card marooned in a huge frame. The fix is not to
+   let the panel grow — line length is the point, and a 900px line of 12.5px
+   text is worse than a small card. It is to step the ROOT, which moves the
+   type ramp, the spacing scale, the chrome clearances and the panel's own
+   35rem measure by the same percentage at once. The result holds the line at
+   ~64 characters while everything gets physically bigger, which is what a
+   2560px display actually needs: it is not more room, it is a further
+   viewing distance.
+
+   17px at 1920 to 19px at 2560, ramped rather than stepped so a window drag
+   across that range never snaps. Media queries are immune to the root
+   font-size they set, so there is no feedback loop here. */
+@media (min-width: 1920px) {
+  :root { font-size: clamp(17px, 0.3125vw + 11px, 19px); }
+
+  /* StationPanel's wrapper carries a hard `max-w-[560px]`, which would pin
+     the card to 560px while the type around it grew — the one thing worse
+     than a small card is a small card full of big text. The measure is a
+     system decision at this step, so the wrapper defers to the panel's own
+     35rem. (Replacing that arbitrary value at its source is listed under
+     needsIntegration; it lives in a file this pass could not touch.) */
+  .panelwrap > *, .anchorpos > * { max-width: none; }
 }

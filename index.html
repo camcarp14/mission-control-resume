@@ -5,30 +5,89 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#08090b" />
-    <title>Mission Control</title>
+    <!-- The name leads. A bookmark, a browser-history entry, and a Google
+         search for "Cam Carp" are all keyed off this string, and "Mission
+         Control" alone attributes the page to nobody. Role last, so the tab
+         still reads when the title is truncated to ~30 characters. -->
+    <title>Cam Carp — Mission Control | Adtech Solutions Consultant</title>
     <meta
       name="description"
       content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
     />
-    <!-- The link gets pasted into Slack and LinkedIn DMs, so the unfurl is
-         part of the first impression. Canonical points at the custom domain
-         so the netlify.app mirror never competes with it in search or in a
-         shared preview. -->
-    <link rel="canonical" href="https://camcarp.com/" />
+    <!-- ORIGIN — read before changing any URL below.
+         The link gets pasted into Slack and LinkedIn DMs, so the unfurl is part
+         of the first impression, and a scraper follows og:url rather than the
+         URL that was actually pasted. camcarp.com is still the intended home,
+         but its apex currently resolves to 13.248.243.5 / 76.223.105.230 (AWS
+         Global Accelerator) and not to Netlify's apex 75.2.60.5 — it is serving
+         something else entirely, so advertising it today hands every preview to
+         a page that is not this one. Everything below therefore names the
+         origin that verifiably serves this build.
+
+         THE DAY camcarp.com IS CUT OVER TO NETLIFY: confirm with
+         `dig +short camcarp.com` → 75.2.60.5, then swap the host in exactly the
+         five places that carry one — lines 32, 35, 47, 61 and 88 below
+         (canonical, og:url, og:image, twitter:image, and the JSON-LD Person
+         url). Nothing else in this file hard-codes an origin. -->
+    <link rel="canonical" href="https://mission-control-resume.netlify.app/" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://camcarp.com/" />
     <meta property="og:site_name" content="Mission Control" />
-    <meta property="og:title" content="Mission Control — a résumé you pilot" />
+    <meta property="og:url" content="https://mission-control-resume.netlify.app/" />
+    <meta property="og:title" content="Cam Carp — a résumé you pilot" />
     <meta
       property="og:description"
       content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
     />
+    <!-- og.jpg is a real frame of the flight — the Navy Pier finale, posed and
+         captured from the running app — with the wordmark composited over the
+         night sky, the one part of that frame with nothing in it. Absolute URLs
+         are not optional here: LinkedIn and Slack resolve og:image against
+         nothing, and a root-relative path silently yields a text-only card on
+         the site whose entire pitch is that it looks spectacular. -->
+    <meta property="og:image" content="https://mission-control-resume.netlify.app/og.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Cam Carp, Adtech Solutions Consultant — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
+    />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Mission Control — a résumé you pilot" />
+    <meta name="twitter:title" content="Cam Carp — a résumé you pilot" />
     <meta
       name="twitter:description"
       content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
     />
+    <meta name="twitter:image" content="https://mission-control-resume.netlify.app/og.jpg" />
+    <meta
+      name="twitter:image:alt"
+      content="Cam Carp, Adtech Solutions Consultant — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
+    />
+    <!-- Icons. Netlify's SPA catch-all (netlify.toml) rewrites every unmatched
+         path to index.html, so before these files existed /favicon.ico came
+         back as an HTML document with a 200 — a tab showing the anonymous
+         default globe next to every competing candidate. Static files in the
+         publish dir are matched before the redirect table, so shipping them is
+         also what makes that path resolve honestly. None of these three is
+         render-blocking: Chrome fetches the tab icon off the critical path and
+         desktop browsers never request the touch icon at all. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Person schema, so a search for the name can resolve to this page as a
+         person rather than as an untitled web app. Deliberately minimal: there
+         is no sameAs, no email and no address, because inventing a LinkedIn URL
+         or a city would be inventing structured data ABOUT A REAL PERSON — add
+         them here only once Cameron supplies the actual values. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Cam Carp",
+        "jobTitle": "Adtech Solutions Consultant",
+        "url": "https://mission-control-resume.netlify.app/"
+      }
+    </script>
     <!--
       Ground colour AND the gate's headline are painted by the document
       itself, before any CSS or JS arrives. The pre-rendered shell below is
@@ -40,23 +99,43 @@
     -->
     <style>
       html { background: #08090b; color-scheme: dark; }
+      /* 'Inter var' used to lead this stack and is loaded NOWHERE — public/fonts
+         holds Space Grotesk and nothing else. On the minority of machines that
+         happen to have Inter installed the whole site rendered in a different
+         typeface than it does everywhere else, which is non-deterministic
+         typography in the one file that paints before any CSS arrives. The
+         stack below is the system stack the README already claims. */
       body { margin: 0; background: #08090b; color: #e8e6e1;
-             font-family: 'Inter var', ui-sans-serif, system-ui, -apple-system, sans-serif; }
+             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
       #root { min-height: 100dvh; }
-      .mc-shell { min-height: 100dvh; display: grid; place-items: center; padding: 48px 20px; }
+      /* EVERY length below is rem, and that is load-bearing rather than
+         stylistic. polish.css steps the root font-size to 17-19px on displays
+         ≥1920 so the console does not read as a small card marooned in a huge
+         frame — which means React's Splash renders this same headline at
+         ~32-36px there. Authored in px, this shell would have painted it at a
+         flat 30px and then let it grow the instant the stylesheet landed:
+         precisely the hop the note above says CLS cannot see and eyes can,
+         reintroduced on exactly the large displays a panel is most likely to
+         be presented on. In rem the two agree at every width, and below 1920
+         (1rem = 16px) these are byte-for-byte the measurements that were here
+         before. The media query is duplicated rather than imported because
+         this style block must not wait on a network request — that is the
+         whole reason it exists. */
+      @media (min-width: 1920px) { html { font-size: clamp(17px, 0.3125vw + 11px, 19px); } }
+      .mc-shell { min-height: 100dvh; display: grid; place-items: center; padding: 3rem 1.25rem; }
       /* Reserve roughly the rendered gate's height so the headline paints at
          (nearly) its final position — without this the centered shell sat
          ~190px lower than the full gate and the headline visibly hopped when
          React mounted. CLS can't see that hop (removed+new nodes), eyes can. */
-      .mc-shell > div { width: 100%; max-width: 32rem; min-height: min(544px, calc(100dvh - 96px)); }
+      .mc-shell > div { width: 100%; max-width: 32rem; min-height: min(34rem, calc(100dvh - 6rem)); }
       .mc-eyebrow { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-                    font-size: 10px; line-height: 14px; letter-spacing: 0.06em;
+                    font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em;
                     text-transform: uppercase; color: #737c88; }
-      .mc-h1 { margin: 12px 0 0; font-size: 24px; font-weight: 600;
+      .mc-h1 { margin: 0.75rem 0 0; font-size: 1.5rem; line-height: 2rem; font-weight: 600;
                letter-spacing: -0.025em; text-wrap: balance; color: #e8e6e1; }
-      .mc-intro { margin: 12px 0 0; max-width: 65ch; font-size: 12.5px;
+      .mc-intro { margin: 0.75rem 0 0; max-width: 65ch; font-size: 0.78125rem;
                   line-height: 1.625; color: #8b929c; }
-      @media (min-width: 768px) { .mc-h1 { font-size: 30px; } }
+      @media (min-width: 768px) { .mc-h1 { font-size: 1.875rem; line-height: 2.25rem; } }
     </style>
   </head>
   <body>

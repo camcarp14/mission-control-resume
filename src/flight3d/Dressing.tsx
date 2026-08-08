@@ -56,10 +56,12 @@ const GLOW_SCALE = 5.5;
 
 // Flyby: a small satellite crossing the deep background near mid-voyage.
 //
-// This used to be spaceship.glb — a cartoon low-poly rocket ("Spaceship_
+// This used to be a vendored cartoon low-poly rocket ("Spaceship_
 // FinnTheFrog") on a single Phong texture atlas with no PBR channels. No
 // material pass rescues that silhouette; against the photoreal moon it read
-// as clip-art. It is now a COMPACT ISS: a lattice truss spine, two big solar
+// as clip-art. The model itself is gone from the repo now — an audit found
+// it was still being deployed months after nothing referenced it — and this
+// is a COMPACT ISS: a lattice truss spine, two big solar
 // wings on rotary joints and a pressurised module slung underneath — the same
 // craft language as SolarBodies' outpost, so the two read as one universe.
 // Path, timing, bank and reduced-motion parking are unchanged.
@@ -640,7 +642,25 @@ function DustCorridor({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: 
 
 function LostAstronaut({ anchor, reduced }: { anchor: Waypoint; reduced: boolean }) {
   const { scene } = useGLTF(ASTRONAUT_URL);
-  const fit = useMemo(() => fitGltfScene(scene, ASTRONAUT_HEIGHT, true), [scene]);
+  const fit = useMemo(() => {
+    // The Quaternius kit ships this figure holding a handgun, as a separate
+    // 2,348-triangle node named "Pistol", and it is genuinely legible in
+    // frame — an audit pass reading the model's own mesh list caught it
+    // dangling below the tumbling astronaut. Charming in a space-shooter
+    // asset pack; an odd thing for a hiring panel to notice on a résumé.
+    // Stripping the NODE rather than hiding it matters: Box3 traverses the
+    // graph without consulting visibility, so an invisible pistol would
+    // still inflate the bounds and fitGltfScene would keep scaling the
+    // astronaut down to make room for something nobody can see.
+    // Collected first, detached after: removing during a traverse mutates
+    // the children array the walk is iterating and silently skips siblings.
+    const armed: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      if (/pistol|gun|weapon/i.test(o.name)) armed.push(o);
+    });
+    for (const o of armed) o.removeFromParent();
+    return fitGltfScene(scene, ASTRONAUT_HEIGHT, true);
+  }, [scene]);
   const tumbleRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {

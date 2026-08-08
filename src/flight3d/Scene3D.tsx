@@ -117,7 +117,20 @@ function Rig({
   // Panel heights, measured once per station (offsetHeight forces layout —
   // never per frame). Cleared on viewport change; transforms don't dirty it.
   const panelHeights = useRef(new Map<number, number>());
+  // Panel WIDTHS, measured the same way. Assuming the CSS max-width here was
+  // fragile — the stylesheet owns the measure and it changes by breakpoint —
+  // so the horizontal clamp reads the real box instead of a duplicated
+  // constant that silently drifts out of sync with polish.css.
+  const panelWidths = useRef(new Map<number, number>());
   const lastSizeKey = useRef('');
+  // Right-hand safe edge for panel anchors, in px. The instrument column
+  // (Telemetry.tsx) is `fixed right-5 lg:right-8` and only exists at lg and
+  // up, so its footprint can't be assumed — it has to be measured. Without
+  // this the panel's right bound was `w - 24`, which put the body copy
+  // straight through the ALT/VEL/SEC readouts at 1280 and 1440 (audit
+  // finding, reproduced in screenshots at both widths). Measured once per
+  // viewport size, alongside the panel heights, never per frame.
+  const rightSafe = useRef(0);
 
   const { points, camPath, gazePath } = useMemo(() => {
     const pts = voyage(n);
@@ -254,9 +267,17 @@ function Rig({
       if (lastSizeKey.current !== sizeKey) {
         lastSizeKey.current = sizeKey;
         panelHeights.current.clear();
+        panelWidths.current.clear();
         lastAnchor.current.clear();
+        // The column only exists from `xl` up, so at narrower widths it has
+        // no box at all and getBoundingClientRect() returns zeros — fall back
+        // to the plain 24px inset in that case. The extra 20px is breathing
+        // room: type that stops exactly at another element's edge still reads
+        // as a collision.
+        const tel = document.querySelector('.telemetry');
+        const box = tel?.getBoundingClientRect();
+        rightSafe.current = box && box.width > 0 ? Math.round(box.left) - 20 : w - 24;
       }
-      const panelW = Math.min(560, w - 32);
       const cur = Math.round(tv);
       let tetherStr = '';
 
@@ -268,10 +289,21 @@ function Rig({
           ph = el.offsetHeight;
           panelHeights.current.set(i, ph);
         }
+        let pw = panelWidths.current.get(i);
+        if (pw === undefined || pw === 0) {
+          pw = el.offsetWidth;
+          panelWidths.current.set(i, pw);
+        }
         // Vertical clamp keeps the WHOLE panel on-screen around its -50%
         // translate; an over-tall panel just centres in the safe band.
         const yLo = ph / 2 + 88;
         const yHi = h - ph / 2 - 118;
+        // Horizontal: the panel's LEFT edge, so its right edge lands on the
+        // safe line. At viewports too narrow to seat both the panel and the
+        // instrument column the bound can fall left of the minimum — take
+        // the minimum and let the column overlap rather than shoving the
+        // panel off the left of the frame.
+        const xHi = Math.max(w * 0.34, rightSafe.current - pw);
         let ax: number;
         let ay: number;
         let limbX = 0;
@@ -281,7 +313,7 @@ function Rig({
         if (wp.kind === 'earthReturn') {
           // The landing camera sits ON the planet — projecting its centre is
           // meaningless. The homecoming panel docks centre-right, fixed.
-          ax = clampPx(w * 0.52, w * 0.34, w - 24 - panelW);
+          ax = clampPx(w * 0.52, w * 0.34, xHi);
           ay = yLo > yHi ? (88 + h - 118) / 2 : clampPx(h * 0.44, yLo, yHi);
         } else {
           tmpView
@@ -299,7 +331,7 @@ function Rig({
           limbX = (tmpNdc.x * 0.5 + 0.5) * w;
           limbY = (-tmpNdc.y * 0.5 + 0.5) * h;
           hasLimb = true;
-          ax = clampPx(limbX + 42, w * 0.34, w - 24 - panelW);
+          ax = clampPx(limbX + 42, w * 0.34, xHi);
           ay = yLo > yHi ? (88 + h - 118) / 2 : clampPx(by, yLo, yHi);
         }
 

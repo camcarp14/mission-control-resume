@@ -19,7 +19,15 @@ export function StaticMode() {
   }, []);
 
   return (
-    <main className="pagefade mx-auto max-w-2xl px-5 pb-24 pt-24">
+    // 35rem is the flight panel's measure, to the token — the promise of this
+    // page is that it is the same résumé, not a lesser one, and a column that
+    // sets to a different width is the first thing that quietly breaks that.
+    // At max-w-2xl the section rules ran 632px wide while the copy inside
+    // stopped at the 517px prose cap, so every section had a rule overshooting
+    // its own text by 115px. Now the rule, the summary, the bullets and the
+    // artifact frames all end within a few pixels of each other, and rem means
+    // the whole column steps up with the type on a large display.
+    <main className="pagefade mx-auto max-w-[35rem] px-5 pb-24 pt-24">
       <h1
         ref={headingRef}
         tabIndex={-1}

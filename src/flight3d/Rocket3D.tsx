@@ -417,6 +417,200 @@ function canopyTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/* ---- machined plating ------------------------------------------------------
+ * One tileable sheet, shared by every material that is not the lathe hull.
+ * The audit's words were that the ship "reads as an untextured blockout", and
+ * it was right: the hull carried a painted texture but the mandibles, cockpit,
+ * turrets, greebles, housing and gear were all FLAT COLOUR, and flat colour
+ * under two lights is a value with no information in it — no scale cue, no
+ * craft, nothing for a highlight to travel across.
+ *
+ * The merged greebles are boxes, so every face carries its own 0..1 UV square
+ * and this sheet lands once per face at whatever size that face happens to be.
+ * That rules out large features (a bay door and a 6 cm greeble would show the
+ * same panel at wildly different scales); what survives that constraint is a
+ * FINE, self-similar grid with rivets and wear, which reads as machined metal
+ * at any face size. One texture object on four materials: no new draw calls,
+ * one upload, and the descent budget is untouched.
+ */
+let platingCache: THREE.CanvasTexture | null = null;
+function platingTexture(): THREE.CanvasTexture {
+  if (platingCache) return platingCache;
+  const S = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(0x0fa1c11);
+
+  // Base sits high (0.92) because this sheet MULTIPLIES each material's
+  // colour: authored dark, it would drag the whole freighter down a value.
+  ctx.fillStyle = '#ebecef';
+  ctx.fillRect(0, 0, S, S);
+
+  const CELLS = 16;
+  const cw = S / CELLS;
+
+  // Per-cell tonal drift, so no two plates on a face read as the same alloy.
+  for (let y = 0; y < CELLS; y++) {
+    for (let x = 0; x < CELLS; x++) {
+      const r = rand();
+      ctx.fillStyle =
+        r < 0.16
+          ? `rgba(96, 102, 112, ${(0.06 + rand() * 0.1).toFixed(3)})` // swapped plate
+          : `rgba(255, 255, 255, ${(rand() * 0.05).toFixed(3)})`;
+      ctx.fillRect(x * cw, y * cw, cw, cw);
+    }
+  }
+
+  // Seam grid, heavier every fourth line so a face reads as plating rather
+  // than as graph paper. Drawn on the cell boundaries, both axes.
+  for (let i = 0; i < CELLS; i++) {
+    const heavy = i % 4 === 0;
+    ctx.strokeStyle = heavy ? 'rgba(52, 58, 68, 0.32)' : 'rgba(52, 58, 68, 0.16)';
+    ctx.lineWidth = heavy ? 2.4 : 1.4;
+    const p = i * cw;
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, S);
+    ctx.moveTo(0, p);
+    ctx.lineTo(S, p);
+    ctx.stroke();
+  }
+
+  // Rivet runs along the heavy seams — the detail that says "fabricated".
+  ctx.fillStyle = 'rgba(74, 80, 90, 0.34)';
+  for (let i = 0; i < CELLS; i += 4) {
+    for (let j = 0; j < S; j += 11) {
+      if (rand() < 0.3) continue;
+      ctx.beginPath();
+      ctx.arc(i * cw + 4, j, 1.5, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(j, i * cw + 4, 1.5, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  // Scuffs and grime streaks, aligned to nothing in particular.
+  for (let i = 0; i < 90; i++) {
+    ctx.fillStyle = `rgba(84, 82, 76, ${(0.03 + rand() * 0.07).toFixed(3)})`;
+    ctx.fillRect(rand() * S, rand() * S, 3 + rand() * 40, 2 + rand() * 9);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  platingCache = tex;
+  return tex;
+}
+
+/* ---- wear map: roughness in G, metalness in B ------------------------------
+ * three multiplies material.roughness by roughnessMap.g and material.metalness
+ * by metalnessMap.b, so ONE sheet in both slots breaks up the uniform sheen
+ * that made the freighter look injection-moulded. Grimy patches go rough and
+ * matte, bare plate stays tighter and more metallic, and the HDRI reflection
+ * finally has something to catch on as the ship turns. Every material's base
+ * roughness/metalness is raised to cover this sheet's mean, so the average
+ * lands where it was already tuned — only the VARIANCE is new.
+ */
+const WEAR_G = 0.82; // mean of the green channel, as a fraction
+const WEAR_B = 0.75; // mean of the blue channel
+let wearCache: THREE.CanvasTexture | null = null;
+function wearTexture(): THREE.CanvasTexture {
+  if (wearCache) return wearCache;
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(0x0fa1c13);
+
+  ctx.fillStyle = `rgb(255, ${Math.round(WEAR_G * 255)}, ${Math.round(WEAR_B * 255)})`;
+  ctx.fillRect(0, 0, S, S);
+
+  // Overlapping low-alpha rects instead of a blur filter: ctx.filter is not
+  // universal, and stacking soft rectangles gets the same cloudy field with
+  // nothing to feature-detect at runtime.
+  for (let i = 0; i < 240; i++) {
+    const rough = rand() < 0.55;
+    // Rough patches: high G (dull), low B (the plate's coating is gone).
+    // Polished patches: low G, high B — bare metal that has been rubbed.
+    const g = rough ? 210 + rand() * 45 : 120 + rand() * 70;
+    const b = rough ? 90 + rand() * 70 : 200 + rand() * 55;
+    ctx.fillStyle = `rgba(255, ${Math.round(g)}, ${Math.round(b)}, ${(0.06 + rand() * 0.1).toFixed(3)})`;
+    const w = 10 + rand() * 90;
+    const h = 8 + rand() * 70;
+    ctx.fillRect(rand() * S - w / 2, rand() * S - h / 2, w, h);
+  }
+
+  // Seams and edges collect grime: a rougher, less metallic grid that lines up
+  // with the plating sheet's cell boundaries.
+  ctx.strokeStyle = 'rgba(255, 255, 110, 0.26)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const p = (i * S) / 8;
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, S);
+    ctx.moveTo(0, p);
+    ctx.lineTo(S, p);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  // Data, not colour: sRGB-decoding a roughness sheet would skew every value.
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  wearCache = tex;
+  return tex;
+}
+
+/* ---- fresnel rim -----------------------------------------------------------
+ * The other half of "the ship loses all separation against bright bodies": at
+ * Saturn and Jupiter the freighter is a mid-grey shape on a pale disc, and no
+ * amount of albedo detail draws the OUTLINE. A grazing-angle term adds a thin
+ * cool edge all the way round the silhouette — the light every real render has
+ * from the sky behind the subject, and the cheapest possible way to buy it: a
+ * dot product and a pow in the fragment shader, no extra geometry, no extra
+ * draw call, no extra pass.
+ *
+ * Injected at <opaque_fragment>, which is the first point where three has both
+ * geometryNormal and geometryViewDir in scope and outgoingLight assembled.
+ */
+const RIM_TINT = 'vec3(0.44, 0.62, 0.88)'; // cool starlight, a cousin of HYPER_CORE
+// The exponent is the whole difference between an edge light and a wash. The
+// hull is a flattened DISC, so at the docked three-quarter views most of its
+// upper shell already sits at a shallow angle to the lens: at pow 3.2 the term
+// lifted the entire top of the ship and the freighter came out BRIGHTER than
+// the sun behind it — measured, the sun frame's median went the wrong way. At
+// 5.0 the term collapses onto the last few degrees before the silhouette,
+// which is the only place it was ever meant to be.
+const RIM_POWER = 5.0;
+
+function withRim(mat: THREE.MeshStandardMaterial, strength: number): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `float rimK = 1.0 - abs(dot(geometryNormal, geometryViewDir));
+       outgoingLight += ${RIM_TINT} * pow(rimK, ${RIM_POWER.toFixed(1)}) * ${strength.toFixed(3)};
+       #include <opaque_fragment>`,
+    );
+  };
+  // three caches compiled programs against the material's PARAMETERS, not the
+  // source onBeforeCompile handed back, so the cache key has to name the patch
+  // or a rim-patched material and an unpatched one with identical parameters
+  // would silently share whichever program compiled first. Keying on the
+  // STRENGTH rather than on the material is the point: every material that
+  // asks for the same rim compiles one program between them, and Scene3D's
+  // warm-up pays for that program once per light signature instead of once per
+  // material per light signature.
+  mat.customProgramCacheKey = () => `falcon-rim-${strength.toFixed(3)}`;
+}
+
 /* Radial glow sprite texture: white-hot core through hyperdrive blue. */
 let glowCache: THREE.CanvasTexture | null = null;
 function glowTexture(): THREE.CanvasTexture {
@@ -1037,34 +1231,68 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       uAspect: { value: 16 / 9 },
       uCamVel: { value: new THREE.Vector3() },
     };
+    // Surface treatment, shared across the freighter: the plating sheet on
+    // everything that used to be flat colour, the wear sheet in both the
+    // roughness and metalness slots, and a fresnel rim on all four hull
+    // materials. Base roughness/metalness are divided by the wear sheet's
+    // mean so the AVERAGE stays exactly where it was tuned across twelve
+    // rounds — the variance is the only new thing. Colours are lifted part of
+    // the way to cover the plating sheet's mean: only part, because the ship
+    // sitting a shade below Saturn's cream disc is precisely the separation
+    // the audit asked for.
+    const plating = platingTexture();
+    const wear = wearTexture();
+    const hull = new THREE.MeshStandardMaterial({
+      map: hullTexture(),
+      roughnessMap: wear,
+      metalnessMap: wear,
+      color: '#ffffff',
+      roughness: 0.62 / WEAR_G,
+      metalness: 0.25 / WEAR_B,
+      envMapIntensity: 0.7,
+    });
+    const grey = new THREE.MeshStandardMaterial({
+      map: plating,
+      roughnessMap: wear,
+      metalnessMap: wear,
+      color: '#b8bcc1',
+      roughness: 0.62 / WEAR_G,
+      metalness: 0.25 / WEAR_B,
+      envMapIntensity: 0.7,
+    });
+    const greyDark = new THREE.MeshStandardMaterial({
+      map: plating,
+      roughnessMap: wear,
+      metalnessMap: wear,
+      color: '#92969b',
+      roughness: 0.7 / WEAR_G,
+      metalness: 0.3 / WEAR_B,
+      envMapIntensity: 0.6,
+    });
+    const dark = new THREE.MeshStandardMaterial({
+      map: plating,
+      roughnessMap: wear,
+      metalnessMap: wear,
+      color: '#3a3e46',
+      roughness: 0.5 / WEAR_G,
+      metalness: 0.6 / WEAR_B,
+      side: THREE.DoubleSide,
+    });
+    // Two tiers, not four. The plate materials own the outline and take the
+    // full rim; the dark furniture is edges and recesses all the way down, and
+    // at full strength every greeble picked out its own corners until the
+    // stern deck read as a glowing wireframe. Two tiers is also two shader
+    // programs instead of four — see withRim on why the strength is the key.
+    for (const m of [hull, grey, greyDark]) withRim(m, 0.22);
+    withRim(dark, 0.12);
+
     return {
       trailU: trailUniforms,
       mats: {
-        hull: new THREE.MeshStandardMaterial({
-          map: hullTexture(),
-          color: '#ffffff',
-          roughness: 0.62,
-          metalness: 0.25,
-          envMapIntensity: 0.7,
-        }),
-        grey: new THREE.MeshStandardMaterial({
-          color: '#b4b8bc',
-          roughness: 0.62,
-          metalness: 0.25,
-          envMapIntensity: 0.7,
-        }),
-        greyDark: new THREE.MeshStandardMaterial({
-          color: '#8e9296',
-          roughness: 0.7,
-          metalness: 0.3,
-          envMapIntensity: 0.6,
-        }),
-        dark: new THREE.MeshStandardMaterial({
-          color: '#3a3e46',
-          roughness: 0.5,
-          metalness: 0.6,
-          side: THREE.DoubleSide,
-        }),
+        hull,
+        grey,
+        greyDark,
+        dark,
         canopy: new THREE.MeshStandardMaterial({
           map: canopyTexture(),
           color: '#ffffff',

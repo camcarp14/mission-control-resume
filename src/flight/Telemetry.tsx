@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MotionValue } from 'framer-motion';
+import { legInto, makePath3, voyage } from '../engine';
 import { stations } from '../content/stations.js';
 
 /**
@@ -16,6 +17,10 @@ import { stations } from '../content/stations.js';
  * Only the `current` diamond highlight goes through React, and that changes
  * once per docking, not per frame.
  */
+/** Gauge formatting: clamped, rounded, zero-padded to a constant width. */
+const pad = (v: number, width: number) =>
+  String(Math.min(10 ** width - 1, Math.max(0, Math.round(v)))).padStart(width, '0');
+
 export function Telemetry({
   t,
   vel,
@@ -33,14 +38,45 @@ export function Telemetry({
   const secRef = useRef<HTMLSpanElement>(null);
   const lastText = useRef(-Infinity);
 
+  // ALT used to be `(t / (n-1)) * 420`, which is not an altitude at all — it
+  // is the progress bar wearing a unit. Its worst symptom was the finale:
+  // the ship sits parked on Navy Pier with the instruments proudly reading
+  // ALT +420.0 KM, an instrument visibly lying on the one frame a visitor
+  // lingers on. This derives it from the same voyage geometry the camera
+  // flies, so the number means something: height above Earth's surface.
+  const alt = useMemo(() => {
+    const pts = voyage(n);
+    const path = makePath3(pts.map((p) => p.camPos));
+    const home = pts[0];
+    if (!home) return () => 0;
+    const [ex, ey, ez] = home.bodyPos;
+    const r = home.bodyRadius;
+    return (v: number) => {
+      const [x, y, z] = path.posAt(v);
+      // World units are a composition choice, not a scale — 24 km per unit
+      // simply puts the outbound voyage in a range that reads as space
+      // travel rather than as a plausible orbit.
+      const above = Math.max(0, Math.hypot(x - ex, y - ey, z - ez) - r) * 24;
+      // The homecoming leg IS a descent, so altitude bleeds to exactly zero
+      // at touchdown. The camera stops a few units above the pad (it is
+      // filming the landing, not performing it); the ship does not.
+      return above * (1 - legInto(n, n - 1, v));
+    };
+  }, [n]);
+
   useEffect(() => {
     const denom = Math.max(1, n - 1);
     let trailing: number | null = null;
     const writeText = () => {
       const v = t.get();
-      if (altRef.current) altRef.current.textContent = `+${((v / denom) * 420).toFixed(1)} KM`;
+      // Zero-padded to a FIXED width, gauge-style. This is not decoration:
+      // Scene3D measures this column once per viewport size to bound the
+      // station panels, so a readout that grows a digit mid-flight would
+      // silently invalidate that measurement and let the panels drift back
+      // into the instruments. Constant width makes the two agree forever.
+      if (altRef.current) altRef.current.textContent = `${pad(alt(v), 5)} KM`;
       if (velRef.current) {
-        velRef.current.textContent = `${Math.min(9999, Math.abs(vel.get()) * 900).toFixed(0)} M/S`;
+        velRef.current.textContent = `${pad(Math.abs(vel.get()) * 900, 4)} M/S`;
       }
       if (secRef.current) secRef.current.textContent = `// ${stations[Math.round(v)]?.code ?? ''}`;
     };
@@ -75,12 +111,17 @@ export function Telemetry({
       offV();
       if (trailing !== null) window.clearTimeout(trailing);
     };
-  }, [t, vel, n]);
+  }, [t, vel, n, alt]);
 
   return (
     <div
       aria-hidden="true"
-      className="telemetry pointer-events-none fixed right-5 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-5 lg:right-8 lg:flex"
+      /* xl, not lg: at 1024 a 560px panel and this column cannot both be seated
+         without the body copy running through the readouts — the collision the
+         audit caught at 1280/1440 came from assuming they always fit. Scene3D
+         measures this element to bound the panels, so the two agree by
+         construction rather than by matching constants. */
+      className="telemetry pointer-events-none fixed right-8 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-5 xl:flex"
     >
       {/* top bracket: square + hairline tick */}
       <div className="flex flex-col items-center gap-1.5">
