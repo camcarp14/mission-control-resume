@@ -160,6 +160,24 @@ function Rig({
       tmpEarthV.set(landing.bodyPos[0], landing.bodyPos[1], landing.bodyPos[2]);
       tmpGaze.lerp(tmpEarthV, Math.sin(Math.PI * arcProg) * 0.6);
     }
+    if (landing && homeRaw > 0) {
+      // The dive must never enter the globe — the raw spline's last segment
+      // clipped straight through it, near-plane slicing the planet into a
+      // see-through shell ("you go right through the earth", verbatim).
+      // Continuous radial clearance: push the camera out to a minimum
+      // altitude whenever the trajectory dips inside it.
+      tmpEarthV.set(landing.bodyPos[0], landing.bodyPos[1], landing.bodyPos[2]);
+      const dEarth = tmpPos.distanceTo(tmpEarthV);
+      const minD = landing.bodyRadius + 2.4;
+      if (dEarth < minD && dEarth > 1e-4) {
+        tmpPos.sub(tmpEarthV).multiplyScalar(minD / dEarth).add(tmpEarthV);
+      }
+      // Final glide: a low second hump along the pad normal that carries the
+      // dive OVER the pier structures and settles onto the composed landing
+      // pose — without it the camera flew under the deck for a beat.
+      const g = Math.min(1, Math.max(0, (homeRaw - 0.74) / 0.24));
+      tmpPos.addScaledVector(tmpNorm, Math.sin(Math.PI * g) * 9);
+    }
 
     const fov = fovAt(points, tv) + (mobile ? 9 : 0);
 

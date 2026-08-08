@@ -46,23 +46,26 @@ const FLOAT_FREQ = 0.5;
 // tightened it so ONLY the next station teases).
 const FADE_NEAR = 120;
 const FADE_FAR = 250;
-const WIDTH_MIN = 14; // world-unit plane width clamp
-const WIDTH_MAX = 30;
-// Placement, learned from two live rounds: shifted toward the flight line
-// the label ran INTO the anchored panel docked right of the body, and at
-// the body's own depth big planets swallowed half the text. So: biased
-// LEFT of the body's centre (panel territory is to the right) and pulled
-// TOWARD the camera past the sphere's near face.
-const X_AWAY_FROM_PANEL = -0.25; // × bodyRadius
-const Z_TOWARD_CAMERA = 0.85; // × bodyRadius — clears the sphere's limb
+// Placement, relearned across THREE live rounds of world-offset guessing
+// (into the panel; behind the planet; off the frame edge): labels are now
+// composed IN THE DOCK FRAME. Each waypoint carries its docked camera
+// (camPos/gaze/fov) — the label sits on the ray through a fixed
+// upper-left screen point, at ~80% of the body's distance, sized to a
+// fixed fraction of the frame. On-screen at every dock by construction.
+const LABEL_NDC_X = -0.5; // upper-left quadrant, clear of the panel (right)
+const LABEL_NDC_Y = 0.55; // below the top bar
+const LABEL_ASPECT = 1.5; // placement basis — a compromise across breakpoints
+const LABEL_DEPTH = 0.8; // × distance(dock cam, body)
+const LABEL_FRACTION = 0.32; // of the frame width at that depth
 
 /* ---- shared resources --------------------------------------------------- */
 
 const LABEL_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 const noRaycast = () => undefined; // labels are decoration; never hit-test
-
-/** Field kinds have a diffuse "surface" — the label rides higher over them. */
-const FIELD_KINDS = new Set<Waypoint['kind']>(['asteroids', 'nebula', 'cluster']);
+// Scratch camera for dock-frame placement — build-time only, never rendered.
+const dockCam = new THREE.PerspectiveCamera(50, LABEL_ASPECT, 0.5, 2600);
+const dockCamPos = new THREE.Vector3();
+const dockRay = new THREE.Vector3();
 
 /* ---- canvas painting ---------------------------------------------------- */
 
@@ -171,22 +174,36 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
     // Above the body, shifted toward the flight line so it sits between the
     // planet and the camera path — never behind the planet. Field kinds have
     // no crisp limb, so their label rides higher to clear the haze.
-    // Field kinds (asteroids/nebula/cluster) are diffuse volumes, not solid
-    // spheres — they need less camera-ward shift (a full-radius pull left
-    // the current station's label clipped by the top bar) and a lower ride.
-    const isField = FIELD_KINDS.has(wp.kind);
-    const lift = isField ? wp.bodyRadius * 0.55 + 6 : wp.bodyRadius * 0.55 + 7.5;
-    const zShift = wp.bodyRadius * (isField ? 0.25 : Z_TOWARD_CAMERA);
+    // Dock-frame placement: rebuild this waypoint's docked camera, cast a
+    // ray through the fixed upper-left screen point, park the label at 80%
+    // of the body's distance, and size it to a fixed screen fraction.
+    dockCam.fov = wp.fov;
+    dockCam.aspect = LABEL_ASPECT;
+    dockCamPos.set(wp.camPos[0], wp.camPos[1], wp.camPos[2]);
+    dockCam.position.copy(dockCamPos);
+    dockCam.up.set(0, 1, 0);
+    dockCam.lookAt(wp.gaze[0], wp.gaze[1], wp.gaze[2]);
+    dockCam.updateMatrixWorld(true);
+    dockCam.updateProjectionMatrix();
+    const bodyDist = Math.hypot(
+      wp.bodyPos[0] - wp.camPos[0],
+      wp.bodyPos[1] - wp.camPos[1],
+      wp.bodyPos[2] - wp.camPos[2],
+    );
+    const depth = bodyDist * LABEL_DEPTH;
+    dockRay.set(LABEL_NDC_X, LABEL_NDC_Y, 0.5).unproject(dockCam).sub(dockCamPos).normalize();
+    const width =
+      2 * depth * Math.tan(THREE.MathUtils.degToRad(wp.fov) / 2) * LABEL_ASPECT * LABEL_FRACTION;
     specs.push({
       index: wp.index,
       texture,
       aspect: canvas.height / Math.max(1, canvas.width),
       position: [
-        wp.bodyPos[0] + wp.bodyRadius * X_AWAY_FROM_PANEL,
-        wp.bodyPos[1] + lift,
-        wp.bodyPos[2] + zShift,
+        dockCamPos.x + dockRay.x * depth,
+        dockCamPos.y + dockRay.y * depth,
+        dockCamPos.z + dockRay.z * depth,
       ],
-      width: THREE.MathUtils.clamp(wp.bodyRadius * 1.6, WIDTH_MIN, WIDTH_MAX),
+      width,
     });
   }
   return specs;
