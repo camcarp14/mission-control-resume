@@ -42,6 +42,7 @@ const tmpDir = new THREE.Vector3();
 const tmpHover = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
 const tmpNorm = new THREE.Vector3();
+const tmpEarthV = new THREE.Vector3();
 // Panel-anchoring scratch: a shadow camera that holds the BASE pose (kick
 // included, breathing excluded) so projected anchors are rock-still at rest.
 const projCam = new THREE.PerspectiveCamera(50, 1, 0.5, 2600);
@@ -143,6 +144,22 @@ function Rig({
     const k = kick.get() * 0.3;
     tmpPos.set(p[0], p[1], p[2]).addScaledVector(tmpTan, k);
     tmpGaze.set(g[0], g[1], g[2]);
+
+    // ==== THE FLIGHT HOME — a ballistic arc OVER the system. The raw
+    // spline cut straight back through the middle of the voyage, planets
+    // and labels whipping past sideways ("the return back to earth looks
+    // really strange", verbatim). Instead: climb high off the ecliptic,
+    // eyes on Earth, then descend into the landing shot. The arc is fully
+    // spent (sin hits π) before the low-horizon landing framing takes
+    // over, so the composed touchdown camera is untouched. ====
+    const homeRaw = landing ? Math.min(1, Math.max(0, tv - (n - 2))) : 0;
+    const arcProg = Math.min(1, homeRaw / 0.78);
+    const arc = landing && homeRaw > 0 ? Math.sin(Math.PI * arcProg) * 52 : 0;
+    if (arc > 0.01 && landing) {
+      tmpPos.y += arc;
+      tmpEarthV.set(landing.bodyPos[0], landing.bodyPos[1], landing.bodyPos[2]);
+      tmpGaze.lerp(tmpEarthV, Math.sin(Math.PI * arcProg) * 0.6);
+    }
 
     const fov = fovAt(points, tv) + (mobile ? 9 : 0);
 
@@ -287,7 +304,10 @@ function Rig({
     // way (screenshot finding).
     const rk = rocketRef.current;
     const velThrust = THREE.MathUtils.clamp(Math.abs(vel.get()) / 0.85, 0, 1);
-    let thrust = velThrust;
+    // The engines never fully die in flight — a docked ship holds station on
+    // a soft idle burn ("always boostin somewhat, even when stopped",
+    // verbatim). Only the landing's touchdown cut takes it to zero.
+    let thrust = Math.max(velThrust, 0.34);
 
     if (rk) {
       // "Make the rocket much larger" (verbatim): the craft is a main
@@ -312,6 +332,9 @@ function Rig({
         .addScaledVector(tmpUp, -3.2)
         .addScaledVector(tmpRight, mobile ? 0 : -7.6)
         .addScaledVector(tmpTan, kick.get() * 0.35);
+      // The ship rides the homecoming arc with the camera — racing you home
+      // above the system, not crawling along the old flat route below.
+      tmpRocket.y += arc * 0.85;
       // ==== DOCKED FORMATION — the ship is a character, so it must be IN
       // SHOT at every station. The path-cruise pose above drifts out of
       // frame once the dock gaze swings toward the planet ("I can't even

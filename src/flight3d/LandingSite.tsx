@@ -18,7 +18,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import type { MotionValue } from 'framer-motion';
 import { legInto, mulberry32 } from '../engine';
 import type { Waypoint } from '../engine';
@@ -96,9 +96,18 @@ const SUN_INTENSITY = 1.5;
 // visible almost immediately and is fully opaque well before the final
 // descent (ramp 0.82+), so the flip and touchdown happen inside a complete
 // world.
-const VISIBLE_AT = 0.03;
-const FADE_START = 0.3;
-const FADE_SPAN = 0.55;
+// Staging, relearned from arc screenshots: the site must materialize only
+// on FINAL DESCENT, once the camera is dropping inside the dome radius.
+// Faded in from 0.30 it was visible from OUTSIDE during the whole return
+// arc — a giant blue bubble swallowing Earth from space. The globe owns the
+// approach; the site owns the touchdown.
+const VISIBLE_AT = 0.72;
+const FADE_START = 0.78;
+const FADE_SPAN = 0.17;
+// The sky dome lags the ground slightly — it is the most "from outside"
+// readable piece, so it completes last.
+const DOME_START = 0.84;
+const DOME_SPAN = 0.13;
 
 /* ---- module-scope scratch (zero per-frame allocs) ------------------------ */
 
@@ -471,6 +480,26 @@ export function LandingSite({
   }, [waypoints]);
 
   const assets = useMemo(buildAssets, []);
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+
+  // Precompile every landing material and upload the canvas textures at
+  // MOUNT, while the boot overlay still covers the canvas. Left to first
+  // use, the whole daylight pipeline compiled at the exact moment the site
+  // became visible mid-homecoming — a multi-second stall (measured under
+  // software rendering; a visible hitch on real GPUs too) that swallowed
+  // the return arc ("the return back to earth looks really strange").
+  useEffect(() => {
+    const g = groupRef.current;
+    if (!g) return;
+    const wasVisible = g.visible;
+    g.visible = true;
+    gl.compile(g, camera);
+    for (const tex of [assets.groundTex, assets.padTex, assets.cloudTex, assets.glowTex]) {
+      gl.initTexture(tex);
+    }
+    g.visible = wasVisible;
+  }, [gl, camera, assets]);
 
   // Canvas textures, the dome material and the shared hill geometry are
   // created imperatively, so they are disposed imperatively.
@@ -525,10 +554,13 @@ export function LandingSite({
     group.visible = visible;
     if (!visible) return;
 
-    // Master opacity: fully planted before the ship's final descent (0.82+).
+    // Master opacity: the world assembles UNDER the descending ship.
     let k = (ramp - FADE_START) / FADE_SPAN;
     k = k < 0 ? 0 : k > 1 ? 1 : k;
     k = k * k * (3 - 2 * k);
+    let kd = (ramp - DOME_START) / DOME_SPAN;
+    kd = kd < 0 ? 0 : kd > 1 ? 1 : kd;
+    kd = kd * kd * (3 - 2 * kd);
 
     if (groundMatRef.current) groundMatRef.current.opacity = k;
     if (padMatRef.current) padMatRef.current.opacity = k;
@@ -536,7 +568,7 @@ export function LandingSite({
     if (glowMatRef.current) glowMatRef.current.opacity = GLOW_OPACITY * k;
     if (hemiRef.current) hemiRef.current.intensity = HEMI_INTENSITY * k;
     if (sunRef.current) sunRef.current.intensity = SUN_INTENSITY * k;
-    assets.domeUniforms.uOpacity.value = k;
+    assets.domeUniforms.uOpacity.value = kd;
 
     const e = state.clock.elapsedTime;
     for (let i = 0; i < assets.clouds.length; i++) {

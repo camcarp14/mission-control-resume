@@ -48,7 +48,13 @@ const FADE_NEAR = 120;
 const FADE_FAR = 250;
 const WIDTH_MIN = 14; // world-unit plane width clamp
 const WIDTH_MAX = 30;
-const X_TOWARD_LINE = 10; // bodies sit LEFT of the flight line; shift right
+// Placement, learned from two live rounds: shifted toward the flight line
+// the label ran INTO the anchored panel docked right of the body, and at
+// the body's own depth big planets swallowed half the text. So: biased
+// LEFT of the body's centre (panel territory is to the right) and pulled
+// TOWARD the camera past the sphere's near face.
+const X_AWAY_FROM_PANEL = -0.25; // × bodyRadius
+const Z_TOWARD_CAMERA = 0.85; // × bodyRadius — clears the sphere's limb
 
 /* ---- shared resources --------------------------------------------------- */
 
@@ -165,14 +171,21 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
     // Above the body, shifted toward the flight line so it sits between the
     // planet and the camera path — never behind the planet. Field kinds have
     // no crisp limb, so their label rides higher to clear the haze.
-    const lift = FIELD_KINDS.has(wp.kind)
-      ? wp.bodyRadius * 0.8 + 8
-      : wp.bodyRadius * 0.55 + 6;
+    // Field kinds (asteroids/nebula/cluster) are diffuse volumes, not solid
+    // spheres — they need less camera-ward shift (a full-radius pull left
+    // the current station's label clipped by the top bar) and a lower ride.
+    const isField = FIELD_KINDS.has(wp.kind);
+    const lift = isField ? wp.bodyRadius * 0.55 + 6 : wp.bodyRadius * 0.55 + 7.5;
+    const zShift = wp.bodyRadius * (isField ? 0.25 : Z_TOWARD_CAMERA);
     specs.push({
       index: wp.index,
       texture,
       aspect: canvas.height / Math.max(1, canvas.width),
-      position: [wp.bodyPos[0] + X_TOWARD_LINE, wp.bodyPos[1] + lift, wp.bodyPos[2]],
+      position: [
+        wp.bodyPos[0] + wp.bodyRadius * X_AWAY_FROM_PANEL,
+        wp.bodyPos[1] + lift,
+        wp.bodyPos[2] + zShift,
+      ],
       width: THREE.MathUtils.clamp(wp.bodyRadius * 1.6, WIDTH_MIN, WIDTH_MAX),
     });
   }

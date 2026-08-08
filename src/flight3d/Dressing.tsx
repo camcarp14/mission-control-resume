@@ -75,7 +75,7 @@ const ROCK_SPREAD_MIN = 2.2; // cluster-local radius
 const ROCK_SPREAD_MAX = 6.5;
 const ROCK_SCALE_MIN = 0.6;
 const ROCK_SCALE_MAX = 1.9;
-const ROCK_COLOR = '#514c45'; // dark umber-grey regolith — still inside the neutral palette
+const ROCK_COLOR = '#565b61'; // cool slate — matches the belt's de-browned palette
 const ROCK_CRAG_SEED = 0x50c7; // shapes the one shared craggy geometry
 const ROCK_DENT_COUNT = 6; // seeded impact dents on the shared rock
 const ROCK_DENT_RADIUS = 0.5; // rad — angular reach of each dent
@@ -189,8 +189,8 @@ function makeCraggyRockGeometry(seed: number): THREE.BufferGeometry {
 const ROCK_GEOMETRY = makeCraggyRockGeometry(ROCK_CRAG_SEED);
 const ROCK_MATERIAL = new THREE.MeshStandardMaterial({
   color: ROCK_COLOR,
-  roughness: 0.96,
-  metalness: 0.06,
+  roughness: 0.82,
+  metalness: 0.18,
   flatShading: true,
 });
 

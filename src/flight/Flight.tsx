@@ -85,6 +85,10 @@ export default function Flight({
   const t = useMotionValue(start);
   const kick = useMotionValue(0);
   const vel = useVelocity(t);
+  // Dev-only escape hatch for visual review tooling: screenshots under
+  // software rendering lag seconds behind wall time, so scripted reviews
+  // hold `t` at a pose instead of racing the tween. Compiled out of prod.
+  if (import.meta.env.DEV) (window as unknown as { __t?: unknown }).__t = t;
   // The scheduled kick bleed-off for the leg in flight — cleared whenever a
   // new leg preempts it, so back-to-back jumps never fight over the spring.
   const kickTimer = useRef<number | null>(null);

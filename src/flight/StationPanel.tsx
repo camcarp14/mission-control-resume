@@ -64,7 +64,9 @@ export function StationPanel({
       ? `translate3d(${d * 560}px, 0, 0)`
       : `translate3d(0, ${d * 340}px, 0)`;
   });
-  const opacity = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index) / 0.75, 1));
+  // Gone by half a leg: at the old 0.75 falloff, two ghost panels
+  // double-exposed over each other through the long return flight.
+  const opacity = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index) / 0.45, 1));
   const scale = useTransform(t, (v) => 1 - Math.min(Math.abs(v - index), 1) * 0.045);
 
   const body = (

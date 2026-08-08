@@ -39,18 +39,21 @@ const SATURN_SPIN = 0.2;
 const ASTEROID_COUNT = 120;
 const ASTEROID_DRIFT = 0.02; // collective field rotation — slow, but alive
 const ASTEROID_VARIANT_SEEDS = [0xa57e, 0x0f1e, 0x9b0c] as const; // one craggy geometry per seed
-const ASTEROID_DENT_COUNT = 6; // seeded impact dents per geometry variant
+const ASTEROID_DENT_COUNT = 8; // seeded impact dents per geometry variant
 const ASTEROID_DENT_RADIUS = 0.5; // rad — angular reach of each dent
-const ASTEROID_DENT_DEPTH = 0.28; // max inward push at a dent's centre
+const ASTEROID_DENT_DEPTH = 0.4; // max inward push at a dent's centre
 const ASTEROID_BOULDER_MIN = 1.5; // base scales above this get the high-detail variant
 const ASTEROID_CLUMP_COUNT = 5; // seeded clump centres inside the belt
 const ASTEROID_CLUMP_CHANCE = 0.72; // rocks that gather at a clump vs. loose belt scatter
 const ASTEROID_CLUMP_SPREAD = 0.2; // clump scatter radius, × field radius
 const ASTEROID_BELT_Y = 0.22; // vertical spread, × lateral spread — a belt, not a swarm
-const ASTEROID_BASE_COLOR = '#57534c'; // palette centre — dark warm grey
-const ASTEROID_PALETTE = ['#46423c', '#514c45', '#5c554b', '#3b3835', '#64584a', '#6b5d4e'] as const;
+// Cool slate greys with a faint blue cast — real asteroid photography, not
+// umber. The warm-brown pass read as, in the user's exact words, "pieces of
+// shit"; browns are banned from the belt.
+const ASTEROID_BASE_COLOR = '#5d6167'; // palette centre — slate grey
+const ASTEROID_PALETTE = ['#4e5257', '#565a60', '#5d6167', '#6a6e74', '#71767c', '#454950'] as const;
 const ASTEROID_DUST_COUNT = 140;
-const ASTEROID_DUST_COLOR = '#9a8f80';
+const ASTEROID_DUST_COLOR = '#8b929c';
 const ASTEROID_DUST_SIZE = 0.5;
 const ASTEROID_DUST_OPACITY = 0.18;
 const NEBULA_PUFF_COUNT = 40;
@@ -213,7 +216,14 @@ function Atmosphere({
   useEffect(() => () => material.dispose(), [material]);
   useFrame(() => {
     const u = material.uniforms['uFade'];
-    if (fadeRef && u) u.value = 1 - fadeRef.current;
+    if (fadeRef && u) {
+      // Hold the blue limb through the whole return arc — Earth should look
+      // like Earth until the final descent, when the LandingSite's own sky
+      // takes over. (An early linear fade stripped the glow mid-approach.)
+      const r = (fadeRef.current - 0.75) / 0.2;
+      const s = r < 0 ? 0 : r > 1 ? 1 : r;
+      u.value = 1 - s * s * (3 - 2 * s);
+    }
   });
   return (
     <mesh material={material}>
@@ -241,11 +251,14 @@ function Earth({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current
   const cloudRef = useRef<THREE.Mesh>(null);
 
   useFrame((_state, delta) => {
-    // The orbital cloud shell fades over the landing approach — state, not
-    // motion, so it runs on every rung. LandingSite's cumulus takes over.
+    // The orbital cloud shell fades late in the landing approach — state,
+    // not motion, so it runs on every rung. Earth keeps its clouds through
+    // the return arc; LandingSite's cumulus takes over on final descent.
     if (landingRef && cloudRef.current) {
+      const r = (landingRef.current - 0.75) / 0.2;
+      const s = r < 0 ? 0 : r > 1 ? 1 : r;
       (cloudRef.current.material as THREE.MeshStandardMaterial).opacity =
-        0.55 * (1 - landingRef.current);
+        0.55 * (1 - s * s * (3 - 2 * s));
     }
     if (reduced) return;
     if (globeRef.current) globeRef.current.rotation.y += EARTH_SPIN * delta;
@@ -447,7 +460,9 @@ function makeAsteroidGeometry(seed: number, detail: number): THREE.BufferGeometr
     const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
     let len = radial.get(key);
     if (len === undefined) {
-      len = 0.72 + rand() * 0.55;
+      // Tighter radial variance than the first pass: silhouettes stay chunky
+      // and angular (facets + dents carry the character), not lumpy.
+      len = 0.82 + rand() * 0.36;
       radial.set(key, len);
     }
     // Dents are a smooth function of position, so unwelded duplicates agree.
@@ -490,8 +505,10 @@ function Asteroids({ wp, reduced }: BodyProps) {
       new THREE.MeshStandardMaterial({
         color: '#ffffff',
         flatShading: true,
-        roughness: 0.96,
-        metalness: 0.06,
+        // A touch of sheen: facets catch the key light and read as fractured
+        // mineral instead of matte clay.
+        roughness: 0.82,
+        metalness: 0.18,
       }),
     [],
   );
