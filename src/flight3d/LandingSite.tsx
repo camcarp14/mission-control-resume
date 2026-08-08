@@ -6,9 +6,11 @@
  * Centennial Wheel, the Crystal Gardens glass vault and the 1916 Head House;
  * the Chicago skyline stands silhouetted against a warm sunset over a calm
  * Lake Michigan, windows lit. The pier shapes, the vertex-color "tintGeom"
- * shading and the sky-gradient structure are adapted directly from the
- * user's river-racer repo (js/world/lake.js, city.js, sky.js), inlined here
- * as self-contained TypeScript.
+ * shading, the sky-gradient structure, the lit-window atlas technique and
+ * the signature-tower silhouettes (Willis / Hancock / Marina City / Aon /
+ * Crain analogues) are adapted directly from the user's river-racer repo
+ * (js/world/lake.js, city.js, landmarks.js, sky.js, js/data/chicago.js),
+ * inlined here as self-contained TypeScript.
  *
  * Layout happens in a "pier space" child group whose +X axis is the engine's
  * landing-camera tangent tHat and whose -Z axis is bHat: the camera parks at
@@ -17,7 +19,7 @@
  * beyond x=-175, and the sun sits low toward (-1, 0, -0.5).
  *
  * Everything is procedural and seeded (mulberry32(0xC0FFEE), one rng, fixed
- * order), merged RR-style into ~12 draw calls. The opacity ramp is STATE (it
+ * order), merged RR-style into ~15 draw calls. The opacity ramp is STATE (it
  * tracks the flight position) times a camera-distance gate, so it runs under
  * reduced motion; the continuous animations — wheel spin, gull circling,
  * sun-path shimmer — are gated off and parked when `reduced` is true.
@@ -38,11 +40,11 @@ const SEED = 0xc0ffee;
 // Staging: the site materializes only on final descent (the globe owns the
 // approach), THEN a camera-distance gate keeps it invisible from outside —
 // so the return arc never shows a pier floating in space.
-const VISIBLE_AT = 0.72;
-const FADE_START = 0.78;
-const FADE_SPAN = 0.17;
-const DOME_START = 0.84; // the sky completes last: most readable "from outside"
-const DOME_SPAN = 0.13;
+const VISIBLE_AT = 0.6;
+const FADE_START = 0.7;
+const FADE_SPAN = 0.22;
+const DOME_START = 0.8; // the sky completes last: most readable "from outside"
+const DOME_SPAN = 0.16;
 const CAM_FADE_NEAR = 60; // kCam = 1 inside this camera distance…
 const CAM_FADE_SPAN = 50; // …fading to 0 by NEAR + SPAN
 
@@ -73,12 +75,33 @@ const WHEEL_SPEED = 0.05; // rad/s — three revolutions in ~6 min, parked when 
 const CG_X = -95;
 const HEAD_X = -150;
 
-// Skyline: seeded silhouettes on the shore arc beyond the pier root.
-const TOWER_COUNT = 22;
+// Skyline: seeded Chicago silhouettes on the shore arc beyond the pier root —
+// two depth rows of background towers (near dark/cool, far lifted into the
+// sunset haze) plus five signature masses adapted from the user's river-racer
+// landmarks (Willis / Hancock / Marina City / Aon / Crain analogues). Window
+// grids come from ONE shared 1024² emissive atlas; the whole skyline is ONE
+// merged mesh.
+const SKYLINE_NEAR_COUNT = 14;
+const SKYLINE_FAR_COUNT = 12;
 const TOWER_R_MIN = 178;
-const TOWER_R_SPAN = 78;
-const WINDOW_DENSITY = 0.2;
-const MAX_WINDOWS = 168;
+const TOWER_R_SPAN = 30;
+const FAR_R_MIN = 230;
+const FAR_R_SPAN = 42;
+const SHORE_Y = -3.6; // tower bases sink just under the water plane
+
+// Horizon haze: an additive gradient ring where the towers meet the water.
+const HAZE_R = 171;
+const HAZE_H = 26;
+const HAZE_Y = 7;
+const HAZE_OPACITY = 0.5;
+const HAZE_SUN_U = 0.676; // cylinder-u of the sun azimuth: haze warmest there
+
+// Skyline water reflection: one additive plane of smeared warm columns,
+// painted FROM the seeded tower z-positions so light lands under towers.
+const REFL_X = -138; // plane centre along the camera axis
+const REFL_W = 84; // extent toward the camera (the smear direction)
+const REFL_SPAN = 400; // extent across the skyline
+const REFL_OPACITY = 0.25;
 
 // Water: calm dusk lake, rim alpha baked so it dissolves into haze.
 const WATER_Y = -3.5;
@@ -356,6 +379,149 @@ function paintStreak(ctx: CanvasRenderingContext2D, w: number, h: number): void 
   ctx.restore();
 }
 
+/* ---- skyline window atlas (technique adapted from RR city.js nightTile) -- */
+
+// One 1024² canvas split into 4×2 facade-grid variants. Top row: near-depth
+// variants at full brightness; bottom row: the same grids dimmed and sparser
+// for the far row — aerial perspective without a second material. Every tower
+// facade samples one variant at a seeded, bay-aligned UV offset, so ~30
+// towers share ONE texture and ONE merged draw.
+const ATLAS_PX = 1024;
+const CELL_W = 256;
+const CELL_H = 512;
+const CELL_MARGIN = 8;
+const ATLAS_PPX = 10; // atlas px per world unit across a facade (bay ≈ 1.6–2.4u)
+const ATLAS_PPY = 7; // atlas px per world unit up a facade (floor ≈ 2.3–3.4u)
+
+type AtlasVariant = {
+  col: number;
+  row: number;
+  bayPx: number;
+  floorPx: number;
+  density: number;
+  dim: number;
+};
+
+const ATLAS_VARIANTS: readonly AtlasVariant[] = [
+  { col: 0, row: 0, bayPx: 19, floorPx: 18, density: 0.52, dim: 1 },
+  { col: 1, row: 0, bayPx: 24, floorPx: 20, density: 0.44, dim: 1 },
+  { col: 2, row: 0, bayPx: 16, floorPx: 16, density: 0.55, dim: 1 },
+  { col: 3, row: 0, bayPx: 21, floorPx: 23, density: 0.38, dim: 1 },
+  { col: 0, row: 1, bayPx: 19, floorPx: 18, density: 0.4, dim: 0.55 },
+  { col: 1, row: 1, bayPx: 24, floorPx: 20, density: 0.34, dim: 0.5 },
+  { col: 2, row: 1, bayPx: 16, floorPx: 16, density: 0.44, dim: 0.55 },
+  { col: 3, row: 1, bayPx: 22, floorPx: 24, density: 0.3, dim: 0.45 },
+];
+
+function variantAt(i: number): AtlasVariant {
+  return ATLAS_VARIANTS[i] ?? { col: 0, row: 0, bayPx: 19, floorPx: 18, density: 0.5, dim: 1 };
+}
+
+function dimHex(hex: string, k: number): string {
+  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) * k) | 0;
+  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) * k) | 0;
+  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) * k) | 0;
+  return `rgb(${r},${g},${b})`;
+}
+
+/** Lit-window grids with realistic clumping: whole dark floors, lit runs and
+ *  dark gaps carried by a run-length state, per-cell brightness jitter, upper
+ *  floors sparser (facades anchor to each cell's bottom edge). The RR
+ *  nightTile insight applies: offices are not all lit to the same level, so
+ *  every cell gets its own dim factor or the tower reads as one slab. */
+function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): void {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, ATLAS_PX, ATLAS_PX);
+  const lit = ['#ffd9a0', '#ffca7a', '#fff3d0'] as const;
+  for (const v of ATLAS_VARIANTS) {
+    const x0 = v.col * CELL_W;
+    const y0 = v.row * CELL_H;
+    const cols = Math.floor((CELL_W - 2 * CELL_MARGIN) / v.bayPx);
+    const rows = Math.floor((CELL_H - 2 * CELL_MARGIN) / v.floorPx);
+    for (let r = 0; r < rows; r++) {
+      if (rng() < 0.15) continue; // a whole dark floor
+      const height = 1 - r / rows; // 1 at the cell top (upper floors)
+      const density = v.density * (0.62 + 0.38 * (1 - height));
+      let run = 0;
+      let on = false;
+      for (let c = 0; c < cols; c++) {
+        if (run <= 0) {
+          on = rng() < density;
+          run = 1 + Math.floor(rng() * (on ? 3 : 4)); // lit clusters / dark gaps
+        }
+        run--;
+        if (!on) continue;
+        const hex = lit[Math.floor(rng() * lit.length)] ?? '#ffca7a';
+        ctx.fillStyle = dimHex(hex, (0.66 + rng() * 0.38) * v.dim);
+        ctx.fillRect(
+          x0 + CELL_MARGIN + c * v.bayPx + 2,
+          y0 + CELL_MARGIN + r * v.floorPx + 2,
+          v.bayPx - 4,
+          v.floorPx - 5,
+        );
+      }
+    }
+  }
+}
+
+/** Horizon haze band for the haze ring: vertical warm-rose gradient (bottom of
+ *  the canvas = bottom of the cylinder), alpha-shaped around the ring so the
+ *  glow peaks on the sun azimuth. Seam-safe: the horizontal factor depends on
+ *  wrapped distance from HAZE_SUN_U only. */
+function paintHaze(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const g = ctx.createLinearGradient(0, h, 0, 0);
+  g.addColorStop(0, 'rgba(255,152,95,0.6)');
+  g.addColorStop(0.42, 'rgba(214,122,128,0.28)');
+  g.addColorStop(0.78, 'rgba(150,92,122,0.09)');
+  g.addColorStop(1, 'rgba(150,92,122,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  const m = ctx.createLinearGradient(0, 0, w, 0);
+  for (let i = 0; i <= 8; i++) {
+    const u = i / 8;
+    let dU = Math.abs(u - HAZE_SUN_U);
+    if (dU > 0.5) dU = 1 - dU;
+    const f = 0.45 + 0.55 * (0.5 + 0.5 * Math.cos(dU * Math.PI * 2));
+    m.addColorStop(u, `rgba(0,0,0,${f.toFixed(3)})`);
+  }
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = m;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/** Skyline water reflection: smeared warm columns painted FROM the same
+ *  seeded tower positions the skyline was built with (u runs toward the
+ *  camera — the smear direction; v spans the skyline's z). Each streak gets a
+ *  soft body plus a narrower brighter core. */
+function paintReflections(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  entries: { z: number; w: number; s: number }[],
+  rng: () => number,
+): void {
+  const wash = ctx.createLinearGradient(0, 0, w * 0.6, 0);
+  wash.addColorStop(0, 'rgba(255,150,88,0.14)'); // the city-glow base wash
+  wash.addColorStop(1, 'rgba(255,150,88,0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, w, h);
+  for (const e of entries) {
+    if (Math.abs(e.z) > REFL_SPAN * 0.42) continue; // off the water disc
+    const y = (0.5 + e.z / REFL_SPAN) * h;
+    const half = Math.max(2, (e.w * 0.55 * h) / REFL_SPAN);
+    const len = w * (0.3 + 0.55 * Math.min(1, e.s));
+    const a = 0.3 + 0.45 * Math.min(1, e.s);
+    const g = ctx.createLinearGradient(0, 0, len, 0);
+    g.addColorStop(0, `rgba(255,196,130,${a.toFixed(3)})`);
+    g.addColorStop(0.55, `rgba(255,170,110,${(a * 0.4).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(255,170,110,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y - half, len, half * 2);
+    ctx.fillRect(0, y - half * 0.35, len * (0.75 + rng() * 0.35), half * 0.7);
+  }
+}
+
 /* ---- RR-style geometry helpers (tintGeom / merged batches, inlined) ------ */
 
 /** Per-geometry vertex-color tint with seeded brightness jitter — the RR
@@ -406,6 +572,70 @@ function boxTo(
   const g = new THREE.BoxGeometry(w, h, d);
   if (rotY) g.rotateY(rotY);
   g.translate(x, y, z);
+  tintGeom(g, hex, jitter, rng);
+  list.push(g);
+}
+
+/** Remap a BoxGeometry's UVs so each SIDE facade samples one window-atlas
+ *  variant at a seeded, bay/floor-aligned offset (whole windows, never cut
+ *  cells), scaled so the grid keeps a constant world pitch across every
+ *  tower. Roof and underside collapse onto a black atlas texel. */
+function mapTowerUVs(
+  geo: THREE.BufferGeometry,
+  sx: number,
+  sy: number,
+  sz: number,
+  v: AtlasVariant,
+  rng: () => number,
+): void {
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+  const cellX = v.col * CELL_W;
+  const cellY = v.row * CELL_H;
+  const hPx = Math.min(sy * ATLAS_PPY, CELL_H - 2 * CELL_MARGIN);
+  for (let face = 0; face < 6; face++) {
+    // box face order: +x, -x, +y, -y, +z, -z — faces 2/3 are roof/underside
+    if (face === 2 || face === 3) {
+      for (let i = 0; i < 4; i++) uv.setXY(face * 4 + i, 3 / ATLAS_PX, 1 - 3 / ATLAS_PX);
+      continue;
+    }
+    const fw = face < 2 ? sz : sx; // ±x faces span the z extent and vice versa
+    const wPx = Math.min(fw * ATLAS_PPX, CELL_W - 2 * CELL_MARGIN);
+    const bayOff = Math.floor((rng() * (CELL_W - 2 * CELL_MARGIN - wPx)) / v.bayPx) * v.bayPx;
+    const floorSlack = Math.floor((CELL_H - 2 * CELL_MARGIN - hPx) / v.floorPx);
+    const floorOff = Math.floor(rng() * (Math.min(3, floorSlack) + 1)) * v.floorPx;
+    const yBot = cellY + CELL_H - CELL_MARGIN - floorOff; // canvas y of the facade base
+    for (let i = 0; i < 4; i++) {
+      const k = face * 4 + i;
+      uv.setXY(
+        k,
+        (cellX + CELL_MARGIN + bayOff + uv.getX(k) * wPx) / ATLAS_PX,
+        1 - (yBot - uv.getY(k) * hPx) / ATLAS_PX,
+      );
+    }
+  }
+  uv.needsUpdate = true;
+}
+
+/** Skyline tower mass: an atlas-windowed box with its base at yBase. sx runs
+ *  toward the camera (depth), sz across the skyline (facade width). */
+function towerTo(
+  list: THREE.BufferGeometry[],
+  rng: () => number,
+  sx: number,
+  sy: number,
+  sz: number,
+  x: number,
+  yBase: number,
+  z: number,
+  hex: number,
+  v: AtlasVariant,
+  rotY: number,
+  jitter = 0.1,
+): void {
+  const g = new THREE.BoxGeometry(sx, sy, sz);
+  mapTowerUVs(g, sx, sy, sz, v, rng);
+  if (rotY) g.rotateY(rotY);
+  g.translate(x, yBase + sy / 2, z);
   tintGeom(g, hex, jitter, rng);
   list.push(g);
 }
@@ -487,6 +717,9 @@ type SiteAssets = {
   padGeo: THREE.BufferGeometry;
   archGeo: THREE.BufferGeometry;
   glowGeo: THREE.BufferGeometry;
+  windowGeo: THREE.BufferGeometry;
+  hazeGeo: THREE.BufferGeometry;
+  reflGeo: THREE.BufferGeometry;
   glassGeo: THREE.BufferGeometry;
   spinGeo: THREE.BufferGeometry;
   cabinGeo: THREE.BufferGeometry;
@@ -498,6 +731,9 @@ type SiteAssets = {
   padMat: THREE.MeshStandardMaterial;
   archMat: THREE.MeshStandardMaterial;
   glowMat: THREE.MeshBasicMaterial;
+  windowMat: THREE.MeshStandardMaterial;
+  hazeMat: THREE.MeshBasicMaterial;
+  reflMat: THREE.MeshBasicMaterial;
   glassMat: THREE.MeshStandardMaterial;
   steelMat: THREE.MeshStandardMaterial;
   cabinMat: THREE.MeshStandardMaterial;
@@ -513,7 +749,8 @@ type SiteAssets = {
 /** Everything seeded and built ONCE, drawing from a single rng in a fixed
  *  order so the site is identical on every visit. All merged batches follow
  *  the RR budget discipline: one vertex-colored mesh for ALL opaque
- *  architecture + skyline, one for every emissive bulb + lit window. */
+ *  architecture, one for every emissive bulb + beacon, and one atlas-windowed
+ *  mesh for the ENTIRE skyline. */
 function buildAssets(): SiteAssets {
   const rng = mulberry32(SEED);
 
@@ -526,6 +763,11 @@ function buildAssets(): SiteAssets {
   const waterTex = makeCanvasTexture(1024, 1024, (ctx, w, h) => paintWater(ctx, w, h, rng));
   const sunTex = makeCanvasTexture(256, 256, paintSunGlow);
   const streakTex = makeCanvasTexture(256, 256, paintStreak);
+  const atlasTex = makeCanvasTexture(ATLAS_PX, ATLAS_PX, (ctx) => paintWindowAtlas(ctx, rng));
+  atlasTex.anisotropy = 4;
+  const hazeTex = makeCanvasTexture(256, 128, (ctx, w, h) => paintHaze(ctx, w, h));
+  // (the reflection texture is painted at the end of section 5, from the
+  // tower positions generated there — same rng, same fixed order)
 
   const arch: THREE.BufferGeometry[] = []; // all opaque architecture + skyline
   const glow: THREE.BufferGeometry[] = []; // all emissive bulbs + lit windows
@@ -680,61 +922,205 @@ function buildAssets(): SiteAssets {
     arch.push(cap);
   }
 
-  /* -- 5. shore band + skyline silhouettes with lit windows --------------- */
+  /* -- 5. shore band + the Chicago skyline -------------------------------- */
   boxTo(arch, rng, 30, 3.2, 340, -186, -1.9, 0, 0x232b36, 0.08); // dark shoreline band
 
-  const towerPalette = [0x2a3340, 0x2e3846, 0x263039, 0x323d4d] as const;
-  let windowCount = 0;
-  let antennaBudget = 2;
-  for (let i = 0; i < TOWER_COUNT; i++) {
-    const u = (i + 0.5) / TOWER_COUNT;
-    const phi = (u - 0.5) * 2.3 + (rng() - 0.5) * 0.08;
-    const R = TOWER_R_MIN + rng() * TOWER_R_SPAN;
-    const w = 6 + rng() * 12; // facade width
-    const d = 6 + rng() * 10; // depth toward the camera
-    const forcedTall = i === 7 || i === 14;
-    const h = forcedTall ? 40 + rng() * 6 : 10 + Math.pow(rng(), 1.35) * 36;
-    const px = -Math.cos(phi) * R;
-    const pz = Math.sin(phi) * R;
+  const winParts: THREE.BufferGeometry[] = []; // every atlas-windowed facade
+  const refl: { z: number; w: number; s: number }[] = []; // reflection seeds
 
-    const tower = new THREE.BoxGeometry(d, h, w);
-    tower.rotateY(phi); // front face (+X) turned back toward the pier
-    tower.translate(px, -3.6 + h / 2, pz);
-    tintGeom(tower, towerPalette[i % towerPalette.length] ?? 0x2a3340, 0.14, rng);
-    arch.push(tower);
-
-    // Sparse warm windows on the camera-facing facade: tiny emissive boxes
-    // merged into the single glow draw.
-    const rows = Math.max(1, Math.floor((h - 3) / 2.5));
-    const cols = Math.max(1, Math.floor((w - 1.6) / 1.9));
-    for (let r = 0; r < rows; r++) {
-      for (let cIdx = 0; cIdx < cols; cIdx++) {
-        if (rng() >= WINDOW_DENSITY || windowCount >= MAX_WINDOWS) continue;
-        const lx = d / 2 + 0.1;
-        const lz = -w / 2 + 1.3 + cIdx * 1.9;
-        const o = rotXZ(lx, lz, phi);
-        const win = new THREE.BoxGeometry(0.22, 1.15, 0.9);
-        win.rotateY(phi);
-        win.translate(px + o.x, -3.6 + 2.1 + r * 2.5, pz + o.z);
-        tintGeom(win, 0xffca7a, 0.25, rng);
-        glow.push(win);
-        windowCount++;
+  // 5a. two depth rows of varied background towers with setbacks: the near
+  // row darker/cooler, the far row lifted toward the sunset haze and sampling
+  // the atlas' dimmed variants. Real skylines are layered, not a picket fence.
+  const NEAR_PAL = [0x232b36, 0x27303c, 0x1f2731, 0x2b3441] as const;
+  const FAR_PAL = [0x4a3a4a, 0x52404f, 0x453a4d, 0x4e4452] as const;
+  let spikes = 0;
+  for (let row = 0; row < 2; row++) {
+    const count = row === 0 ? SKYLINE_NEAR_COUNT : SKYLINE_FAR_COUNT;
+    const rMin = row === 0 ? TOWER_R_MIN : FAR_R_MIN;
+    const rSpan = row === 0 ? TOWER_R_SPAN : FAR_R_SPAN;
+    const arc = row === 0 ? 2.1 : 2.4;
+    const pal = row === 0 ? NEAR_PAL : FAR_PAL;
+    for (let i = 0; i < count; i++) {
+      const fu = (i + 0.5) / count;
+      const phi = (fu - 0.5) * arc + (rng() - 0.5) * 0.1;
+      const R = rMin + rng() * rSpan;
+      const w = 7 + rng() * 11; // facade width
+      const d = 6 + rng() * 9; // depth toward the camera
+      const h = 11 + Math.pow(rng(), 1.3) * (row === 0 ? 30 : 33);
+      const px = -Math.cos(phi) * R;
+      const pz = Math.sin(phi) * R;
+      const hex = pal[i % pal.length] ?? 0x232b36;
+      const v = variantAt(row * 4 + Math.floor(rng() * 4));
+      towerTo(winParts, rng, d, h, w, px, SHORE_Y, pz, hex, v, phi, 0.14);
+      let topY = SHORE_Y + h;
+      let tw = w;
+      let td = d;
+      if (rng() < 0.5) {
+        // setbacks: stacked shrinking boxes, slightly offset off-axis
+        const tiers = rng() < 0.3 ? 2 : 1;
+        for (let s2 = 0; s2 < tiers; s2++) {
+          tw *= 0.55 + rng() * 0.2;
+          td *= 0.6 + rng() * 0.2;
+          const th = h * (0.16 + rng() * 0.2);
+          const o = rotXZ((rng() - 0.5) * 1.2, (rng() - 0.5) * 2.4, phi);
+          towerTo(winParts, rng, td, th, tw, px + o.x, topY, pz + o.z, hex, v, phi, 0.1);
+          topY += th;
+        }
       }
-    }
-
-    // RR-style crowns on the two tallest: antenna spikes + warm beacons.
-    if (forcedTall && antennaBudget > 0) {
-      antennaBudget--;
-      const topY = -3.6 + h;
-      boxTo(arch, rng, 0.5, 8, 0.5, px, topY + 4, pz, 0x1e242e, 0, phi);
-      const o = rotXZ(0, w * 0.22, phi);
-      boxTo(arch, rng, 0.3, 4.6, 0.3, px + o.x, topY + 2.3, pz + o.z, 0x1e242e, 0, phi);
-      bulbTo(glow, rng, px, topY + 8.2, pz, 0xff7a5a, 0.35);
+      // rooflines: mechanical penthouses, a few antenna spikes with steady
+      // RED aircraft-warning beacons merged into the glow batch.
+      if (rng() < 0.6) {
+        const ph = 1.2 + rng() * 1.8;
+        const o = rotXZ((rng() - 0.5) * td * 0.3, (rng() - 0.5) * tw * 0.3, phi);
+        const mechHex = row === 0 ? 0x1a2028 : 0x3a3244;
+        boxTo(arch, rng, td * 0.42, ph, tw * 0.4, px + o.x, topY + ph / 2, pz + o.z, mechHex, 0.08, phi);
+      }
+      if (spikes < 4 && h > 26 && rng() < 0.45) {
+        spikes++;
+        const ah = 4 + rng() * 4;
+        boxTo(arch, rng, 0.22, ah, 0.22, px, topY + ah / 2, pz, 0x1e242e, 0, phi);
+        bulbTo(glow, rng, px, topY + ah + 0.3, pz, 0xff2a1e, 0.4);
+      }
+      refl.push({ z: pz, w, s: Math.min(1, h / 40) * (row === 0 ? 0.85 : 0.35) });
     }
   }
 
+  // 5b. signature silhouettes, adapted from river-racer landmarks.js.
+  // Willis-like: bundled dark tubes at staggered heights (9→7→5→2 collapsed
+  // to four masses) + two white antennas of DIFFERENT lengths — the RR
+  // builder's most-photographed detail — on the sunset (south/-z) side.
+  {
+    const phi = -0.34;
+    const R = 210;
+    const px = -Math.cos(phi) * R;
+    const pz = Math.sin(phi) * R;
+    const v = variantAt(4); // dim grid: it silhouettes against the sun
+    const hex = 0x1d222c;
+    towerTo(winParts, rng, 13, 27, 15, px, SHORE_Y, pz, hex, v, phi, 0.04);
+    towerTo(winParts, rng, 10.5, 44, 12, px, SHORE_Y, pz, hex, v, phi, 0.04);
+    const oT = rotXZ(0, 1.8, phi);
+    towerTo(winParts, rng, 8, 60, 7.5, px + oT.x, SHORE_Y, pz + oT.z, hex, v, phi, 0.04);
+    const oB = rotXZ(0, -2.8, phi);
+    towerTo(winParts, rng, 8.5, 52, 6.5, px + oB.x, SHORE_Y, pz + oB.z, hex, v, phi, 0.04);
+    for (const [zo, ah] of [
+      [0.6, 12.5],
+      [3.0, 10.6],
+    ] as const) {
+      const o = rotXZ(0, zo, phi);
+      const g = new THREE.CylinderGeometry(0.14, 0.3, ah, 5);
+      g.translate(px + o.x, SHORE_Y + 60 + ah / 2, pz + o.z);
+      tintGeom(g, 0xe8eaec, 0, rng);
+      arch.push(g);
+      bulbTo(glow, rng, px + o.x, SHORE_Y + 60 + ah + 0.3, pz + o.z, 0xff2a1e, 0.42);
+    }
+    refl.push({ z: pz, w: 15, s: 0.95 });
+  }
+
+  // Hancock-like: broad-shouldered tapered obelisk (five shrinking sections,
+  // as in the RR builder) with a two-antenna crown, north (+z) of the pier.
+  {
+    const phi = 0.52;
+    const R = 240;
+    const px = -Math.cos(phi) * R;
+    const pz = Math.sin(phi) * R;
+    const v = variantAt(6);
+    const hex = 0x232733;
+    const H = 52;
+    const W0 = 16;
+    const D0 = 11;
+    const secs = [
+      [1, 1, 0, 0.3],
+      [0.85, 0.88, 0.3, 0.55],
+      [0.72, 0.78, 0.55, 0.76],
+      [0.6, 0.68, 0.76, 0.92],
+      [0.52, 0.6, 0.92, 1],
+    ] as const;
+    for (const [sw, sd, f0, f1] of secs) {
+      towerTo(winParts, rng, D0 * sd, H * (f1 - f0), W0 * sw, px, SHORE_Y + H * f0, pz, hex, v, phi, 0.04);
+    }
+    for (const s of [-1, 1] as const) {
+      const o = rotXZ(0, s * 2.2, phi);
+      const g = new THREE.CylinderGeometry(0.13, 0.26, 9, 5);
+      g.translate(px + o.x, SHORE_Y + H + 4.5, pz + o.z);
+      tintGeom(g, 0xe8eaec, 0, rng);
+      arch.push(g);
+      bulbTo(glow, rng, px + o.x, SHORE_Y + H + 9.3, pz + o.z, 0xff2a1e, 0.4);
+    }
+    refl.push({ z: pz, w: 16, s: 0.8 });
+  }
+
+  // Marina City-like: the twin scalloped concrete cylinders right at the
+  // river mouth — a ribbed drum reads as the corncob at this distance.
+  {
+    const phi = -0.06;
+    const R = 190;
+    const cx = -Math.cos(phi) * R;
+    const cz = Math.sin(phi) * R;
+    for (const s of [-1, 1] as const) {
+      const o = rotXZ(0, s * 5.6, phi);
+      const x = cx + o.x;
+      const z = cz + o.z;
+      const core = new THREE.CylinderGeometry(3.1, 3.1, 26, 14);
+      core.translate(x, SHORE_Y + 13, z);
+      tintGeom(core, 0x6b5f57, 0.05, rng);
+      arch.push(core);
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2 + s;
+        const rib = new THREE.CylinderGeometry(0.62, 0.62, 24.4, 5);
+        rib.translate(x + Math.cos(a) * 3.0, SHORE_Y + 12.2, z + Math.sin(a) * 3.0);
+        tintGeom(rib, 0x776a5f, 0.08, rng);
+        arch.push(rib);
+      }
+      const cap = new THREE.CylinderGeometry(2.6, 3.2, 1.4, 10);
+      cap.translate(x, SHORE_Y + 26.6, z);
+      tintGeom(cap, 0x5a5049, 0, rng);
+      arch.push(cap);
+    }
+    refl.push({ z: cz, w: 9, s: 0.55 });
+  }
+
+  // Aon-like: sheer pale shaft with the flat white crown, tall in the far
+  // row where the haze lifts it.
+  {
+    const phi = -0.17;
+    const R = 235;
+    const px = -Math.cos(phi) * R;
+    const pz = Math.sin(phi) * R;
+    towerTo(winParts, rng, 9.5, 47, 9.5, px, SHORE_Y, pz, 0x8b8088, variantAt(7), phi, 0.04);
+    boxTo(arch, rng, 10.3, 1.9, 10.3, px, SHORE_Y + 47 + 0.95, pz, 0xded6c6, 0.03, phi);
+    bulbTo(glow, rng, px, SHORE_Y + 49.4, pz, 0xff2a1e, 0.34);
+    refl.push({ z: pz, w: 9.5, s: 0.7 });
+  }
+
+  // Crain-like: modest shaft with the sloped diamond top glinting at the sky.
+  {
+    const phi = 0.2;
+    const R = 198;
+    const px = -Math.cos(phi) * R;
+    const pz = Math.sin(phi) * R;
+    const cw = 11; // facade width (and the wedge ridge length)
+    const cd = 8;
+    const ch = 24;
+    towerTo(winParts, rng, cd, ch, cw, px, SHORE_Y, pz, 0x2c3140, variantAt(1), phi, 0.05);
+    const r = cd / 1.732; // triangular prism sized so its base spans the depth
+    const k = 5.5 / (1.5 * r); // slope height 5.5 over the prism's natural 1.5r
+    const wedge = new THREE.CylinderGeometry(r, r, cw, 3, 1);
+    wedge.rotateX(Math.PI / 2); // axis onto z (the ridge runs across the facade)
+    wedge.rotateZ(Math.PI / 2); // apex up, flat bottom
+    wedge.scale(1, k, 1);
+    wedge.rotateY(phi);
+    wedge.translate(px, SHORE_Y + ch + 0.5 * r * k, pz);
+    tintGeom(wedge, 0x565d78, 0.05, rng);
+    arch.push(wedge);
+    refl.push({ z: pz, w: cw, s: 0.5 });
+  }
+
+  // 5c. the reflection streaks, painted FROM the tower positions above.
+  const reflTex = makeCanvasTexture(256, 512, (ctx, rw, rh) => paintReflections(ctx, rw, rh, refl, rng));
+
   const archGeo = mergeAll(arch);
   const glowGeo = mergeAll(glow);
+  const windowGeo = mergeAll(winParts);
 
   /* -- 6. pad, water, sun path, dome, gulls ------------------------------- */
   const padGeo = new THREE.CircleGeometry(PAD_RADIUS, 48);
@@ -748,6 +1134,12 @@ function buildAssets(): SiteAssets {
   streakGeo.rotateY(Math.atan2(SUN_AZ_X, SUN_AZ_Z)); // …swung onto the sun azimuth
 
   const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.58);
+
+  // Horizon haze ring (open cylinder, seen from inside) + the reflection
+  // plane lying just above the water: u runs toward the camera on it.
+  const hazeGeo = new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, 48, 1, true);
+  const reflGeo = new THREE.PlaneGeometry(REFL_W, REFL_SPAN);
+  reflGeo.rotateX(-Math.PI / 2); // flat on the water: u → +x, v → -z
 
   // Three gull silhouettes (two-triangle chevrons) seeded around the pivot.
   const gullVerts: number[] = [];
@@ -793,6 +1185,35 @@ function buildAssets(): SiteAssets {
     vertexColors: true,
     transparent: true,
     opacity: 0,
+    toneMapped: false,
+  });
+  // The skyline: dark albedo from the per-tower vertex tints, lit window
+  // grids from the shared emissive atlas — windows glow against the dusk.
+  const windowMat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.85,
+    metalness: 0,
+    emissive: 0xffc9a0,
+    emissiveMap: atlasTex,
+    emissiveIntensity: 1.5,
+    transparent: true,
+    opacity: 0,
+  });
+  const hazeMat = new THREE.MeshBasicMaterial({
+    map: hazeTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.BackSide,
+    toneMapped: false,
+  });
+  const reflMat = new THREE.MeshBasicMaterial({
+    map: reflTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
     toneMapped: false,
   });
   const glassMat = new THREE.MeshStandardMaterial({
@@ -860,12 +1281,15 @@ function buildAssets(): SiteAssets {
     side: THREE.BackSide,
   });
 
-  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, sunTex, streakTex];
+  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, sunTex, streakTex, atlasTex, hazeTex, reflTex];
   const geometries: THREE.BufferGeometry[] = [
     deckGeo,
     padGeo,
     archGeo,
     glowGeo,
+    windowGeo,
+    hazeGeo,
+    reflGeo,
     glassGeo,
     spinGeo,
     cabinGeo,
@@ -879,6 +1303,9 @@ function buildAssets(): SiteAssets {
     padMat,
     archMat,
     glowMat,
+    windowMat,
+    hazeMat,
+    reflMat,
     glassMat,
     steelMat,
     cabinMat,
@@ -895,10 +1322,13 @@ function buildAssets(): SiteAssets {
     { m: padMat, mul: 1 },
     { m: archMat, mul: 1 },
     { m: glowMat, mul: 1 },
+    { m: windowMat, mul: 1 },
     { m: steelMat, mul: 1 },
     { m: cabinMat, mul: 1 },
     { m: waterMat, mul: 1 },
     { m: glassMat, mul: 0.3 }, // glass rests translucent
+    { m: hazeMat, mul: HAZE_OPACITY }, // additive: opacity IS the strength
+    { m: reflMat, mul: REFL_OPACITY },
     { m: gullMat, mul: 0.9 },
   ];
 
@@ -910,6 +1340,9 @@ function buildAssets(): SiteAssets {
     padGeo,
     archGeo,
     glowGeo,
+    windowGeo,
+    hazeGeo,
+    reflGeo,
     glassGeo,
     spinGeo,
     cabinGeo,
@@ -921,6 +1354,9 @@ function buildAssets(): SiteAssets {
     padMat,
     archMat,
     glowMat,
+    windowMat,
+    hazeMat,
+    reflMat,
     glassMat,
     steelMat,
     cabinMat,
@@ -1092,14 +1528,20 @@ export function LandingSite({
         {/* 2. Landing pad painted on the pier tip, under the ship. */}
         <mesh geometry={assets.padGeo} material={assets.padMat} position={[0, PAD_LIFT, 0]} />
 
-        {/* 3. All opaque architecture + skyline: ONE merged vertex-colored
-            draw (caisson, pilings, railings, lamp posts, wheel base+struts,
-            Crystal Gardens plinth+ribs, sheds, Head House, shore, towers). */}
+        {/* 3. All opaque architecture: ONE merged vertex-colored draw
+            (caisson, pilings, railings, lamp posts, wheel base+struts,
+            Crystal Gardens plinth+ribs, sheds, Head House, shore, tower
+            antennas/penthouses, Marina drums, the Crain wedge). */}
         <mesh geometry={assets.archGeo} material={assets.archMat} />
 
         {/* 4. Every light that is ON: pier lamps, wheel hub, Crystal Gardens
-            interior, tower beacons, ~150 lit windows. ONE merged draw. */}
+            interior, red aircraft-warning beacons. ONE merged draw. */}
         <mesh geometry={assets.glowGeo} material={assets.glowMat} />
+
+        {/* 4b. The Chicago skyline: every facade in ONE merged mesh — dark
+            vertex-tinted albedo, lit window grids sampled from the shared
+            1024² emissive atlas, near/far depth rows, signature silhouettes. */}
+        <mesh geometry={assets.windowGeo} material={assets.windowMat} />
 
         {/* 5. Crystal Gardens glass vault: translucent, drawn over the sky. */}
         <mesh geometry={assets.glassGeo} material={assets.glassMat} renderOrder={2} />
@@ -1126,9 +1568,24 @@ export function LandingSite({
           renderOrder={2}
         />
 
+        {/* 8b. Skyline reflection: smeared warm columns on the water, painted
+            from the same seeded tower positions as the skyline itself. */}
+        <mesh
+          geometry={assets.reflGeo}
+          material={assets.reflMat}
+          position={[REFL_X, WATER_Y + 0.1, 0]}
+          renderOrder={2}
+        />
+
         {/* 9. Sunset sky dome: drawn after the depth-writing pier/skyline so
             the architecture silhouettes against it. */}
         <mesh geometry={assets.domeGeo} material={assets.domeMat} renderOrder={1} />
+
+        {/* 9b. Horizon haze: a soft additive ring where the skyline meets the
+            water, warmest toward the sun — cheap aerial perspective. Drawn
+            after the dome (renderOrder 2) so it adds over the sky; the
+            depth-written pier and towers clip it where they stand in front. */}
+        <mesh geometry={assets.hazeGeo} material={assets.hazeMat} position={[0, HAZE_Y, 0]} renderOrder={2} />
 
         {/* 10. The sun: one big additive glow just above the horizon. */}
         <sprite

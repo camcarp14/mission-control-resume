@@ -43,6 +43,8 @@ const tmpHover = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
 const tmpNorm = new THREE.Vector3();
 const tmpEarthV = new THREE.Vector3();
+const tmpTHat = new THREE.Vector3();
+const tmpDescent = new THREE.Vector3();
 // Panel-anchoring scratch: a shadow camera that holds the BASE pose (kick
 // included, breathing excluded) so projected anchors are rock-still at rest.
 const projCam = new THREE.PerspectiveCamera(50, 1, 0.5, 2600);
@@ -172,11 +174,29 @@ function Rig({
       if (dEarth < minD && dEarth > 1e-4) {
         tmpPos.sub(tmpEarthV).multiplyScalar(minD / dEarth).add(tmpEarthV);
       }
-      // Final glide: a low second hump along the pad normal that carries the
-      // dive OVER the pier structures and settles onto the composed landing
-      // pose — without it the camera flew under the deck for a beat.
-      const g = Math.min(1, Math.max(0, (homeRaw - 0.74) / 0.24));
-      tmpPos.addScaledVector(tmpNorm, Math.sin(Math.PI * g) * 9);
+      // ==== THE GOOGLE-EARTH DESCENT. From halfway down the homecoming the
+      // camera leaves the spline and rides a column above the PAD: high on
+      // the surface normal looking down, altitude bleeding off as the site
+      // assembles beneath, then sliding out to the composed low landing
+      // pose. Ground always below, horizon arriving last — never through
+      // the water plane, never under the deck (both prior live reports).
+      // At homeRaw=1 the column pose EQUALS the engine's landing camPos
+      // (site + n̂·1.25 + tHat·12), so the handoff is exact. ====
+      if (landing.site && homeRaw > 0.5) {
+        tmpTHat.set(-tmpNorm.z, 0, tmpNorm.x).normalize(); // engine tHat
+        const alt = 1.25 + (45 - 1.25) * (1 - smooth(homeRaw, 0.5, 0.97));
+        const side = 14 - 2 * smooth(homeRaw, 0.85, 0.995);
+        tmpDescent
+          .set(landing.site[0], landing.site[1], landing.site[2])
+          .addScaledVector(tmpNorm, alt)
+          .addScaledVector(tmpTHat, side);
+        tmpPos.lerp(tmpDescent, smooth(homeRaw, 0.5, 0.66));
+        // Eyes on the pad through the drop; released to the composed gaze
+        // for the settle.
+        const gW = smooth(homeRaw, 0.52, 0.7) * (1 - smooth(homeRaw, 0.9, 0.995));
+        tmpEarthV.set(landing.site[0], landing.site[1], landing.site[2]);
+        tmpGaze.lerp(tmpEarthV, gW);
+      }
     }
 
     const fov = fovAt(points, tv) + (mobile ? 9 : 0);
@@ -339,8 +359,12 @@ function Rig({
       // the same ramp.) ====
 
       // Cruise pose: ahead on the path, pulling further ahead as the
-      // homecoming begins (it should visibly RACE you home).
-      const ra = camPath.posAt(tv + 0.22 + ramp * 0.36);
+      // homecoming begins (it should visibly RACE you home). The sample is
+      // capped just past the NEXT dock — uncapped, approaching the sun it
+      // sampled deep into the return curve and visibly swung all the way
+      // around the sun before the visitor had even arrived (live report).
+      const aheadT = Math.min(tv + 0.22 + ramp * 0.36, Math.floor(tv + 1e-4) + 1.02);
+      const ra = camPath.posAt(aheadT);
       tmpRight.crossVectors(tmpTan, tmpUp).normalize();
       // Offsets push the ship low and LEFT of the flight line — at the old
       // -5.2 it parked over the right-edge telemetry column in the hero

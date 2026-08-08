@@ -52,11 +52,17 @@ const FADE_FAR = 250;
 // (camPos/gaze/fov) — the label sits on the ray through a fixed
 // upper-left screen point, at ~80% of the body's distance, sized to a
 // fixed fraction of the frame. On-screen at every dock by construction.
-const LABEL_NDC_X = -0.5; // upper-left quadrant, clear of the panel (right)
+const LABEL_NDC_X = -0.56; // upper-left quadrant, clear of the panel (right)
 const LABEL_NDC_Y = 0.55; // below the top bar
 const LABEL_ASPECT = 1.5; // placement basis — a compromise across breakpoints
 const LABEL_DEPTH = 0.8; // × distance(dock cam, body)
-const LABEL_FRACTION = 0.32; // of the frame width at that depth
+// Never behind the near face: giants are CLOSE relative to their radius, so
+// a fraction of centre-distance can land inside the sphere (Jupiter ate
+// half of PIPELINE — live screenshot). The label depth is capped at 92% of
+// the distance to the near face.
+const LABEL_NEAR_FACE = 0.92;
+const LABEL_MIN_DEPTH = 6;
+const LABEL_FRACTION = 0.26; // of the frame width at that depth
 
 /* ---- shared resources --------------------------------------------------- */
 
@@ -190,7 +196,10 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
       wp.bodyPos[1] - wp.camPos[1],
       wp.bodyPos[2] - wp.camPos[2],
     );
-    const depth = bodyDist * LABEL_DEPTH;
+    const depth = Math.max(
+      LABEL_MIN_DEPTH,
+      Math.min(bodyDist * LABEL_DEPTH, (bodyDist - wp.bodyRadius) * LABEL_NEAR_FACE),
+    );
     dockRay.set(LABEL_NDC_X, LABEL_NDC_Y, 0.5).unproject(dockCam).sub(dockCamPos).normalize();
     const width =
       2 * depth * Math.tan(THREE.MathUtils.degToRad(wp.fov) / 2) * LABEL_ASPECT * LABEL_FRACTION;
