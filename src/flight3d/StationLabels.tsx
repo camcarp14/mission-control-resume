@@ -44,15 +44,15 @@ const FLOAT_FREQ = 0.5;
 // out. Without it every down-route label stacked into one glowing pile on
 // the right edge of the frame (live-site finding, twice — the second pass
 // tightened it so ONLY the next station teases).
-const FADE_NEAR = 120;
-const FADE_FAR = 250;
+const FADE_NEAR = 100;
+const FADE_FAR = 190;
 // Placement, relearned across THREE live rounds of world-offset guessing
 // (into the panel; behind the planet; off the frame edge): labels are now
 // composed IN THE DOCK FRAME. Each waypoint carries its docked camera
 // (camPos/gaze/fov) — the label sits on the ray through a fixed
 // upper-left screen point, at ~80% of the body's distance, sized to a
 // fixed fraction of the frame. On-screen at every dock by construction.
-const LABEL_NDC_X = -0.56; // upper-left quadrant, clear of the panel (right)
+const LABEL_NDC_X = -0.62; // upper-left quadrant, clear of the panel (right)
 const LABEL_NDC_Y = 0.55; // below the top bar
 const LABEL_ASPECT = 1.5; // placement basis — a compromise across breakpoints
 const LABEL_DEPTH = 0.8; // × distance(dock cam, body)
@@ -62,7 +62,7 @@ const LABEL_DEPTH = 0.8; // × distance(dock cam, body)
 // the distance to the near face.
 const LABEL_NEAR_FACE = 0.92;
 const LABEL_MIN_DEPTH = 6;
-const LABEL_FRACTION = 0.26; // of the frame width at that depth
+const LABEL_FRACTION = 0.23; // of the frame width at that depth
 
 /* ---- shared resources --------------------------------------------------- */
 

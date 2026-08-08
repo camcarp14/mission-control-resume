@@ -117,8 +117,23 @@ try {
   r.ok(titles.length === N && titles.every(Boolean), `rail exposes ${N} labelled station dots`);
 
   async function assertStation(n, what) {
-    const st = await focusState(page);
     const title = titles[n - 1];
+    // Wait for focus to actually LAND rather than sleeping a fixed margin:
+    // focus fires on the travel tween's completion, and the homecoming leg
+    // (4.8s) plus CPU contention twice outran the flat SETTLE on full-board
+    // runs while passing every solo run. The assertion itself is unchanged —
+    // this only replaces dead-reckoned timing with the real signal.
+    await page
+      .waitForFunction(
+        (want) => {
+          const a = document.activeElement;
+          return !!a && a.tagName === 'SECTION' && a.getAttribute('aria-label') === want;
+        },
+        `Station ${n}: ${title}`,
+        { timeout: 20000 },
+      )
+      .catch(() => {});
+    const st = await focusState(page);
     r.ok(
       st.tag === 'SECTION' && st.label === `Station ${n}: ${title}`,
       `${what}: focus is on panel "Station ${n}: ${title}" (got ${st.tag} "${st.label}")`,

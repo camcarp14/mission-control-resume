@@ -119,6 +119,7 @@ function Rig({
     const home = points[n - 1];
     const landing = home && home.kind === 'earthReturn' && home.site ? home : null;
     const ramp = landing ? legInto(n, n - 1, tv) : 0;
+    const homeRawHoist = landing ? Math.min(1, Math.max(0, tv - (n - 2))) : 0;
     if (landing && ramp > 0) {
       tmpNorm
         .set(
@@ -127,10 +128,11 @@ function Rig({
           landing.site![2] - landing.bodyPos[2],
         )
         .normalize();
-      // Roll the camera onto the pad's local vertical as the descent begins
-      // — with world-up held, the horizon crossed the frame diagonally and
-      // the "landed" read fell apart (screenshot finding).
-      camera.up.set(0, 1, 0).lerp(tmpNorm, smooth(ramp, 0.45, 0.9)).normalize();
+      // Roll the camera onto the pad's local vertical DURING the top-down
+      // stretch of the descent column, where a roll is invisible — finishing
+      // it late overlapped the gaze release and read as a choppy whip on
+      // final approach (live report).
+      camera.up.set(0, 1, 0).lerp(tmpNorm, smooth(homeRawHoist, 0.5, 0.74)).normalize();
     } else {
       camera.up.set(0, 1, 0);
     }
@@ -160,7 +162,12 @@ function Rig({
     if (arc > 0.01 && landing) {
       tmpPos.y += arc;
       tmpEarthV.set(landing.bodyPos[0], landing.bodyPos[1], landing.bodyPos[2]);
-      tmpGaze.lerp(tmpEarthV, Math.sin(Math.PI * arcProg) * 0.6);
+      // Earth-centre gaze dies BEFORE the descent column's pad gaze takes
+      // over — two overlapping gaze targets mid-descent read as a wobble.
+      tmpGaze.lerp(
+        tmpEarthV,
+        Math.sin(Math.PI * arcProg) * 0.6 * (1 - smooth(homeRaw, 0.42, 0.52)),
+      );
     }
     if (landing && homeRaw > 0) {
       // The dive must never enter the globe — the raw spline's last segment
@@ -181,25 +188,32 @@ function Rig({
       // pose. Ground always below, horizon arriving last — never through
       // the water plane, never under the deck (both prior live reports).
       // At homeRaw=1 the column pose EQUALS the engine's landing camPos
-      // (site + n̂·1.85 + tHat·17), so the handoff is exact. ====
+      // (site + n̂·2.6 + tHat·24), so the handoff is exact. ====
       if (landing.site && homeRaw > 0.5) {
         tmpTHat.set(-tmpNorm.z, 0, tmpNorm.x).normalize(); // engine tHat
-        const alt = 1.85 + (45 - 1.85) * (1 - smooth(homeRaw, 0.5, 0.97));
-        const side = 14 + 3 * smooth(homeRaw, 0.85, 0.995);
+        const alt = 2.6 + (45 - 2.6) * (1 - smooth(homeRaw, 0.5, 0.97));
+        const side = 16 + 8 * smooth(homeRaw, 0.8, 0.99);
         tmpDescent
           .set(landing.site[0], landing.site[1], landing.site[2])
           .addScaledVector(tmpNorm, alt)
           .addScaledVector(tmpTHat, side);
         tmpPos.lerp(tmpDescent, smooth(homeRaw, 0.5, 0.66));
-        // Eyes on the pad through the drop; released to the composed gaze
-        // for the settle.
-        const gW = smooth(homeRaw, 0.52, 0.7) * (1 - smooth(homeRaw, 0.9, 0.995));
+        // ONE gaze bump: eyes on the pad through the drop, released back to
+        // the composed gaze in a single smooth window — the old
+        // grab-then-late-release overlapped the up-roll and read as chop.
+        const gW = smooth(homeRaw, 0.52, 0.68) * (1 - smooth(homeRaw, 0.84, 0.97));
         tmpEarthV.set(landing.site[0], landing.site[1], landing.site[2]);
         tmpGaze.lerp(tmpEarthV, gW);
       }
     }
 
-    const fov = fovAt(points, tv) + (mobile ? 9 : 0);
+    // Travel breathes the fov wider mid-leg — but a zoom breathing on top
+    // of the descent read as chop, so the landing leg locks to its final
+    // fov early.
+    let fov = fovAt(points, tv) + (mobile ? 9 : 0);
+    if (landing && homeRaw > 0) {
+      fov = fov + (landing.fov + (mobile ? 9 : 0) - fov) * smooth(homeRaw, 0.45, 0.75);
+    }
 
     // ==== PANEL ANCHORS — "the artifact is ON the planet". Each mounted
     // panel's wrapper is pinned to a projected point beside its body, so
@@ -377,6 +391,37 @@ function Rig({
       // The ship rides the homecoming arc with the camera — racing you home
       // above the system, not crawling along the old flat route below.
       tmpRocket.y += arc * 0.85;
+      // ==== BODY AVOIDANCE — the cruise path must never pierce a planet
+      // (the ship flew straight through Neptune, live report). Continuous
+      // radial clearance against every solid body; fields are fine to fly
+      // through, that's the fun of them.
+      for (let bi = 0; bi < n; bi++) {
+        const bw = points[bi];
+        if (!bw) continue;
+        const bk = bw.kind;
+        if (
+          bk === 'asteroids' ||
+          bk === 'nebula' ||
+          bk === 'cluster' ||
+          bk === 'outpost' ||
+          bk === 'earthReturn'
+        ) {
+          continue;
+        }
+        const dx = tmpRocket.x - bw.bodyPos[0];
+        const dy = tmpRocket.y - bw.bodyPos[1];
+        const dz = tmpRocket.z - bw.bodyPos[2];
+        const d = Math.hypot(dx, dy, dz);
+        const clearD = bw.bodyRadius * 1.12 + 1.8;
+        if (d < clearD && d > 1e-4) {
+          const s = clearD / d;
+          tmpRocket.set(
+            bw.bodyPos[0] + dx * s,
+            bw.bodyPos[1] + dy * s,
+            bw.bodyPos[2] + dz * s,
+          );
+        }
+      }
       // ==== DOCKED FORMATION — the ship is a character, so it must be IN
       // SHOT at every station. The path-cruise pose above drifts out of
       // frame once the dock gaze swings toward the planet ("I can't even
@@ -422,10 +467,18 @@ function Rig({
       tmpQuat.setFromRotationMatrix(tmpMat);
 
       if (ramp > 0 && landing && landing.site) {
-        // The engine owns the landing pad (composed with the low-horizon
+        // The engine owns the landing pad (composed with the wide night
         // camera in space.ts); the rig just flies the descent to it. Local
         // "up" at the pad is the surface normal (tmpNorm, set above).
-        tmpSite.set(landing.site[0], landing.site[1], landing.site[2]);
+        // BELLY LANDER: this ship sets down FLAT like the freighter it is —
+        // gear soles sit at local y=-1.0 (0.95 world at rk.scale 0.95). The
+        // pier DECK TOP lies 1.35 beneath the engine's `site` point (site is
+        // the legacy touchdown reference at bodyRadius+1.35; the deck is
+        // built at bodyRadius), so the origin rests at site - 1.35 + 0.95 —
+        // parked on the planks, not hovering (screenshot finding).
+        tmpSite
+          .set(landing.site[0], landing.site[1], landing.site[2])
+          .addScaledVector(tmpNorm, -0.4);
         tmpDir.copy(tmpNorm);
         tmpHover.copy(tmpSite).addScaledVector(tmpDir, 6.5);
 
@@ -435,14 +488,16 @@ function Rig({
         tmpHover.lerp(tmpSite, wDown);
         tmpRocket.lerp(tmpHover, wApproach);
 
-        // Orientation: flip tail-down — nose (local -Z) points away from the
-        // planet, legs at the surface.
-        tmpMat.lookAt(tmpRocket, tmpAim.copy(tmpRocket).add(tmpDir), tmpUp);
+        // Orientation: level off horizontal — belly to the pad (up = the
+        // surface normal), nose toward the city so the stern's hyperdrive
+        // strip faces the landing camera.
+        tmpTHat.set(-tmpNorm.z, 0, tmpNorm.x).normalize();
+        tmpMat.lookAt(tmpRocket, tmpAim.copy(tmpRocket).sub(tmpTHat), tmpNorm);
         tmpQuatLand.setFromRotationMatrix(tmpMat);
         tmpQuat.slerp(tmpQuatLand, smooth(ramp, 0.42, 0.78));
 
-        // Retro-burn envelope: braking flare through the flip, full burn on
-        // descent, engines cut at touchdown (RCS puffs take over).
+        // Descent-burn envelope: braking flare on approach, repulsor glow on
+        // the drop, engines cut at touchdown.
         const retro = 0.5 * smooth(ramp, 0.4, 0.7) + 0.5 * smooth(ramp, 0.82, 0.9);
         const cut = 1 - smooth(ramp, 0.965, 0.995);
         thrust = Math.max(velThrust * (1 - wApproach), retro * cut);

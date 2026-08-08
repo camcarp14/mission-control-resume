@@ -76,10 +76,30 @@ const ROCK_SPREAD_MAX = 6.5;
 const ROCK_SCALE_MIN = 0.6;
 const ROCK_SCALE_MAX = 1.9;
 const ROCK_COLOR = '#565b61'; // cool slate — matches the belt's de-browned palette
-const ROCK_CRAG_SEED = 0x50c7; // shapes the one shared craggy geometry
-const ROCK_DENT_COUNT = 6; // seeded impact dents on the shared rock
-const ROCK_DENT_RADIUS = 0.5; // rad — angular reach of each dent
-const ROCK_DENT_DEPTH = 0.28; // max inward push at a dent's centre
+const ROCK_CRAG_SEED = 0x50c7; // shapes the one shared rubble geometry
+// three's PolyhedronGeometry subdivides (detail+1)² triangles per icosa face,
+// so detail 3 is the 320-tri icosphere — same budget as the belt's smaller
+// variants in SolarBodies.
+const ROCK_DETAIL = 3;
+// Multi-octave value noise over the sphere direction — multi-scale lumps.
+const ROCK_NOISE_OCTAVES = 3;
+const ROCK_NOISE_FREQ = 2.3; // base lattice frequency across the unit sphere
+const ROCK_NOISE_LACUNARITY = 2.1;
+const ROCK_NOISE_GAIN = 0.5;
+const ROCK_NOISE_AMP = 0.22; // displacement, × unit radius
+// Seeded crater dents: smooth bowls with a raised rim annulus.
+const ROCK_CRATER_MIN = 5; // craters, seeded in [MIN, MAX]
+const ROCK_CRATER_MAX = 7;
+const ROCK_CRATER_RADIUS_MIN = 0.35; // rad — angular reach
+const ROCK_CRATER_RADIUS_MAX = 0.7;
+const ROCK_CRATER_DEPTH_MIN = 0.08; // inward push at the bowl centre
+const ROCK_CRATER_DEPTH_MAX = 0.2;
+const ROCK_CRATER_RIM = 0.35; // rim lift, × that crater's depth
+// Vertex-color AO + albedo, multiplying ROCK_COLOR.
+const ROCK_AO_DARKEN = 0.45; // crevice/crater floors darken up to 45%
+const ROCK_RIM_LIGHT = 0.08; // crater rims catch ~8% extra light
+const ROCK_PATCH_FREQ = 1.3; // low-frequency warm/cool albedo field
+const ROCK_PATCH_AMOUNT = 0.1; // ±10%
 
 const ENV_MAP_INTENSITY = 0.55; // the single sanctioned GLB material mutation
 
@@ -136,62 +156,180 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _zAxis = new THREE.Vector3(0, 0, 1);
 const _dummy = new THREE.Object3D();
 
-/** Craggy rock geometry: an icosahedron whose every vertex is pushed in/out
- *  along its radial direction by a seeded factor, then hit with a handful of
- *  seeded "impact" dents. The base polyhedron ships unwelded (non-indexed)
- *  vertices, so the radial factor is keyed by position — duplicated corners
- *  displace together and the faceted shell never tears — and
- *  computeVertexNormals on the non-indexed result yields per-face normals:
- *  fractured rock, not candy. (SolarBodies' asteroid belt carries the same
- *  approach; the two files deliberately do not import each other's internals.) */
+/* ---- seeded noise for the rock shaper ------------------------------------
+ * Runs once at module load — never per frame. */
+
+function smooth01(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Seeded value at an integer lattice point. mulberry32 is the hash core, so
+ *  the whole noise field stays on the project's one sanctioned PRNG. */
+function latticeValue(ix: number, iy: number, iz: number, seed: number): number {
+  return mulberry32((seed + ix * 374761393 + iy * 668265263 + iz * 1274126177) >>> 0)();
+}
+
+/** Trilinearly interpolated value noise in [0, 1] over 3D space. */
+function valueNoise3(x: number, y: number, z: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fy = y - iy;
+  const fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const uz = fz * fz * (3 - 2 * fz);
+  const c000 = latticeValue(ix, iy, iz, seed);
+  const c100 = latticeValue(ix + 1, iy, iz, seed);
+  const c010 = latticeValue(ix, iy + 1, iz, seed);
+  const c110 = latticeValue(ix + 1, iy + 1, iz, seed);
+  const c001 = latticeValue(ix, iy, iz + 1, seed);
+  const c101 = latticeValue(ix + 1, iy, iz + 1, seed);
+  const c011 = latticeValue(ix, iy + 1, iz + 1, seed);
+  const c111 = latticeValue(ix + 1, iy + 1, iz + 1, seed);
+  const x00 = c000 + (c100 - c000) * ux;
+  const x10 = c010 + (c110 - c010) * ux;
+  const x01 = c001 + (c101 - c001) * ux;
+  const x11 = c011 + (c111 - c011) * ux;
+  const y0 = x00 + (x10 - x00) * uy;
+  const y1 = x01 + (x11 - x01) * uy;
+  return y0 + (y1 - y0) * uz;
+}
+
+/** 3-octave fbm of valueNoise3, normalized to roughly [-1, 1]. */
+function fbm3(x: number, y: number, z: number, seed: number): number {
+  let sum = 0;
+  let norm = 0;
+  let amp = 1;
+  let freq = ROCK_NOISE_FREQ;
+  for (let o = 0; o < ROCK_NOISE_OCTAVES; o++) {
+    sum += amp * (valueNoise3(x * freq, y * freq, z * freq, seed + o * 0x9e37) * 2 - 1);
+    norm += amp;
+    amp *= ROCK_NOISE_GAIN;
+    freq *= ROCK_NOISE_LACUNARITY;
+  }
+  return sum / norm;
+}
+
+/** IcosahedronGeometry ships unwelded corner vertices (a flat-shading layout);
+ *  welding them into an indexed mesh is what lets computeVertexNormals blend
+ *  across faces — smooth-lumpy regolith instead of facets. */
+function weldedIcosahedron(detail: number): THREE.BufferGeometry {
+  const src = new THREE.IcosahedronGeometry(1, detail);
+  const srcPos = src.getAttribute('position') as THREE.BufferAttribute;
+  const seen = new Map<string, number>();
+  const verts: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i < srcPos.count; i++) {
+    const x = srcPos.getX(i);
+    const y = srcPos.getY(i);
+    const z = srcPos.getZ(i);
+    const key = `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`;
+    let idx = seen.get(key);
+    if (idx === undefined) {
+      idx = verts.length / 3;
+      seen.set(key, idx);
+      verts.push(x, y, z);
+    }
+    index.push(idx);
+  }
+  src.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(index);
+  return geo;
+}
+
+/** Rock geometry with photographic asteroid character (think Itokawa/Bennu):
+ *  a welded icosphere displaced by seeded 3-octave value noise (multi-scale
+ *  lumps), dented by 5-7 seeded craters (smooth bowls with raised rims), then
+ *  triaxially squashed (~1.0/0.82/0.68) so the silhouette never reads as a
+ *  sphere. Per-vertex color bakes crevice self-shadow (floors darken up to
+ *  45%), ~8% rim light, and a low-frequency warm/cool albedo field — all
+ *  multiplying ROCK_COLOR. Smooth vertex normals: real rubble at this scale
+ *  reads smooth-lumpy, never faceted. (SolarBodies' asteroid belt carries the
+ *  same technique; the two files deliberately do not import each other's
+ *  internals.) */
 function makeCraggyRockGeometry(seed: number): THREE.BufferGeometry {
   const rng = mulberry32(seed);
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
 
-  const dentDirs: THREE.Vector3[] = [];
-  const dentDepths: number[] = [];
-  for (let d = 0; d < ROCK_DENT_COUNT; d++) {
+  type Crater = { dir: THREE.Vector3; radius: number; depth: number };
+  const craters: Crater[] = [];
+  const craterCount =
+    ROCK_CRATER_MIN + Math.floor(rng() * (ROCK_CRATER_MAX - ROCK_CRATER_MIN + 1));
+  for (let c = 0; c < craterCount; c++) {
     const z = rng() * 2 - 1;
     const a = rng() * Math.PI * 2;
     const s = Math.sqrt(Math.max(0, 1 - z * z));
-    dentDirs.push(new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z));
-    dentDepths.push(rng() * ROCK_DENT_DEPTH);
+    craters.push({
+      dir: new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z),
+      radius: ROCK_CRATER_RADIUS_MIN + rng() * (ROCK_CRATER_RADIUS_MAX - ROCK_CRATER_RADIUS_MIN),
+      depth: ROCK_CRATER_DEPTH_MIN + rng() * (ROCK_CRATER_DEPTH_MAX - ROCK_CRATER_DEPTH_MIN),
+    });
   }
 
-  const radial = new Map<string, number>();
+  // Triaxial squash — potato-oid, never round.
+  const squashY = 0.76 + rng() * 0.12;
+  const squashZ = 0.6 + rng() * 0.16;
+
+  // Independent integer seeds for the shape and albedo noise fields.
+  const shapeSeed = Math.floor(rng() * 0xffffffff);
+  const patchSeed = Math.floor(rng() * 0xffffffff);
+
+  const geo = weldedIcosahedron(ROCK_DETAIL);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const colors = new Float32Array(pos.count * 3);
+
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i).normalize();
-    const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
-    let len = radial.get(key);
-    if (len === undefined) {
-      len = 0.72 + rng() * 0.55;
-      radial.set(key, len);
+
+    // Multi-scale lumps from fbm over the sphere direction.
+    let len = 1 + ROCK_NOISE_AMP * fbm3(v.x, v.y, v.z, shapeSeed);
+
+    // Craters: inward across the bowl, slightly outward on the rim annulus.
+    let rim = 0;
+    for (const crater of craters) {
+      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(crater.dir))));
+      if (ang >= crater.radius) continue;
+      const t = ang / crater.radius;
+      const bowl = 1 - smooth01(0, 0.72, t);
+      const lip = smooth01(0.55, 0.82, t) * (1 - smooth01(0.82, 1, t));
+      len += crater.depth * (ROCK_CRATER_RIM * lip - bowl);
+      rim += lip;
     }
-    // Dents are a smooth function of position, so unwelded duplicates agree.
-    for (let d = 0; d < dentDirs.length; d++) {
-      const dir = dentDirs[d];
-      const depth = dentDepths[d];
-      if (!dir || depth === undefined) continue;
-      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(dir))));
-      if (ang < ROCK_DENT_RADIUS) len *= 1 - depth * (1 - ang / ROCK_DENT_RADIUS);
-    }
-    pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+
+    // Baked AO + albedo, multiplying the slate material color.
+    const inward = Math.max(0, 1 - len);
+    const ao = Math.min(1, inward / (ROCK_NOISE_AMP + ROCK_CRATER_DEPTH_MAX));
+    const shade = (1 - ROCK_AO_DARKEN * ao) * (1 + ROCK_RIM_LIGHT * Math.min(1, rim));
+    const patch =
+      valueNoise3(v.x * ROCK_PATCH_FREQ, v.y * ROCK_PATCH_FREQ, v.z * ROCK_PATCH_FREQ, patchSeed) *
+        2 -
+      1;
+    colors[i * 3] = shade * (1 + ROCK_PATCH_AMOUNT * patch);
+    colors[i * 3 + 1] = shade * (1 + ROCK_PATCH_AMOUNT * 0.3 * patch);
+    colors[i * 3 + 2] = shade * (1 - ROCK_PATCH_AMOUNT * 0.7 * patch);
+
+    pos.setXYZ(i, v.x * len, v.y * len * squashY, v.z * len * squashZ);
   }
-  geo.computeVertexNormals();
+
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals(); // indexed + welded → smooth regolith normals
   return geo;
 }
 
 // One geometry + material for every rock in every cluster and the hero
-// loners — a single seeded craggy variant, flat-shaded so the facets read as
-// fractured rock at silhouette distance.
+// loners — a single seeded rubble variant with baked vertex-color AO.
 const ROCK_GEOMETRY = makeCraggyRockGeometry(ROCK_CRAG_SEED);
 const ROCK_MATERIAL = new THREE.MeshStandardMaterial({
   color: ROCK_COLOR,
-  roughness: 0.82,
-  metalness: 0.18,
-  flatShading: true,
+  vertexColors: true,
+  // Matte regolith: dust-blanketed rock has almost no specular sheen.
+  roughness: 0.93,
+  metalness: 0.04,
 });
 
 // Soft radial disc, drawn once: map for the dust points (round, soft-edged

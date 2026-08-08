@@ -1,11 +1,12 @@
-/* ==== LANDING SITE: NAVY PIER AT SUNSET =====================================
+/* ==== LANDING SITE: NAVY PIER AT NIGHT ======================================
  *
  * The finale's ground truth. The voyage now ends where the author's own
- * River Racer game lives: the tip of Navy Pier at golden hour. The ship sets
+ * River Racer game lives: the tip of Navy Pier after dark. The ship sets
  * down on a pier-end pad; the wooden deck runs back toward shore past the
  * Centennial Wheel, the Crystal Gardens glass vault and the 1916 Head House;
- * the Chicago skyline stands silhouetted against a warm sunset over a calm
- * Lake Michigan, windows lit. The pier shapes, the vertex-color "tintGeom"
+ * the Chicago skyline stands against a deep night sky over a calm Lake
+ * Michigan, windows lit and the city's amber glow banked low on the horizon,
+ * the moon silvering the lake. The pier shapes, the vertex-color "tintGeom"
  * shading, the sky-gradient structure, the lit-window atlas technique and
  * the signature-tower silhouettes (Willis / Hancock / Marina City / Aon /
  * Crain analogues) are adapted directly from the user's river-racer repo
@@ -16,13 +17,14 @@
  * landing-camera tangent tHat and whose -Z axis is bHat: the camera parks at
  * ~(+12, +2.6, 0) looking down -X with a -Z drift, so the deck runs to
  * x=-170, the wheel stands at (-60, z=-9.5), the skyline spreads across ±Z
- * beyond x=-175, and the sun sits low toward (-1, 0, -0.5).
+ * beyond x=-175, the city glow banks low toward (-1, 0, -0.5), and the moon
+ * hangs opposite, over the lake.
  *
  * Everything is procedural and seeded (mulberry32(0xC0FFEE), one rng, fixed
  * order), merged RR-style into ~15 draw calls. The opacity ramp is STATE (it
  * tracks the flight position) times a camera-distance gate, so it runs under
  * reduced motion; the continuous animations — wheel spin, gull circling,
- * sun-path shimmer — are gated off and parked when `reduced` is true.
+ * moon-path shimmer — are gated off and parked when `reduced` is true.
  * ========================================================================= */
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -77,7 +79,7 @@ const HEAD_X = -150;
 
 // Skyline: seeded Chicago silhouettes on the shore arc beyond the pier root —
 // two depth rows of background towers (near dark/cool, far lifted into the
-// sunset haze) plus five signature masses adapted from the user's river-racer
+// amber city haze) plus five signature masses adapted from the user's river-racer
 // landmarks (Willis / Hancock / Marina City / Aon / Crain analogues). Window
 // grids come from ONE shared 1024² emissive atlas; the whole skyline is ONE
 // merged mesh.
@@ -94,26 +96,31 @@ const HAZE_R = 171;
 const HAZE_H = 26;
 const HAZE_Y = 7;
 const HAZE_OPACITY = 0.5;
-const HAZE_SUN_U = 0.676; // cylinder-u of the sun azimuth: haze warmest there
+const HAZE_CITY_U = 0.676; // cylinder-u of the city azimuth: glow warmest there
 
 // Skyline water reflection: one additive plane of smeared warm columns,
 // painted FROM the seeded tower z-positions so light lands under towers.
 const REFL_X = -138; // plane centre along the camera axis
 const REFL_W = 84; // extent toward the camera (the smear direction)
 const REFL_SPAN = 400; // extent across the skyline
-const REFL_OPACITY = 0.25;
+const REFL_OPACITY = 0.34; // night: the lit skyline owns more of the water
 
-// Water: calm dusk lake, rim alpha baked so it dissolves into haze.
+// Water: calm night lake, rim alpha baked so it dissolves into haze.
 const WATER_Y = -3.5;
 const WATER_RADIUS = 260;
 
-// Sunset: azimuth is (-tHat + 0.5·bHat) → pier space (-1, 0, -0.5).
-const SUN_AZ_X = -0.8944;
-const SUN_AZ_Z = -0.4472;
+// Night azimuths: the CITY (residual skyglow) sits toward (-tHat + 0.5·bHat)
+// → pier space (-1, 0, -0.5); the MOON hangs on the opposite azimuth, high
+// over the lake, and owns the water streak.
+const CITY_AZ_X = -0.8944;
+const CITY_AZ_Z = -0.4472;
+const MOON_AZ_X = 0.8944;
+const MOON_AZ_Z = 0.4472;
 const DOME_RADIUS = 420;
-const SUN_SPRITE_SCALE = 120;
-const SUN_SPRITE_OPACITY = 0.85;
-const STREAK_OPACITY = 0.8;
+const MOON_SPRITE_SCALE = 34; // small cool disc, not the old broad sun glow
+const MOON_SPRITE_OPACITY = 0.7;
+const MOON_SPRITE_Y = 150; // high over the lake
+const STREAK_OPACITY = 0.5; // moon path: subtler than the old sun path
 
 // Gulls: three silhouettes on a slow circle over the water.
 const GULL_X = -40;
@@ -121,14 +128,25 @@ const GULL_Y = 8.5;
 const GULL_Z = -30;
 const GULL_SPEED = 0.07;
 
-// Site lights, ramped by the master fade k: warm low sun FROM the sunset
-// azimuth so the ship at the pad reads rim-lit.
-const SUN_COLOR = '#ffb27a';
-const SUN_INTENSITY = 1.6;
-const SUN_LIGHT_POS: [number, number, number] = [SUN_AZ_X * 150, 24, SUN_AZ_Z * 150];
-const HEMI_SKY = '#ffc9a0';
-const HEMI_GROUND = '#2a3340';
-const HEMI_INTENSITY = 0.9;
+// Site lights, ramped by the master fade k: cool low moonlight FROM the moon
+// azimuth so the ship at the pad reads rim-lit in silver, a deep night
+// hemisphere fill, and ONE warm amber point light hung low over the city so
+// the skyline base catches the glow (decay 0: the classic stylized falloff —
+// physical decay would kill a 0.9 light across tens of units).
+const MOON_COLOR = '#9fb4d8';
+const MOON_INTENSITY = 0.5;
+const MOON_LIGHT_POS: [number, number, number] = [MOON_AZ_X * 150, 24, MOON_AZ_Z * 150];
+const HEMI_SKY = '#1a2434';
+const HEMI_GROUND = '#241d18';
+const HEMI_INTENSITY = 0.55;
+const CITY_LIGHT_COLOR = '#ffb46a';
+const CITY_LIGHT_INTENSITY = 0.9;
+const CITY_LIGHT_DIST = 240;
+const CITY_LIGHT_POS: [number, number, number] = [CITY_AZ_X * 190, 6, CITY_AZ_Z * 190];
+// Pier-lamp bulbs get a 1.5x color boost over the base palette so the deck
+// reads lamp-lit against the darker night (the glow material is unclamped:
+// toneMapped false + vertex colors > 1).
+const LAMP_BOOST = 1.5;
 
 // Fireworks (adapted from the user's river-racer js/world/fireworks.js —
 // "fireworks over Navy Pier at night"): ONE additive Points pool, armed when
@@ -148,7 +166,7 @@ const FW_LAUNCH_Y = WATER_Y + 0.4; // motes rise off the water surface
 const FW_G = 9.0; // gravity on rockets and sparks
 const FW_DRAG = 1.5; // exponential drag on burst sparks
 const FW_LIFT = 1.6; // slight upward bias at burst
-const FW_BIRTH_BRIGHT = 3.2; // >1 at birth so bloom catches the burst
+const FW_BIRTH_BRIGHT = 3.6; // >1 at birth so bloom catches the burst (night pop)
 const FW_ROCKET_BRIGHT = 2.0; // the ascending mote stays hot
 const FW_ROCKET_SIZE = 1.5;
 const FW_TRAIL_STEP = 0.07; // seconds between trail ticks up the ascent
@@ -183,7 +201,7 @@ function sstep(x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/* ---- sunset sky dome shader (structure adapted from RR js/world/sky.js) -- */
+/* ---- night sky dome shader (structure adapted from RR js/world/sky.js) --- */
 
 const DOME_VERT = /* glsl */ `
   varying vec3 vPos;
@@ -193,41 +211,40 @@ const DOME_VERT = /* glsl */ `
   }
 `;
 
-// Height-blended sunset: hot orange horizon band lifting through rose and
-// violet to deep navy by ~60% height, with the warmest+brightest lobe
-// centred on the sun azimuth (uSunDir) and a few thin dark cloud strips
-// baked analytically near the horizon. Alpha fades out toward the zenith so
-// stars still peek through; uOpacity is the sky's master fade.
+// Height-blended night: a low horizon band of residual city-glow amber with
+// a whisper of late-dusk teal, lifting through deep navy to near-black by
+// ~55% height, with a subtle BROAD skyglow lobe centred on the city azimuth
+// (uCityDir) and the same thin baked cloud strips darkened to near-silhouette
+// with faint underlit amber edges cityward. Alpha fades out toward the zenith
+// so the real starfield shows; uOpacity is the sky's master fade.
 const DOME_FRAG = /* glsl */ `
   uniform float uOpacity;
-  uniform vec3 uSunDir;
+  uniform vec3 uCityDir;
   varying vec3 vPos;
   void main() {
     vec3 D = normalize(vPos);
     float h = clamp(D.y, 0.0, 1.0);
-    vec3 band0 = vec3(1.000, 0.604, 0.353); /* #ff9a5a */
-    vec3 band1 = vec3(1.000, 0.435, 0.322); /* #ff6f52 */
-    vec3 rose  = vec3(0.788, 0.416, 0.486); /* #c96a7c */
-    vec3 viol  = vec3(0.478, 0.290, 0.541); /* #7a4a8a */
-    vec3 navy  = vec3(0.063, 0.102, 0.180); /* #101a2e */
-    vec3 col = mix(band0, band1, smoothstep(0.0, 0.10, h));
-    col = mix(col, rose, smoothstep(0.06, 0.24, h));
-    col = mix(col, viol, smoothstep(0.20, 0.42, h));
-    col = mix(col, navy, smoothstep(0.38, 0.60, h));
-    /* warm lobe on the sun azimuth, hottest right at the horizon */
+    vec3 glow = vec3(0.165, 0.122, 0.078); /* #2a1f14 residual city-glow amber */
+    vec3 teal = vec3(0.063, 0.133, 0.180); /* #10222e late-dusk teal */
+    vec3 mid  = vec3(0.039, 0.071, 0.125); /* #0a1220 */
+    vec3 zen  = vec3(0.020, 0.031, 0.059); /* #05080f near-black navy */
+    vec3 col = mix(glow, teal, smoothstep(0.0, 0.10, h) * 0.5); /* teal whisper over the amber */
+    col = mix(col, mid, smoothstep(0.05, 0.28, h));
+    col = mix(col, zen, smoothstep(0.24, 0.55, h));
+    /* subtle broad skyglow lobe over the city azimuth, low intensity */
     float azl = max(length(D.xz), 1e-4);
-    float sc = max(dot(D.xz / azl, normalize(uSunDir.xz)), 0.0);
-    float lobe = pow(sc, 3.0) * (1.0 - smoothstep(0.0, 0.34, h));
-    col = mix(col, vec3(1.0, 0.80, 0.55), lobe * 0.6);
-    col += vec3(1.0, 0.62, 0.35) * pow(sc, 9.0) * pow(1.0 - h, 4.0) * 0.5;
-    /* thin dark cloud strips, strongest near the sun (baked, no drift) */
+    float sc = max(dot(D.xz / azl, normalize(uCityDir.xz)), 0.0);
+    float lobe = pow(sc, 2.0) * (1.0 - smoothstep(0.0, 0.30, h));
+    col += vec3(0.42, 0.27, 0.12) * lobe * 0.30;
+    /* thin cloud strips: near-silhouette, faint underlit amber edge cityward */
     float ang = atan(D.z, D.x);
     float amp = 0.35 + 0.65 * sc * sc;
     float s1 = 1.0 - smoothstep(0.004, 0.012, abs(h - 0.075 - 0.014 * sin(ang * 2.0 + 1.7)));
     float s2 = 1.0 - smoothstep(0.003, 0.010, abs(h - 0.120 - 0.011 * sin(ang * 3.1 + 0.4)));
     float s3 = 1.0 - smoothstep(0.003, 0.009, abs(h - 0.175 - 0.016 * sin(ang * 2.4 + 2.6)));
     float strips = min(1.0, s1 * 0.55 + s2 * 0.45 + s3 * 0.35) * amp;
-    col = mix(col, vec3(0.30, 0.16, 0.24), strips * 0.55);
+    col = mix(col, vec3(0.012, 0.016, 0.026), strips * 0.7);
+    col += vec3(0.35, 0.22, 0.10) * strips * sc * 0.12;
     float a = 1.0 - smoothstep(0.45, 0.72, h);
     gl_FragColor = vec4(col, a * uOpacity);
   }
@@ -287,7 +304,8 @@ function makeCanvasTexture(
 
 /** Wooden pier deck: warm brown planks running along the pier (canvas u),
  *  dark seams, faint grain, a few weathered runs and knots, and a subtle
- *  sunset wash. Tiled ~5x along the deck so planks read ~6 units long. */
+ *  warm wash (the pier lamps own the deck's color at night). Tiled ~5x along
+ *  the deck so planks read ~6 units long. */
 function paintDeck(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () => number): void {
   ctx.fillStyle = '#33261a'; // seam gaps between planks
   ctx.fillRect(0, 0, w, h);
@@ -390,26 +408,26 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
   }
 }
 
-/** Calm dusk lake: deep blue base, soft elongated swell mottling, darkening
- *  toward the rim, and the outer 22% alpha-faded so the disc dissolves into
- *  horizon haze instead of ending in an edge. */
+/** Calm night lake: near-black navy base, soft elongated swell mottling,
+ *  darkening toward the rim, and the outer 22% alpha-faded so the disc
+ *  dissolves into horizon haze instead of ending in an edge. */
 function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () => number): void {
-  ctx.fillStyle = '#16324a';
+  ctx.fillStyle = '#0a1622';
   ctx.fillRect(0, 0, w, h);
   for (let i = 0; i < 130; i++) {
     const x = rng() * w;
     const y = rng() * h;
     const long = 30 + rng() * 130; // elongated across the camera's view
     const short = 4 + rng() * 12;
-    ctx.fillStyle = rng() < 0.5 ? 'rgba(12,32,50,0.16)' : 'rgba(38,86,120,0.14)';
+    ctx.fillStyle = rng() < 0.5 ? 'rgba(5,12,20,0.18)' : 'rgba(24,50,72,0.12)';
     ctx.beginPath();
     ctx.ellipse(x, y, short, long, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   const c = w / 2;
   const ring = ctx.createRadialGradient(c, c, 0, c, c, c);
-  ring.addColorStop(0.6, 'rgba(8,20,34,0)');
-  ring.addColorStop(1, 'rgba(8,20,34,0.5)');
+  ring.addColorStop(0.6, 'rgba(4,10,18,0)');
+  ring.addColorStop(1, 'rgba(4,10,18,0.5)');
   ctx.fillStyle = ring;
   ctx.fillRect(0, 0, w, h);
   ctx.globalCompositeOperation = 'destination-out';
@@ -422,28 +440,31 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   ctx.globalCompositeOperation = 'source-over';
 }
 
-/** Big warm radial glow for the sun sprite just above the horizon. */
-function paintSunGlow(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+/** Small cool moon: a modest #dfe8f5 disc with a tight limb falloff and a
+ *  restrained halo — nothing like the old broad sun glow. */
+function paintMoonGlow(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const c = w / 2;
   const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-  g.addColorStop(0, 'rgba(255,246,224,0.95)');
-  g.addColorStop(0.22, 'rgba(255,217,160,0.55)');
-  g.addColorStop(0.55, 'rgba(255,154,90,0.18)');
-  g.addColorStop(1, 'rgba(255,154,90,0)');
+  g.addColorStop(0, 'rgba(240,246,255,0.95)');
+  g.addColorStop(0.16, 'rgba(223,232,245,0.88)'); /* #dfe8f5 disc */
+  g.addColorStop(0.24, 'rgba(223,232,245,0.32)'); /* limb falloff */
+  g.addColorStop(0.55, 'rgba(190,205,228,0.10)');
+  g.addColorStop(1, 'rgba(190,205,228,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 }
 
-/** Elongated warm blob (long axis = canvas y) for the sun's specular path
- *  lying flat on the water, pointed at the sun azimuth. */
+/** Elongated cool silver blob (long axis = canvas y) for the moon's specular
+ *  path lying flat on the water, pointed at the moon azimuth — narrower and
+ *  subtler than the old sun path. */
 function paintStreak(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.save();
   ctx.translate(w / 2, h / 2);
-  ctx.scale(0.5, 1);
+  ctx.scale(0.4, 1);
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, h / 2);
-  g.addColorStop(0, 'rgba(255,217,160,0.55)');
-  g.addColorStop(0.5, 'rgba(255,154,90,0.22)');
-  g.addColorStop(1, 'rgba(255,154,90,0)');
+  g.addColorStop(0, 'rgba(223,232,245,0.42)');
+  g.addColorStop(0.5, 'rgba(186,202,226,0.16)');
+  g.addColorStop(1, 'rgba(186,202,226,0)');
   ctx.fillStyle = g;
   ctx.fillRect(-w, -h / 2, w * 2, h);
   ctx.restore();
@@ -521,9 +542,10 @@ function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): voi
     const cols = Math.floor((CELL_W - 2 * CELL_MARGIN) / v.bayPx);
     const rows = Math.floor((CELL_H - 2 * CELL_MARGIN) / v.floorPx);
     for (let r = 0; r < rows; r++) {
-      if (rng() < 0.15) continue; // a whole dark floor
+      if (rng() < 0.12) continue; // a whole dark floor (fewer at night)
       const height = 1 - r / rows; // 1 at the cell top (upper floors)
-      const density = v.density * (0.62 + 0.38 * (1 - height));
+      // Night: slightly more of the grid lit — the skyline carries the scene.
+      const density = Math.min(0.9, v.density * 1.12 * (0.62 + 0.38 * (1 - height)));
       let run = 0;
       let on = false;
       for (let c = 0; c < cols; c++) {
@@ -534,7 +556,8 @@ function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): voi
         run--;
         if (!on) continue;
         const hex = lit[Math.floor(rng() * lit.length)] ?? '#ffca7a';
-        ctx.fillStyle = dimHex(hex, (0.66 + rng() * 0.38) * v.dim);
+        // 1.3x lit-cell brightness against the darker night sky (dimHex clamps).
+        ctx.fillStyle = dimHex(hex, (0.66 + rng() * 0.38) * 1.3 * v.dim);
         ctx.fillRect(
           x0 + CELL_MARGIN + c * v.bayPx + 2,
           y0 + CELL_MARGIN + r * v.floorPx + 2,
@@ -546,22 +569,22 @@ function paintWindowAtlas(ctx: CanvasRenderingContext2D, rng: () => number): voi
   }
 }
 
-/** Horizon haze band for the haze ring: vertical warm-rose gradient (bottom of
- *  the canvas = bottom of the cylinder), alpha-shaped around the ring so the
- *  glow peaks on the sun azimuth. Seam-safe: the horizontal factor depends on
- *  wrapped distance from HAZE_SUN_U only. */
+/** Horizon haze band for the haze ring: vertical amber city-glow gradient
+ *  (bottom of the canvas = bottom of the cylinder), alpha-shaped around the
+ *  ring so the glow peaks on the city azimuth. Seam-safe: the horizontal
+ *  factor depends on wrapped distance from HAZE_CITY_U only. */
 function paintHaze(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const g = ctx.createLinearGradient(0, h, 0, 0);
-  g.addColorStop(0, 'rgba(255,152,95,0.6)');
-  g.addColorStop(0.42, 'rgba(214,122,128,0.28)');
-  g.addColorStop(0.78, 'rgba(150,92,122,0.09)');
-  g.addColorStop(1, 'rgba(150,92,122,0)');
+  g.addColorStop(0, 'rgba(255,170,100,0.4)');
+  g.addColorStop(0.42, 'rgba(150,102,74,0.18)');
+  g.addColorStop(0.78, 'rgba(52,66,88,0.07)');
+  g.addColorStop(1, 'rgba(52,66,88,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   const m = ctx.createLinearGradient(0, 0, w, 0);
   for (let i = 0; i <= 8; i++) {
     const u = i / 8;
-    let dU = Math.abs(u - HAZE_SUN_U);
+    let dU = Math.abs(u - HAZE_CITY_U);
     if (dU > 0.5) dU = 1 - dU;
     const f = 0.45 + 0.55 * (0.5 + 0.5 * Math.cos(dU * Math.PI * 2));
     m.addColorStop(u, `rgba(0,0,0,${f.toFixed(3)})`);
@@ -722,6 +745,9 @@ function towerTo(
   list.push(g);
 }
 
+/** Emissive bulb. `boost` scales the tinted vertex colors AFTER tintGeom (no
+ *  extra rng draws — the seeded order is untouched); the glow material is
+ *  toneMapped:false so values > 1 read as hotter, not clipped hue-shifts. */
 function bulbTo(
   list: THREE.BufferGeometry[],
   rng: () => number,
@@ -730,10 +756,16 @@ function bulbTo(
   z: number,
   hex: number,
   r: number,
+  boost = 1,
 ): void {
   const g = new THREE.SphereGeometry(r, 8, 6);
   g.translate(x, y, z);
   tintGeom(g, hex, 0.1, rng);
+  if (boost !== 1) {
+    const col = g.getAttribute('color');
+    const arr = col.array as Float32Array;
+    for (let i = 0; i < arr.length; i++) arr[i] = (arr[i] ?? 0) * boost;
+  }
   list.push(g);
 }
 
@@ -1240,10 +1272,10 @@ type SiteAssets = {
   cabinMat: THREE.MeshStandardMaterial;
   waterMat: THREE.MeshStandardMaterial;
   streakMat: THREE.MeshBasicMaterial;
-  sunMat: THREE.SpriteMaterial;
+  moonMat: THREE.SpriteMaterial;
   domeMat: THREE.ShaderMaterial;
   gullMat: THREE.MeshBasicMaterial;
-  domeUniforms: { uOpacity: { value: number }; uSunDir: { value: THREE.Vector3 } };
+  domeUniforms: { uOpacity: { value: number }; uCityDir: { value: THREE.Vector3 } };
   fade: { m: THREE.Material; mul: number }[];
   fw: FwSim;
 };
@@ -1263,7 +1295,7 @@ function buildAssets(): SiteAssets {
   deckTex.anisotropy = 4;
   const padTex = makeCanvasTexture(512, 512, (ctx, w) => paintPad(ctx, w, rng));
   const waterTex = makeCanvasTexture(1024, 1024, (ctx, w, h) => paintWater(ctx, w, h, rng));
-  const sunTex = makeCanvasTexture(256, 256, paintSunGlow);
+  const moonTex = makeCanvasTexture(256, 256, paintMoonGlow);
   const streakTex = makeCanvasTexture(256, 256, paintStreak);
   const atlasTex = makeCanvasTexture(ATLAS_PX, ATLAS_PX, (ctx) => paintWindowAtlas(ctx, rng));
   atlasTex.anisotropy = 4;
@@ -1309,11 +1341,12 @@ function buildAssets(): SiteAssets {
     }
   }
 
-  // Warm pier lamps every ~22 units, both edges: post + emissive sphere.
+  // Warm pier lamps every ~22 units, both edges: post + emissive sphere,
+  // boosted 1.5x at night so the deck reads lamp-lit.
   for (let x = 6; x > DECK_END; x -= LAMP_STEP) {
     for (const s of [-1, 1]) {
       boxTo(arch, rng, 0.15, 2.5, 0.15, x, 1.25, s * 5.25, 0x4c463e, 0.06);
-      bulbTo(glow, rng, x, 2.66, s * 5.25, 0xffd9a0, 0.27);
+      bulbTo(glow, rng, x, 2.66, s * 5.25, 0xffd9a0, 0.27, LAMP_BOOST);
     }
   }
 
@@ -1431,10 +1464,11 @@ function buildAssets(): SiteAssets {
   const refl: { z: number; w: number; s: number }[] = []; // reflection seeds
 
   // 5a. two depth rows of varied background towers with setbacks: the near
-  // row darker/cooler, the far row lifted toward the sunset haze and sampling
-  // the atlas' dimmed variants. Real skylines are layered, not a picket fence.
+  // row darker/cooler, the far row lifted slightly by the city haze and
+  // sampling the atlas' dimmed variants. Real skylines are layered, not a
+  // picket fence. Night: both rows stay deep blue-grey; the windows carry it.
   const NEAR_PAL = [0x232b36, 0x27303c, 0x1f2731, 0x2b3441] as const;
-  const FAR_PAL = [0x4a3a4a, 0x52404f, 0x453a4d, 0x4e4452] as const;
+  const FAR_PAL = [0x2c3140, 0x323848, 0x2a3040, 0x343a4c] as const;
   let spikes = 0;
   for (let row = 0; row < 2; row++) {
     const count = row === 0 ? SKYLINE_NEAR_COUNT : SKYLINE_FAR_COUNT;
@@ -1474,7 +1508,7 @@ function buildAssets(): SiteAssets {
       if (rng() < 0.6) {
         const ph = 1.2 + rng() * 1.8;
         const o = rotXZ((rng() - 0.5) * td * 0.3, (rng() - 0.5) * tw * 0.3, phi);
-        const mechHex = row === 0 ? 0x1a2028 : 0x3a3244;
+        const mechHex = row === 0 ? 0x1a2028 : 0x272d3a;
         boxTo(arch, rng, td * 0.42, ph, tw * 0.4, px + o.x, topY + ph / 2, pz + o.z, mechHex, 0.08, phi);
       }
       if (spikes < 4 && h > 26 && rng() < 0.45) {
@@ -1490,13 +1524,13 @@ function buildAssets(): SiteAssets {
   // 5b. signature silhouettes, adapted from river-racer landmarks.js.
   // Willis-like: bundled dark tubes at staggered heights (9→7→5→2 collapsed
   // to four masses) + two white antennas of DIFFERENT lengths — the RR
-  // builder's most-photographed detail — on the sunset (south/-z) side.
+  // builder's most-photographed detail — on the city (south/-z) side.
   {
     const phi = -0.34;
     const R = 210;
     const px = -Math.cos(phi) * R;
     const pz = Math.sin(phi) * R;
-    const v = variantAt(4); // dim grid: it silhouettes against the sun
+    const v = variantAt(4); // dim grid: it silhouettes against the city glow
     const hex = 0x1d222c;
     towerTo(winParts, rng, 13, 27, 15, px, SHORE_Y, pz, hex, v, phi, 0.04);
     towerTo(winParts, rng, 10.5, 44, 12, px, SHORE_Y, pz, hex, v, phi, 0.04);
@@ -1624,16 +1658,16 @@ function buildAssets(): SiteAssets {
   const glowGeo = mergeAll(glow);
   const windowGeo = mergeAll(winParts);
 
-  /* -- 6. pad, water, sun path, dome, gulls ------------------------------- */
+  /* -- 6. pad, water, moon path, dome, gulls ------------------------------ */
   const padGeo = new THREE.CircleGeometry(PAD_RADIUS, 48);
   padGeo.rotateX(-Math.PI / 2);
 
   const waterGeo = new THREE.CircleGeometry(WATER_RADIUS, 64);
   waterGeo.rotateX(-Math.PI / 2);
 
-  const streakGeo = new THREE.PlaneGeometry(16, 170);
+  const streakGeo = new THREE.PlaneGeometry(9, 170); // narrower than the old sun path
   streakGeo.rotateX(-Math.PI / 2); // flat on the water, long axis on Z…
-  streakGeo.rotateY(Math.atan2(SUN_AZ_X, SUN_AZ_Z)); // …swung onto the sun azimuth
+  streakGeo.rotateY(Math.atan2(MOON_AZ_X, MOON_AZ_Z)); // …swung onto the moon azimuth
 
   const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.58);
 
@@ -1690,14 +1724,14 @@ function buildAssets(): SiteAssets {
     toneMapped: false,
   });
   // The skyline: dark albedo from the per-tower vertex tints, lit window
-  // grids from the shared emissive atlas — windows glow against the dusk.
+  // grids from the shared emissive atlas — windows burn against the night.
   const windowMat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness: 0.85,
     metalness: 0,
     emissive: 0xffc9a0,
     emissiveMap: atlasTex,
-    emissiveIntensity: 1.5,
+    emissiveIntensity: 2.1,
     transparent: true,
     opacity: 0,
   });
@@ -1727,10 +1761,14 @@ function buildAssets(): SiteAssets {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
+  // The wheel spinner: cool steel plus a subtle steady blue emissive ring
+  // tint — the Centennial Wheel's LED rim at night. No blink, no pulse.
   const steelMat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness: 0.35,
     metalness: 0.5,
+    emissive: 0x7db8ff,
+    emissiveIntensity: 0.5,
     transparent: true,
     opacity: 0,
   });
@@ -1756,8 +1794,8 @@ function buildAssets(): SiteAssets {
     depthWrite: false,
     toneMapped: false,
   });
-  const sunMat = new THREE.SpriteMaterial({
-    map: sunTex,
+  const moonMat = new THREE.SpriteMaterial({
+    map: moonTex,
     transparent: true,
     opacity: 0,
     blending: THREE.AdditiveBlending,
@@ -1772,7 +1810,7 @@ function buildAssets(): SiteAssets {
   });
   const domeUniforms = {
     uOpacity: { value: 0 },
-    uSunDir: { value: new THREE.Vector3(SUN_AZ_X, 0.05, SUN_AZ_Z).normalize() },
+    uCityDir: { value: new THREE.Vector3(CITY_AZ_X, 0.05, CITY_AZ_Z).normalize() },
   };
   const domeMat = new THREE.ShaderMaterial({
     vertexShader: DOME_VERT,
@@ -1790,7 +1828,7 @@ function buildAssets(): SiteAssets {
   // fade list to drive).
   const fw = buildFireworks();
 
-  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, sunTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
+  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, moonTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
   const geometries: THREE.BufferGeometry[] = [
     deckGeo,
     padGeo,
@@ -1821,7 +1859,7 @@ function buildAssets(): SiteAssets {
     cabinMat,
     waterMat,
     streakMat,
-    sunMat,
+    moonMat,
     gullMat,
     domeMat,
     fw.mat,
@@ -1873,7 +1911,7 @@ function buildAssets(): SiteAssets {
     cabinMat,
     waterMat,
     streakMat,
-    sunMat,
+    moonMat,
     domeMat,
     gullMat,
     domeUniforms,
@@ -1898,11 +1936,12 @@ export function LandingSite({
   const cabinsRef = useRef<THREE.InstancedMesh>(null);
   const gullsRef = useRef<THREE.Group>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
-  const sunLightRef = useRef<THREE.DirectionalLight>(null);
+  const moonLightRef = useRef<THREE.DirectionalLight>(null);
+  const cityLightRef = useRef<THREE.PointLight>(null);
 
-  // The sun light's aim point: parented into the site at the pad origin, so
-  // the low sunset light rakes across the pad (and rim-lights the ship).
-  const sunTarget = useMemo(() => new THREE.Object3D(), []);
+  // The moonlight's aim point: parented into the site at the pad origin, so
+  // the low cool light rakes across the pad (and rim-lights the ship silver).
+  const moonTarget = useMemo(() => new THREE.Object3D(), []);
 
   // The site's frames. Outer group: local +Y is the pad's surface normal,
   // origin is the sphere-surface point under the pad. Inner group: the
@@ -1947,7 +1986,7 @@ export function LandingSite({
 
   // Precompile every landing material and upload the canvas textures at
   // MOUNT, while the boot overlay still covers the canvas. Left to first
-  // use, the whole sunset pipeline would compile at the exact moment the
+  // use, the whole night pipeline would compile at the exact moment the
   // site becomes visible mid-descent — a multi-second stall on software
   // rendering and a visible hitch on real GPUs.
   useEffect(() => {
@@ -2021,15 +2060,16 @@ export function LandingSite({
 
     for (const f of assets.fade) f.m.opacity = f.mul * k;
     assets.domeUniforms.uOpacity.value = kd;
-    assets.sunMat.opacity = SUN_SPRITE_OPACITY * kd;
+    assets.moonMat.opacity = MOON_SPRITE_OPACITY * kd;
 
     const e = state.clock.elapsedTime;
-    // Sun-path shimmer: a slow breathing of the specular streak. Parked
+    // Moon-path shimmer: a slow breathing of the specular streak. Parked
     // (steady) under reduced motion.
     assets.streakMat.opacity = STREAK_OPACITY * k * (reduced ? 1 : 0.85 + 0.15 * Math.sin(e * 0.6));
 
     if (hemiRef.current) hemiRef.current.intensity = HEMI_INTENSITY * k;
-    if (sunLightRef.current) sunLightRef.current.intensity = SUN_INTENSITY * k;
+    if (moonLightRef.current) moonLightRef.current.intensity = MOON_INTENSITY * k;
+    if (cityLightRef.current) cityLightRef.current.intensity = CITY_LIGHT_INTENSITY * k;
 
     if (!reduced) {
       const spin = e * WHEEL_SPEED;
@@ -2048,7 +2088,8 @@ export function LandingSite({
   return (
     <group ref={groupRef} position={frame.position} quaternion={frame.quaternion} visible={false}>
       {/* Pier space: +X toward the landing camera, deck running -X to shore,
-          skyline across ±Z, sunset low toward (-1, 0, -0.5). */}
+          skyline across ±Z, city glow low toward (-1, 0, -0.5), the moon
+          opposite over the lake. */}
       <group quaternion={frame.yawQuat}>
         {/* 1. Wooden deck, pier tip at the origin. */}
         <mesh geometry={assets.deckGeo} material={assets.deckMat} />
@@ -2084,15 +2125,15 @@ export function LandingSite({
           />
         </group>
 
-        {/* 7. The lake: calm dusk water, rim baked to dissolve into haze. */}
+        {/* 7. The lake: calm night water, rim baked to dissolve into haze. */}
         <mesh geometry={assets.waterGeo} material={assets.waterMat} position={[0, WATER_Y, 0]} />
 
-        {/* 8. The sun's specular path: one additive streak lying on the
-            water, pointing at the sun azimuth. */}
+        {/* 8. The moon's specular path: one additive silver streak lying on
+            the water, pointing at the moon azimuth over the lake. */}
         <mesh
           geometry={assets.streakGeo}
           material={assets.streakMat}
-          position={[SUN_AZ_X * 92, WATER_Y + 0.14, SUN_AZ_Z * 92]}
+          position={[MOON_AZ_X * 92, WATER_Y + 0.14, MOON_AZ_Z * 92]}
           renderOrder={2}
         />
 
@@ -2105,23 +2146,25 @@ export function LandingSite({
           renderOrder={2}
         />
 
-        {/* 9. Sunset sky dome: drawn after the depth-writing pier/skyline so
-            the architecture silhouettes against it. */}
+        {/* 9. Night sky dome: drawn after the depth-writing pier/skyline so
+            the architecture silhouettes against it; its zenith alpha fades so
+            the real starfield shows through. */}
         <mesh geometry={assets.domeGeo} material={assets.domeMat} renderOrder={1} />
 
         {/* 9b. Horizon haze: a soft additive ring where the skyline meets the
-            water, warmest toward the sun — cheap aerial perspective. Drawn
+            water, warmest toward the city — cheap aerial perspective. Drawn
             after the dome (renderOrder 2) so it adds over the sky; the
             depth-written pier and towers clip it where they stand in front. */}
         <mesh geometry={assets.hazeGeo} material={assets.hazeMat} position={[0, HAZE_Y, 0]} renderOrder={2} />
 
-        {/* 10. The sun: one big additive glow just above the horizon. */}
+        {/* 10. The moon: one small cool disc glow, high over the lake on the
+            azimuth opposite the city. */}
         <sprite
-          position={[SUN_AZ_X * 385, 17, SUN_AZ_Z * 385]}
-          scale={[SUN_SPRITE_SCALE, SUN_SPRITE_SCALE, 1]}
+          position={[MOON_AZ_X * 385, MOON_SPRITE_Y, MOON_AZ_Z * 385]}
+          scale={[MOON_SPRITE_SCALE, MOON_SPRITE_SCALE, 1]}
           renderOrder={2}
         >
-          <primitive object={assets.sunMat} attach="material" />
+          <primitive object={assets.moonMat} attach="material" />
         </sprite>
 
         {/* 10b. Fireworks over the water beside the skyline (adapted from the
@@ -2144,17 +2187,27 @@ export function LandingSite({
         </group>
 
         {/* 12. Site lights, intensities ramped with k so deep space stays
-            untouched until the descent: warm hemisphere fill + the low sun
-            FROM the sunset azimuth. The ship at the pad reads rim-lit. */}
+            untouched until the descent: deep night hemisphere fill, low cool
+            moonlight FROM the moon azimuth (the ship at the pad reads
+            rim-lit in silver), and one warm amber point light hung low over
+            the city so the skyline base catches the glow. */}
         <hemisphereLight ref={hemiRef} args={[HEMI_SKY, HEMI_GROUND, 0]} />
         <directionalLight
-          ref={sunLightRef}
-          color={SUN_COLOR}
+          ref={moonLightRef}
+          color={MOON_COLOR}
           intensity={0}
-          position={SUN_LIGHT_POS}
-          target={sunTarget}
+          position={MOON_LIGHT_POS}
+          target={moonTarget}
         />
-        <primitive object={sunTarget} />
+        <pointLight
+          ref={cityLightRef}
+          color={CITY_LIGHT_COLOR}
+          intensity={0}
+          distance={CITY_LIGHT_DIST}
+          decay={0}
+          position={CITY_LIGHT_POS}
+        />
+        <primitive object={moonTarget} />
       </group>
     </group>
   );

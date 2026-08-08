@@ -38,10 +38,34 @@ const SUN_SPIN = 0.03;
 const SATURN_SPIN = 0.2;
 const ASTEROID_COUNT = 120;
 const ASTEROID_DRIFT = 0.02; // collective field rotation — slow, but alive
-const ASTEROID_VARIANT_SEEDS = [0xa57e, 0x0f1e, 0x9b0c] as const; // one craggy geometry per seed
-const ASTEROID_DENT_COUNT = 8; // seeded impact dents per geometry variant
-const ASTEROID_DENT_RADIUS = 0.5; // rad — angular reach of each dent
-const ASTEROID_DENT_DEPTH = 0.4; // max inward push at a dent's centre
+const ASTEROID_VARIANT_SEEDS = [0xa57e, 0x0f1e, 0x9b0c] as const; // one rubble-pile geometry per seed
+/* three's PolyhedronGeometry subdivides each icosa face into (detail+1)²
+ * triangles — NOT the recursive 4^detail most references assume — so detail 7
+ * is the classic "detail 3" 1280-tri icosphere and detail 3 the 320-tri one.
+ * Three variants shared across ~120 instances keeps that budget trivial. */
+const ASTEROID_DETAIL_BOULDER = 7; // 1280 tris / 642 welded verts — the hero boulders
+const ASTEROID_DETAIL_SMALL = 3; // 320 tris / 162 welded verts — the two smaller variants
+/* Multi-octave value noise over the sphere direction — irregular multi-scale
+ * lumps (Itokawa/Bennu silhouettes), not gravel facets. */
+const ASTEROID_NOISE_OCTAVES = 3;
+const ASTEROID_NOISE_FREQ = 2.3; // base lattice frequency across the unit sphere
+const ASTEROID_NOISE_LACUNARITY = 2.1;
+const ASTEROID_NOISE_GAIN = 0.5;
+const ASTEROID_NOISE_AMP = 0.22; // displacement, × unit radius
+/* Seeded crater dents: smooth radial depressions with a raised rim annulus —
+ * inward across the bowl, slightly outward at the lip. */
+const ASTEROID_CRATER_MIN = 5; // craters per variant, seeded in [MIN, MAX]
+const ASTEROID_CRATER_MAX = 7;
+const ASTEROID_CRATER_RADIUS_MIN = 0.35; // rad — angular reach
+const ASTEROID_CRATER_RADIUS_MAX = 0.7;
+const ASTEROID_CRATER_DEPTH_MIN = 0.08; // inward push at the bowl centre
+const ASTEROID_CRATER_DEPTH_MAX = 0.2;
+const ASTEROID_CRATER_RIM = 0.35; // rim lift, × that crater's depth
+/* Vertex-color AO + albedo: baked crevice shadow and regolith patchiness. */
+const ASTEROID_AO_DARKEN = 0.45; // crevice/crater floors darken up to 45%
+const ASTEROID_RIM_LIGHT = 0.08; // crater rims catch ~8% extra light
+const ASTEROID_PATCH_FREQ = 1.3; // low-frequency warm/cool albedo field
+const ASTEROID_PATCH_AMOUNT = 0.1; // ±10%
 const ASTEROID_BOULDER_MIN = 1.5; // base scales above this get the high-detail variant
 const ASTEROID_CLUMP_COUNT = 5; // seeded clump centres inside the belt
 const ASTEROID_CLUMP_CHANCE = 0.72; // rocks that gather at a clump vs. loose belt scatter
@@ -430,52 +454,180 @@ function Saturn({ wp, reduced }: BodyProps) {
 
 /* ==== ASTEROID FIELD ==== */
 
-/** Craggy rock geometry: an icosahedron whose every vertex is pushed in/out
- *  along its radial direction by a seeded factor, then hit with a handful of
- *  seeded "impact" dents. The base polyhedron ships unwelded (non-indexed)
- *  vertices, so the radial factor is keyed by position — duplicated corners
- *  displace together and the faceted shell never tears — and
- *  computeVertexNormals on the non-indexed result yields per-face normals:
- *  fractured rock, not candy. (Dressing carries the same approach for its
- *  clusters; the two files deliberately do not import each other's internals.) */
+/* ---- seeded noise for the rock shaper ------------------------------------
+ * All of it runs once per variant inside useMemo — never per frame. */
+
+function smooth01(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Seeded value at an integer lattice point. mulberry32 is the hash core, so
+ *  the whole noise field stays on the project's one sanctioned PRNG. */
+function latticeValue(ix: number, iy: number, iz: number, seed: number): number {
+  return mulberry32((seed + ix * 374761393 + iy * 668265263 + iz * 1274126177) >>> 0)();
+}
+
+/** Trilinearly interpolated value noise in [0, 1] over 3D space. */
+function valueNoise3(x: number, y: number, z: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fy = y - iy;
+  const fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const uz = fz * fz * (3 - 2 * fz);
+  const c000 = latticeValue(ix, iy, iz, seed);
+  const c100 = latticeValue(ix + 1, iy, iz, seed);
+  const c010 = latticeValue(ix, iy + 1, iz, seed);
+  const c110 = latticeValue(ix + 1, iy + 1, iz, seed);
+  const c001 = latticeValue(ix, iy, iz + 1, seed);
+  const c101 = latticeValue(ix + 1, iy, iz + 1, seed);
+  const c011 = latticeValue(ix, iy + 1, iz + 1, seed);
+  const c111 = latticeValue(ix + 1, iy + 1, iz + 1, seed);
+  const x00 = c000 + (c100 - c000) * ux;
+  const x10 = c010 + (c110 - c010) * ux;
+  const x01 = c001 + (c101 - c001) * ux;
+  const x11 = c011 + (c111 - c011) * ux;
+  const y0 = x00 + (x10 - x00) * uy;
+  const y1 = x01 + (x11 - x01) * uy;
+  return y0 + (y1 - y0) * uz;
+}
+
+/** 3-octave fbm of valueNoise3, normalized to roughly [-1, 1]. */
+function fbm3(x: number, y: number, z: number, seed: number): number {
+  let sum = 0;
+  let norm = 0;
+  let amp = 1;
+  let freq = ASTEROID_NOISE_FREQ;
+  for (let o = 0; o < ASTEROID_NOISE_OCTAVES; o++) {
+    sum += amp * (valueNoise3(x * freq, y * freq, z * freq, seed + o * 0x9e37) * 2 - 1);
+    norm += amp;
+    amp *= ASTEROID_NOISE_GAIN;
+    freq *= ASTEROID_NOISE_LACUNARITY;
+  }
+  return sum / norm;
+}
+
+/** IcosahedronGeometry ships unwelded corner vertices (a flat-shading layout);
+ *  welding them into an indexed mesh is what lets computeVertexNormals blend
+ *  across faces — smooth-lumpy regolith instead of facets. */
+function weldedIcosahedron(detail: number): THREE.BufferGeometry {
+  const src = new THREE.IcosahedronGeometry(1, detail);
+  const srcPos = src.getAttribute('position') as THREE.BufferAttribute;
+  const seen = new Map<string, number>();
+  const verts: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i < srcPos.count; i++) {
+    const x = srcPos.getX(i);
+    const y = srcPos.getY(i);
+    const z = srcPos.getZ(i);
+    const key = `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`;
+    let idx = seen.get(key);
+    if (idx === undefined) {
+      idx = verts.length / 3;
+      seen.set(key, idx);
+      verts.push(x, y, z);
+    }
+    index.push(idx);
+  }
+  src.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(index);
+  return geo;
+}
+
+/** Asteroid geometry with photographic character (think Itokawa/Bennu): a
+ *  welded icosphere displaced by seeded 3-octave value noise (multi-scale
+ *  lumps), dented by 5-7 seeded craters (smooth bowls with raised rims), then
+ *  triaxially squashed (~1.0/0.82/0.68) so no silhouette reads as a sphere.
+ *  Per-vertex color bakes the lighting the mesh cannot afford at runtime:
+ *  crevice floors darken up to 45% (soft self-shadow), crater rims lighten
+ *  ~8%, and a low-frequency warm/cool field breaks the monochrome. Smooth
+ *  vertex normals — real asteroids at this scale read smooth-lumpy, never
+ *  faceted. (Dressing carries the same technique for its rock props; the two
+ *  files deliberately do not import each other's internals.) */
 function makeAsteroidGeometry(seed: number, detail: number): THREE.BufferGeometry {
   const rand = mulberry32(seed);
-  const geo = new THREE.IcosahedronGeometry(1, detail);
-  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
 
-  const dentDirs: THREE.Vector3[] = [];
-  const dentDepths: number[] = [];
-  for (let d = 0; d < ASTEROID_DENT_COUNT; d++) {
+  type Crater = { dir: THREE.Vector3; radius: number; depth: number };
+  const craters: Crater[] = [];
+  const craterCount =
+    ASTEROID_CRATER_MIN + Math.floor(rand() * (ASTEROID_CRATER_MAX - ASTEROID_CRATER_MIN + 1));
+  for (let c = 0; c < craterCount; c++) {
     const z = rand() * 2 - 1;
     const a = rand() * Math.PI * 2;
     const s = Math.sqrt(Math.max(0, 1 - z * z));
-    dentDirs.push(new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z));
-    dentDepths.push(rand() * ASTEROID_DENT_DEPTH);
+    craters.push({
+      dir: new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, z),
+      radius:
+        ASTEROID_CRATER_RADIUS_MIN +
+        rand() * (ASTEROID_CRATER_RADIUS_MAX - ASTEROID_CRATER_RADIUS_MIN),
+      depth:
+        ASTEROID_CRATER_DEPTH_MIN +
+        rand() * (ASTEROID_CRATER_DEPTH_MAX - ASTEROID_CRATER_DEPTH_MIN),
+    });
   }
 
-  const radial = new Map<string, number>();
+  // Triaxial squash — potato-oid, never round. Seeded per variant around
+  // the 1.0 / 0.82 / 0.68 target so the three variants differ in build.
+  const squashY = 0.76 + rand() * 0.12;
+  const squashZ = 0.6 + rand() * 0.16;
+
+  // Independent integer seeds for the shape and albedo noise fields.
+  const shapeSeed = Math.floor(rand() * 0xffffffff);
+  const patchSeed = Math.floor(rand() * 0xffffffff);
+
+  const geo = weldedIcosahedron(detail);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const colors = new Float32Array(pos.count * 3);
+
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i).normalize();
-    const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
-    let len = radial.get(key);
-    if (len === undefined) {
-      // Tighter radial variance than the first pass: silhouettes stay chunky
-      // and angular (facets + dents carry the character), not lumpy.
-      len = 0.82 + rand() * 0.36;
-      radial.set(key, len);
+
+    // Multi-scale lumps from fbm over the sphere direction.
+    let len = 1 + ASTEROID_NOISE_AMP * fbm3(v.x, v.y, v.z, shapeSeed);
+
+    // Craters: inward across the bowl, slightly outward on the rim annulus.
+    let rim = 0;
+    for (const crater of craters) {
+      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(crater.dir))));
+      if (ang >= crater.radius) continue;
+      const t = ang / crater.radius;
+      const bowl = 1 - smooth01(0, 0.72, t);
+      const lip = smooth01(0.55, 0.82, t) * (1 - smooth01(0.82, 1, t));
+      len += crater.depth * (ASTEROID_CRATER_RIM * lip - bowl);
+      rim += lip;
     }
-    // Dents are a smooth function of position, so unwelded duplicates agree.
-    for (let d = 0; d < dentDirs.length; d++) {
-      const dir = dentDirs[d];
-      const depth = dentDepths[d];
-      if (!dir || depth === undefined) continue;
-      const ang = Math.acos(Math.min(1, Math.max(-1, v.dot(dir))));
-      if (ang < ASTEROID_DENT_RADIUS) len *= 1 - depth * (1 - ang / ASTEROID_DENT_RADIUS);
-    }
-    pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+
+    // Baked AO + albedo. These multiply the material color AND the
+    // per-instance palette, so the belt keeps its slate range while every
+    // crevice self-shadows and every rim catches light.
+    const inward = Math.max(0, 1 - len);
+    const ao = Math.min(1, inward / (ASTEROID_NOISE_AMP + ASTEROID_CRATER_DEPTH_MAX));
+    const shade = (1 - ASTEROID_AO_DARKEN * ao) * (1 + ASTEROID_RIM_LIGHT * Math.min(1, rim));
+    const patch =
+      valueNoise3(
+        v.x * ASTEROID_PATCH_FREQ,
+        v.y * ASTEROID_PATCH_FREQ,
+        v.z * ASTEROID_PATCH_FREQ,
+        patchSeed,
+      ) *
+        2 -
+      1;
+    colors[i * 3] = shade * (1 + ASTEROID_PATCH_AMOUNT * patch);
+    colors[i * 3 + 1] = shade * (1 + ASTEROID_PATCH_AMOUNT * 0.3 * patch);
+    colors[i * 3 + 2] = shade * (1 - ASTEROID_PATCH_AMOUNT * 0.7 * patch);
+
+    pos.setXYZ(i, v.x * len, v.y * len * squashY, v.z * len * squashZ);
   }
-  geo.computeVertexNormals();
+
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals(); // indexed + welded → smooth regolith normals
   return geo;
 }
 
@@ -490,25 +642,30 @@ function Asteroids({ wp, reduced }: BodyProps) {
   const driftRef = useRef<THREE.Group>(null);
   const meshRefs = useRef<Array<THREE.InstancedMesh | null>>([]);
 
-  // Three craggy variants shared across all instances (index 0 is higher
+  // Three lumpy variants shared across all instances (index 0 is higher
   // detail, reserved for the boulders) — the whole belt stays ≤3 rock draw
   // calls plus one Points veil.
   const geometries = useMemo(
-    () => ASTEROID_VARIANT_SEEDS.map((seed, i) => makeAsteroidGeometry(seed, i === 0 ? 2 : 1)),
+    () =>
+      ASTEROID_VARIANT_SEEDS.map((seed, i) =>
+        makeAsteroidGeometry(seed, i === 0 ? ASTEROID_DETAIL_BOULDER : ASTEROID_DETAIL_SMALL),
+      ),
     [],
   );
   // Instance colors MULTIPLY the material color, so the base stays white and
-  // the albedo lives entirely in the per-instance palette (centred on
-  // ASTEROID_BASE_COLOR) — a tinted base would double-darken every rock.
+  // the albedo lives in the per-instance palette (centred on
+  // ASTEROID_BASE_COLOR) — a tinted base would double-darken every rock. The
+  // baked vertex colors multiply on top of BOTH: near-white with crevice
+  // darkening and warm/cool patchiness, never a second grey.
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
         color: '#ffffff',
-        flatShading: true,
-        // A touch of sheen: facets catch the key light and read as fractured
-        // mineral instead of matte clay.
-        roughness: 0.82,
-        metalness: 0.18,
+        vertexColors: true,
+        // Matte regolith: dust-blanketed rubble has almost no specular sheen —
+        // the earlier mineral glint read as game gravel.
+        roughness: 0.93,
+        metalness: 0.04,
       }),
     [],
   );

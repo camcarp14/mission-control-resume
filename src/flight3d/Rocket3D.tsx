@@ -1,188 +1,237 @@
 /* ==== ROCKET 3D — the hero prop ==============================================
  *
- * A friendly cartoon spacecraft built entirely from primitives and canvas
- * textures: chunky white lathe hull with painted livery, glossy black ogive
- * nose, one big porthole, three strapped side boosters, three swept bulbous
- * fins it lands on, and a teal exhaust — shader plume + nozzle glow + a
- * long world-space particle trail that arcs along the flight path.
+ * A Millennium-Falcon-style light freighter built entirely from primitives
+ * and canvas textures: a flat weathered saucer-disc hull, two forward
+ * mandible prongs with the notch between them, an offset cylindrical cockpit
+ * tube on the starboard flank ending in a dark glazed canopy, a round radar
+ * dish topside, panel-line greebles everywhere — and the signature: a
+ * full-width curved engine strip across the stern glowing hyperdrive blue.
  *
- * Contract (unchanged from the shuttle it replaces): renders at local origin,
- * nose along local -Z, envelope z in [-2.2, +2.2]; the PARENT drives
- * position/quaternion/scale and for the finale stands the craft tail-down on
- * the three fin feet, whose soles are the aft-most geometry at exactly
- * z = +2.2. thrustRef is 0..1 (may spike ~1.2); `reduced` gates every
- * continuous animation — value-tracking state (flame length, glow intensity)
- * still follows thrust.
+ * Contract (unchanged from the craft it replaces): renders at local origin,
+ * nose (mandibles) along local -Z. Envelope: z in [-2.2, +2.2] (mandible
+ * tips exactly at -2.2, stern band at +2.15), x in [-1.9, +1.9], y in
+ * [-1.0, +1.1]. The PARENT drives position/quaternion/scale.
+ *
+ * LANDING: this ship lands FLAT ON ITS BELLY. Three landing-gear pads hang
+ * under the disc; their soles sit at exactly local y = -1.0 — the finale
+ * stands the craft on that plane. No tail-sitting, no fins.
+ *
+ * thrustRef is 0..1 (may spike ~1.2); `reduced` gates every continuous
+ * animation (band flicker, dish sweep, trail) — value-tracking state (glow
+ * intensity, sprite scale) still follows thrust.
  * ========================================================================= */
 
 import * as THREE from 'three';
-import { forwardRef, useMemo, useRef } from 'react';
+import { forwardRef, useEffect, useMemo, useRef } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { mulberry32 } from '../engine';
 
-const TEAL = '#4cc9f0';
-const TEAL_BRIGHT = '#7df9ff';
-const VIOLET = '#7c3aed';
-const BEACON = '#ff5c37';
 const TAU = Math.PI * 2;
 
-function smooth01(x: number): number {
-  const c = Math.min(1, Math.max(0, x));
-  return c * c * (3 - 2 * c);
-}
+/* Hyperdrive palette — wash, not fire. */
+const HYPER_CORE = '#7db8ff';
+const HYPER_HOT = '#b9dcff';
 
-/* ---- hull profile ----------------------------------------------------------
- * One body-of-revolution radius function drives the hull lathe, the nose
- * cone lathe AND every surface-mounted part, so nothing floats or sinks.
- * d = distance aft of the ogive tip; local z = TIP_Z + d.
- * The ogive tip sits at -1.98, not -2.2 — the antenna spike + beacon carry
- * the silhouette out to the -2.2 envelope edge.
+/* ---- saucer disc -----------------------------------------------------------
+ * One lathe (axis = local Y, no mesh rotation needed) sweeps the whole
+ * profile: bottom centre -> bottom shell -> rim edge -> top shell -> top
+ * centre. Thickness 0.75 at the core tapering to 0.35 at the rim, with a
+ * near-flat crown and a straight conic slope — the Falcon read, not a lens.
  */
-const TIP_Z = -1.98;
-const PROFILE_LEN = 3.48; // tip -> skirt trailing edge (z = +1.5)
-const R_MAX = 0.85; // chunky waistline, peaks near z = +0.4
-const OGIVE_LEN = 2.38; // tip to max radius
-const WAIST_D = 2.98; // gentle waist at z = +1.0
-const R_WAIST = 0.76;
-const R_SKIRT = 0.88; // flared base skirt
+const DISC_R = 1.8;
+const DISC_CORE_HALF = 0.375;
+const DISC_RIM_HALF = 0.175;
+const DISC_N = 20; // segments per shell
+const DISC_LAST = DISC_N * 2 + 4; // last profile index (45 points total)
 
-function profileRadius(d: number): number {
-  if (d <= OGIVE_LEN) {
-    const u = Math.max(0, d) / OGIVE_LEN;
-    // pow < 1 blunts the tip — rounded and friendly, nothing missile-sharp.
-    return R_MAX * Math.pow(Math.sin((u * Math.PI) / 2), 0.72);
-  }
-  if (d <= WAIST_D) return R_MAX + (R_WAIST - R_MAX) * smooth01((d - OGIVE_LEN) / (WAIST_D - OGIVE_LEN));
-  return R_WAIST + (R_SKIRT - R_WAIST) * smooth01((d - WAIST_D) / (PROFILE_LEN - WAIST_D));
+function discY(u: number): number {
+  if (u <= 0.3) return DISC_CORE_HALF - u * 0.1; // near-flat crown
+  const w = (u - 0.3) / 0.7;
+  return DISC_CORE_HALF - 0.03 - (DISC_CORE_HALF - 0.03 - DISC_RIM_HALF) * w; // conic slope
 }
 
-/* Nose cone: separate lathe over d in [0, NOSE_END_D], fractionally proud so
- * the seam reads as a paint break, never a gap. */
-const NOSE_END_D = 1.26; // seam at z = -0.72
-function makeNoseGeometry(): THREE.LatheGeometry {
+function makeDiscGeometry(): THREE.LatheGeometry {
   const pts: THREE.Vector2[] = [];
-  const N = 26;
-  for (let i = 0; i <= N; i++) {
-    const d = (i / N) * NOSE_END_D;
-    pts.push(new THREE.Vector2(profileRadius(d) * 1.012 + 0.004, d));
+  for (let i = 0; i <= DISC_N; i++) {
+    const u = i / DISC_N;
+    pts.push(new THREE.Vector2(Math.max(0.001, u * DISC_R), -discY(u)));
   }
-  return new THREE.LatheGeometry(pts, 48);
-}
-const NOSE_GEO = makeNoseGeometry();
-
-/* Hull: starts slightly under the nose edge (overlap, no gap), runs to the
- * skirt, then steps inward to a recessed base plate the engine hides. */
-const HULL_D0 = 1.18;
-const HULL_STEPS = 36;
-const HULL_EXTRA = 3; // stern-closure points appended after the profile
-function makeHullGeometry(): THREE.LatheGeometry {
-  const pts: THREE.Vector2[] = [];
-  for (let i = 0; i <= HULL_STEPS; i++) {
-    const d = HULL_D0 + (i / HULL_STEPS) * (PROFILE_LEN - HULL_D0);
-    pts.push(new THREE.Vector2(profileRadius(d), d));
+  // Rim edge with a subtle equator bulge.
+  pts.push(new THREE.Vector2(DISC_R + 0.015, -0.09));
+  pts.push(new THREE.Vector2(DISC_R + 0.028, 0));
+  pts.push(new THREE.Vector2(DISC_R + 0.015, 0.09));
+  for (let i = DISC_N; i >= 0; i--) {
+    const u = i / DISC_N;
+    pts.push(new THREE.Vector2(Math.max(0.001, u * DISC_R), discY(u)));
   }
-  pts.push(new THREE.Vector2(R_SKIRT * 0.8, 3.56));
-  pts.push(new THREE.Vector2(0.3, 3.58));
-  pts.push(new THREE.Vector2(0, 3.58));
-  return new THREE.LatheGeometry(pts, 64);
+  return new THREE.LatheGeometry(pts, 96);
 }
-const HULL_GEO = makeHullGeometry();
+const DISC_GEO = makeDiscGeometry();
 
-/* ---- livery texture --------------------------------------------------------
- * Lathe UVs: u wraps the axis (canvas x), v runs point-index-wise along the
- * profile (canvas y, flipped). Horizontal canvas bands therefore become
- * rings. v(d) accounts for the 3 stern-closure points sharing the v range.
+/* ---- hull texture ----------------------------------------------------------
+ * Lathe UVs: u wraps the azimuth (canvas x -> radial seams), v runs along
+ * the profile (canvas y -> ring seams at constant radius, mirrored across
+ * the rim band in the middle of the canvas). Light warm grey, panel grid,
+ * darker patches, rust hints, scorch streaks, greeble dots — lived-in.
  */
-const LIVERY_SIZE = 1024;
-function dToCanvasY(d: number): number {
-  const v = ((d - HULL_D0) / (PROFILE_LEN - HULL_D0)) * (HULL_STEPS / (HULL_STEPS + HULL_EXTRA));
-  return Math.round(LIVERY_SIZE * (1 - v));
-}
-
-let liveryCache: THREE.CanvasTexture | null = null;
-function liveryTexture(): THREE.CanvasTexture {
-  if (liveryCache) return liveryCache;
+let hullCache: THREE.CanvasTexture | null = null;
+function hullTexture(): THREE.CanvasTexture {
+  if (hullCache) return hullCache;
+  const S = 1024;
   const canvas = document.createElement('canvas');
-  canvas.width = LIVERY_SIZE;
-  canvas.height = LIVERY_SIZE;
+  canvas.width = S;
+  canvas.height = S;
   // 2d context only fails where WebGL could not have rendered either.
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(0x0fa1c02);
 
-  // Warm-white base coat.
-  ctx.fillStyle = '#f2f3f7';
-  ctx.fillRect(0, 0, LIVERY_SIZE, LIVERY_SIZE);
+  // v(profile index) -> canvas y, for a ring at radius fraction u on each shell.
+  const topY = (u: number): number => ((DISC_N * u) / DISC_LAST) * S;
+  const botY = (u: number): number => S - ((DISC_N * u) / DISC_LAST) * S;
 
-  // Faint vertical panel seams (lines of constant u = along the hull axis).
-  ctx.strokeStyle = 'rgba(30, 36, 52, 0.09)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 8; i++) {
-    const x = i * 128 + 64;
+  ctx.fillStyle = '#b8bcc0';
+  ctx.fillRect(0, 0, S, S);
+
+  // Soft tonal mottling under everything.
+  for (let i = 0; i < 170; i++) {
+    const g = 140 + Math.floor(rand() * 80);
+    ctx.fillStyle = `rgba(${g}, ${g + 3}, ${g + 6}, ${(0.04 + rand() * 0.07).toFixed(3)})`;
+    ctx.fillRect(rand() * S, rand() * S, 14 + rand() * 90, 8 + rand() * 60);
+  }
+
+  const SECTORS = 24;
+  const secW = S / SECTORS;
+  const RING_US = [0.14, 0.28, 0.42, 0.56, 0.7, 0.84, 0.97];
+
+  // Darker replacement panels snapped to the seam grid, both shells.
+  for (let i = 0; i < 52; i++) {
+    const bi = Math.floor(rand() * (RING_US.length - 1));
+    const u1 = RING_US[bi] ?? 0.2;
+    const u2 = RING_US[bi + 1] ?? 0.9;
+    const x = Math.floor(rand() * SECTORS) * secW;
+    const w = (rand() < 0.3 ? 2 : 1) * secW;
+    const topHalf = rand() < 0.62;
+    const ya = topHalf ? topY(u1) : botY(u2);
+    const yb = topHalf ? topY(u2) : botY(u1);
+    const roll = rand();
+    ctx.fillStyle =
+      roll < 0.16
+        ? 'rgba(160, 136, 95, 0.30)' // #a0885f rust hint
+        : roll < 0.5
+          ? 'rgba(142, 146, 150, 0.55)' // #8e9296 darker plate
+          : 'rgba(170, 174, 178, 0.6)';
+    ctx.fillRect(x + 2, Math.min(ya, yb) + 2, w - 4, Math.abs(yb - ya) - 4);
+  }
+
+  // Scorch streaks near the rim — decades of hard flying.
+  for (let i = 0; i < 14; i++) {
+    const x = rand() * S;
+    const topHalf = rand() < 0.5;
+    const y0 = topHalf ? topY(0.68) : botY(0.97);
+    const y1 = topHalf ? topY(0.97) : botY(0.68);
+    ctx.fillStyle = `rgba(92, 84, 70, ${(0.06 + rand() * 0.09).toFixed(3)})`;
+    ctx.fillRect(x, Math.min(y0, y1), 5 + rand() * 10, Math.abs(y1 - y0));
+  }
+
+  // Radial seams (constant u = spokes), heavier every 4th.
+  for (let i = 0; i < SECTORS; i++) {
+    ctx.strokeStyle = i % 4 === 0 ? 'rgba(48, 54, 62, 0.34)' : 'rgba(48, 54, 62, 0.2)';
+    ctx.lineWidth = i % 4 === 0 ? 3 : 2;
+    const x = i * secW;
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, LIVERY_SIZE);
+    ctx.lineTo(x, S);
     ctx.stroke();
   }
-  // Two faint ring seams on the lower hull.
-  for (const d of [2.62, 3.18]) {
-    const y = dToCanvasY(d);
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(LIVERY_SIZE, y);
-    ctx.stroke();
-  }
-  // Rivet dots flanking the seams along two rings.
-  ctx.fillStyle = 'rgba(30, 36, 52, 0.14)';
-  for (const d of [2.56, 3.24]) {
-    const y = dToCanvasY(d);
-    for (let i = 0; i < 32; i++) {
+
+  // Ring seams mirrored on both shells.
+  ctx.strokeStyle = 'rgba(48, 54, 62, 0.28)';
+  ctx.lineWidth = 2;
+  for (const u of RING_US) {
+    for (const y of [topY(u), botY(u)]) {
       ctx.beginPath();
-      ctx.arc(i * 32 + 16, y, 2.4, 0, TAU);
-      ctx.fill();
+      ctx.moveTo(0, y);
+      ctx.lineTo(S, y);
+      ctx.stroke();
     }
   }
 
-  // The bold teal band ringing the upper hull, violet pinstripe just aft.
-  const bandTop = dToCanvasY(1.86);
-  const bandBot = dToCanvasY(1.52);
-  ctx.fillStyle = TEAL;
-  ctx.fillRect(0, bandTop, LIVERY_SIZE, bandBot - bandTop);
-  ctx.fillStyle = VIOLET;
-  ctx.fillRect(0, dToCanvasY(2.0), LIVERY_SIZE, 7);
+  // Rim band: darker wrap with vent ticks.
+  const rimA = topY(1);
+  const rimB = botY(1);
+  ctx.fillStyle = 'rgba(104, 110, 118, 0.4)';
+  ctx.fillRect(0, rimA, S, rimB - rimA);
+  ctx.fillStyle = 'rgba(40, 46, 54, 0.35)';
+  for (let i = 0; i < 64; i++) {
+    if (rand() < 0.35) continue;
+    ctx.fillRect(i * 16 + 5, rimA + 10 + rand() * 40, 6, 34 + rand() * 30);
+  }
 
-  // Callsign twice, opposite flanks. Drawn rotated 180° so it reads upright
-  // when the craft stands tail-down on the pad (v increases AFT).
-  for (const cx of [256, 768]) {
-    ctx.save();
-    ctx.translate(cx, dToCanvasY(2.38));
-    ctx.rotate(Math.PI);
-    ctx.fillStyle = '#1a1e2b';
-    ctx.font = "700 88px ui-monospace, 'Space Grotesk', Menlo, monospace";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('CC-01', 0, 0);
-    ctx.restore();
-
-    // Rotated-diamond gradient mark "below" the callsign (aft when standing).
-    ctx.save();
-    ctx.translate(cx, dToCanvasY(2.78));
-    ctx.rotate(Math.PI / 4);
-    const g = ctx.createLinearGradient(-26, -26, 26, 26);
-    g.addColorStop(0, TEAL);
-    g.addColorStop(1, VIOLET);
-    ctx.fillStyle = g;
-    ctx.fillRect(-26, -26, 52, 52);
-    ctx.restore();
+  // Greeble dots and short ticks scattered everywhere.
+  for (let i = 0; i < 240; i++) {
+    const x = rand() * S;
+    const y = rand() * S;
+    ctx.fillStyle = `rgba(52, 57, 66, ${(0.14 + rand() * 0.28).toFixed(3)})`;
+    if (rand() < 0.7) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1.2 + rand() * 2.4, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.fillRect(x, y, 3 + rand() * 12, 2 + rand() * 3);
+    }
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.anisotropy = 4;
-  liveryCache = tex;
+  hullCache = tex;
   return tex;
 }
 
-/* Radial glow sprite texture: white-hot core through cyan to nothing. */
+/* ---- cockpit canopy texture ------------------------------------------------
+ * Near-black glaze with thin pale frame lines: u wraps the cone, so vertical
+ * canvas lines become the pane mullions.
+ */
+let canopyCache: THREE.CanvasTexture | null = null;
+function canopyTexture(): THREE.CanvasTexture {
+  if (canopyCache) return canopyCache;
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  ctx.fillStyle = '#10141a';
+  ctx.fillRect(0, 0, S, S);
+  const sheen = ctx.createLinearGradient(0, 0, 0, S);
+  sheen.addColorStop(0, 'rgba(140, 180, 220, 0.1)');
+  sheen.addColorStop(0.5, 'rgba(140, 180, 220, 0.02)');
+  sheen.addColorStop(1, 'rgba(140, 180, 220, 0.08)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, S, S);
+  ctx.strokeStyle = 'rgba(150, 160, 175, 0.8)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const x = i * 32 + 16;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, S);
+    ctx.stroke();
+  }
+  for (const y of [86, 170]) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(S, y);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  canopyCache = tex;
+  return tex;
+}
+
+/* Radial glow sprite texture: white-hot core through hyperdrive blue. */
 let glowCache: THREE.CanvasTexture | null = null;
 function glowTexture(): THREE.CanvasTexture {
   if (glowCache) return glowCache;
@@ -192,10 +241,10 @@ function glowTexture(): THREE.CanvasTexture {
   canvas.height = size;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(255,255,255,0.95)');
-  g.addColorStop(0.25, 'rgba(125,249,255,0.6)');
-  g.addColorStop(0.6, 'rgba(76,201,240,0.2)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  g.addColorStop(0.25, 'rgba(185, 220, 255, 0.62)');
+  g.addColorStop(0.6, 'rgba(125, 184, 255, 0.22)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   const tex = new THREE.CanvasTexture(canvas);
@@ -204,159 +253,113 @@ function glowTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-/* ---- antenna + beacon ------------------------------------------------------ */
-const ANTENNA_GEO = new THREE.CylinderGeometry(0.03, 0.012, 0.22, 8); // thin end forward after rotation
-const BEACON_GEO = new THREE.SphereGeometry(0.05, 14, 10);
-const BEACON_Z = -2.15; // forward face at -2.2: the envelope edge
-
-/* ---- portholes ------------------------------------------------------------- */
-const PORT_Z = -0.12;
-const PORT_R = profileRadius(PORT_Z - TIP_Z); // hull radius at the big window
-const PORT_RIM_GEO = new THREE.TorusGeometry(0.3, 0.05, 12, 36);
-// Slightly-domed glass: a spherical cap (base radius ≈ rim inner radius).
-const PORT_GLASS_GEO = new THREE.SphereGeometry(0.62, 28, 12, 0, TAU, 0, 0.51);
-const PORT_GLASS_OFFSET = 0.01 - 0.62 * Math.cos(0.51); // cap base flush with the rim
-const SMALL_PORTS: ReadonlyArray<readonly [number, number]> = [
-  [0.45, profileRadius(0.45 - TIP_Z) - 0.006],
-  [0.95, profileRadius(0.95 - TIP_Z) - 0.006],
-];
-const SMALL_RIM_GEO = new THREE.TorusGeometry(0.095, 0.022, 8, 22);
-const SMALL_GLASS_GEO = new THREE.CircleGeometry(0.08, 18);
-
-/* ---- side boosters ---------------------------------------------------------
- * Three capsules strapped at 120° azimuths around the lower hull, offset 60°
- * from the fins. Each: rounded body, black sphere tip echoing the nose, a
- * thin teal ring, tiny nozzle, two strut stubs into the hull.
+/* ---- mandibles -------------------------------------------------------------
+ * Two tapered prongs extruded in the (x, forward) plane, thickness 0.3 in y,
+ * rooted inside the disc at z = -1.0 and running to tips at exactly -2.2.
+ * Gap between inner faces: 0.5 (x = +-0.25 .. +-0.70 at the root).
  */
-const BOOSTER_ANGLES = [Math.PI / 2 + Math.PI / 3, Math.PI / 2 + Math.PI, Math.PI / 2 + (5 * Math.PI) / 3];
-const BOOSTER_R = 1.0; // radial stand-off of the capsule axis
-const BOOSTER_Z = 0.78;
-const BOOSTER_BODY_GEO = new THREE.CapsuleGeometry(0.22, 0.68, 6, 16);
-const BOOSTER_TIP_GEO = new THREE.SphereGeometry(0.15, 16, 12);
-const BOOSTER_RING_GEO = new THREE.TorusGeometry(0.228, 0.02, 8, 26);
-const BOOSTER_NOZZLE_GEO = new THREE.CylinderGeometry(0.09, 0.13, 0.14, 12, 1, true);
-const BOOSTER_STRUT_GEO = new THREE.BoxGeometry(0.3, 0.05, 0.05);
-
-/* ---- fins ------------------------------------------------------------------
- * Three swept, slightly bulbous fins (extruded with bevel, ~0.07 thick) at
- * the azimuths between the boosters, rooted in the skirt and sweeping
- * outboard + AFT. The fin tips flatten toward small landing pads whose sole
- * plane is exactly z = +2.2 — the aft-most geometry on the craft.
- * Shape coords: x = outboard, y = aft; extrude depth = tangential thickness.
- */
-const FIN_ANGLES = [Math.PI / 2, Math.PI / 2 + TAU / 3, Math.PI / 2 + (2 * TAU) / 3];
-const FIN_ROOT_X = 0.55; // root plane buried inside the hull — no gap, ever
-const FIN_ROOT_Z = 1.0;
-function makeFinGeometry(): THREE.ExtrudeGeometry {
+function makeMandibleGeometry(): THREE.ExtrudeGeometry {
   const s = new THREE.Shape();
-  s.moveTo(0, -0.78); // root, leading (z = 0.22 — inside the skirt shoulder)
-  s.quadraticCurveTo(0.5, -0.5, 0.78, 0.1); // leading edge sweeps out and aft
-  s.quadraticCurveTo(1.02, 0.62, 0.94, 1.0); // bulbous outboard belly
-  s.quadraticCurveTo(0.9, 1.11, 0.78, 1.13); // flattening toward the foot
-  s.lineTo(0.62, 1.13); // foot underside (z = 2.13, pad takes over below)
-  s.quadraticCurveTo(0.3, 0.9, 0.02, 0.55); // inner trailing edge home
-  s.lineTo(0, -0.78);
-  const g = new THREE.ExtrudeGeometry(s, {
-    depth: 0.046,
-    bevelEnabled: true,
-    bevelThickness: 0.012,
-    bevelSize: 0.014,
-    bevelSegments: 2,
-  });
-  g.translate(0, 0, -0.035); // center the thickness
+  s.moveTo(-0.225, 0);
+  s.lineTo(0.225, 0);
+  s.lineTo(0.19, 1.06);
+  s.quadraticCurveTo(0.17, 1.2, 0.1, 1.2);
+  s.lineTo(-0.1, 1.2);
+  s.quadraticCurveTo(-0.17, 1.2, -0.19, 1.06);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.3, bevelEnabled: false });
+  g.translate(0, 0, -0.15); // center the thickness
   return g;
 }
-const FIN_GEO = makeFinGeometry();
-// Teal leading-edge stripe: a thin box laid along the leading edge, a hair
-// thicker than the fin so it wraps the edge from both sides.
-const FIN_STRIPE_GEO = new THREE.BoxGeometry(1.1, 0.084, 0.12);
-const FIN_STRIPE_POS: [number, number, number] = [FIN_ROOT_X + 0.445, 0, FIN_ROOT_Z - 0.42];
-const FIN_STRIPE_YAW = -Math.atan2(0.88, 0.78);
-// Foot pad: squat cylinder under the fin tip, sole at exactly +2.2.
-const PAD_GEO = new THREE.CylinderGeometry(0.16, 0.19, 0.08, 16);
-const PAD_POS: [number, number, number] = [FIN_ROOT_X + 0.78, 0, 2.16];
+const MANDIBLE_GEO = makeMandibleGeometry();
 
-/* ---- main engine ----------------------------------------------------------- */
-const BELL_PTS = [
-  new THREE.Vector2(0.3, 0),
-  new THREE.Vector2(0.19, 0.1),
-  new THREE.Vector2(0.17, 0.16),
-  new THREE.Vector2(0.22, 0.24),
-  new THREE.Vector2(0.33, 0.33),
-  new THREE.Vector2(0.42, 0.4),
-];
-const BELL_GEO = new THREE.LatheGeometry(BELL_PTS, 32);
-const BELL_Z = 1.45; // lip at 1.85 — well inboard of the fin soles at 2.2
+/* ---- cockpit tube ---------------------------------------------------------- */
+const COCKPIT_ANGLE = -0.205; // yawed slightly outboard, like the real thing
+const COCKPIT_TUBE_GEO = new THREE.CylinderGeometry(0.26, 0.285, 1.04, 18);
+const COCKPIT_RING_GEO = new THREE.TorusGeometry(0.285, 0.022, 8, 22);
+const CANOPY_GEO = new THREE.CylinderGeometry(0.14, 0.26, 0.32, 14, 1, true);
+const CANOPY_TIP_GEO = new THREE.SphereGeometry(0.14, 14, 10);
 
-/* ---- plume -----------------------------------------------------------------
- * Teardrop lathe, nozzle at local 0, tip at +1 before scaling; scale.z maps
- * thrust to length. v (uv.y) IS the tail coordinate the shader colors by.
- */
-function makePlumeGeometry(): THREE.LatheGeometry {
-  const pts: THREE.Vector2[] = [];
-  const N = 24;
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    const r = t <= 0.22 ? 0.16 + 0.2 * smooth01(t / 0.22) : 0.36 * Math.pow(1 - (t - 0.22) / 0.78, 0.8);
-    pts.push(new THREE.Vector2(Math.max(0, r), t));
+/* ---- topside / belly furniture --------------------------------------------- */
+const CORE_DISC_GEO = new THREE.CylinderGeometry(0.55, 0.64, 0.16, 28);
+const CORE_DOME_GEO = new THREE.SphereGeometry(0.24, 20, 14);
+const GUN_GEO = new THREE.CylinderGeometry(0.022, 0.032, 0.34, 8);
+const BELLY_TURRET_GEO = new THREE.CylinderGeometry(0.3, 0.34, 0.12, 20);
+const BELLY_DOME_GEO = new THREE.SphereGeometry(0.2, 16, 12);
+const DISH_POST_GEO = new THREE.CylinderGeometry(0.03, 0.04, 0.16, 8);
+const DISH_GEO = new THREE.ConeGeometry(0.28, 0.1, 22, 1, true);
+const DISH_FEED_GEO = new THREE.CylinderGeometry(0.014, 0.014, 0.16, 6);
+const DOCK_GEO = new THREE.CylinderGeometry(0.2, 0.2, 0.34, 16);
+const DOCK_RING_GEO = new THREE.TorusGeometry(0.2, 0.028, 8, 22);
+const GREEBLE_GEO = new THREE.BoxGeometry(1, 1, 1);
+
+/* Scattered hull greebles — seeded, identical every visit. */
+type Greeble = { x: number; y: number; z: number; ry: number; sx: number; sy: number; sz: number };
+const GREEBLES: Greeble[] = [];
+{
+  const rand = mulberry32(0x0fa1c05);
+  for (let i = 0; i < 16; i++) {
+    const a = rand() * TAU;
+    const rr = 0.45 + rand() * 1.0;
+    const top = i < 11;
+    GREEBLES.push({
+      x: Math.cos(a) * rr,
+      y: (top ? 1 : -1) * discY(rr / DISC_R),
+      z: Math.sin(a) * rr,
+      ry: a,
+      sx: 0.08 + rand() * 0.2,
+      sy: 0.05 + rand() * 0.08,
+      sz: 0.08 + rand() * 0.26,
+    });
   }
-  return new THREE.LatheGeometry(pts, 28);
 }
-const PLUME_GEO = makePlumeGeometry();
-const PLUME_Z = 1.7;
 
-const PLUME_VERT = /* glsl */ `
-uniform float uTime;
-varying vec2 vUv;
-varying float vFres;
-void main() {
-  vUv = uv;
-  float tail = uv.y;
-  // Wobble: the sheath breathes sideways, more toward the tail.
-  float w = sin(uv.x * 18.8 + uTime * 9.0 + tail * 8.0) * 0.05 * tail;
-  vec3 p = position + normal * w;
-  vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  vec3 n = normalize(normalMatrix * normal);
-  vec3 vdir = normalize(-mv.xyz);
-  vFres = pow(abs(dot(n, vdir)), 1.3);
-  gl_Position = projectionMatrix * mv;
-}`;
+/* ---- landing gear ----------------------------------------------------------
+ * Three pads under the disc: one forward, two aft. Foot boxes are 0.10 tall,
+ * centered at y = -0.95, so every sole sits at EXACTLY local y = -1.0 — the
+ * belly-landing plane the finale stands on. Struts bury into the lower shell.
+ */
+const GEAR_STRUT_GEO = new THREE.BoxGeometry(0.15, 0.68, 0.2); // y -0.22 .. -0.90
+const GEAR_KNEE_GEO = new THREE.BoxGeometry(0.26, 0.14, 0.3);
+const GEAR_FOOT_GEO = new THREE.BoxGeometry(0.46, 0.1, 0.58); // sole at -1.0
+const GEAR_POS: Array<[number, number]> = [
+  [0, -0.85],
+  [-1.0, 0.8],
+  [1.0, 0.8],
+];
 
-const PLUME_FRAG = /* glsl */ `
-uniform float uTime;
-uniform float uThrust;
-varying vec2 vUv;
-varying float vFres;
-void main() {
-  float tail = vUv.y;
-  vec3 col = mix(vec3(1.0), vec3(0.49, 0.976, 1.0), smoothstep(0.0, 0.45, tail)); // white-hot -> #7df9ff
-  col = mix(col, vec3(0.486, 0.227, 0.929), smoothstep(0.35, 0.95, tail));         // -> #7c3aed edge
-  float flicker = 0.82 + 0.18 * sin(uTime * 21.0 + vUv.x * 12.6) * sin(uTime * 15.0 - tail * 10.0);
-  float a = (1.0 - smoothstep(0.1, 1.0, tail)) * vFres * flicker * clamp(uThrust, 0.0, 1.0);
-  gl_FragColor = vec4(col * (1.35 + 1.1 * (1.0 - tail)), a);
-}`;
+/* ---- the hyperdrive strip --------------------------------------------------
+ * A curved band wrapped along the disc's rear arc, standing just proud of
+ * the rim: dark backing wall + top/bottom deck plates bridging to the hull,
+ * with the emissive core band (and a hotter centre stripe) as the outermost
+ * rear-facing surface. Chord width ~2.6 (x +-1.3), rear-most z = 2.15.
+ */
+const BAND_HALF = 0.66; // asin(1.3 / 2.10)
+const WALL_HALF = BAND_HALF + 0.04;
+const ENGINE_WALL_GEO = new THREE.CylinderGeometry(2.04, 2.04, 0.44, 40, 1, true, -WALL_HALF, 2 * WALL_HALF);
+const ENGINE_CORE_GEO = new THREE.CylinderGeometry(2.1, 2.1, 0.26, 40, 1, true, -BAND_HALF, 2 * BAND_HALF);
+const ENGINE_HOT_GEO = new THREE.CylinderGeometry(2.13, 2.13, 0.11, 32, 1, true, -0.5, 1.0);
+const ENGINE_PLATE_GEO = new THREE.RingGeometry(1.66, 2.15, 30, 1, -Math.PI / 2 - WALL_HALF, 2 * WALL_HALF);
+const ENGINE_CAP_GEO = new THREE.BoxGeometry(0.1, 0.44, 0.36);
 
-// Plume length flicker: two detuned sines in the 9-13 Hz band.
-const FLICKER_HZ_A = 12.3;
-const FLICKER_HZ_B = 9.7;
-const FLICKER_AMP_A = 0.08;
-const FLICKER_AMP_B = 0.055;
-
-/* ---- RCS puffs ------------------------------------------------------------- */
-const RCS_GEO = new THREE.ConeGeometry(0.055, 0.36, 10, 1, true);
-const RCS_AZIMUTH = 0.75;
-const RCS_THRUST_MAX = 0.25;
+const GLOW_POS: Array<[number, number, number]> = [
+  [-0.85, 0, 2.06],
+  [0, 0, 2.3],
+  [0.85, 0, 2.06],
+];
+const GLOW_BASE = [0.85, 1.3, 0.85];
 
 /* ---- world-space trail -----------------------------------------------------
- * The signature. Points live in SCENE space (portal), so the exhaust arcs
- * along the flight path instead of swinging rigidly with the ship. Ring
- * buffer recycled in place — zero allocation per frame. Shader adapted from
- * the author's own River-Racer spray system: real-metre projected sizing via
- * uH, and a screen-space smear along travel RELATIVE to the camera.
+ * The signature system, kept exactly in architecture: points live in SCENE
+ * space (portal) so the wash arcs along the flight path; ring buffer recycled
+ * in place; real-metre projected sizing via uH; screen-space smear along
+ * travel RELATIVE to the camera. Re-tuned: emission spread across the stern
+ * strip (+-1.1 local x, following the band's arc), white-blue aging, 2.4 s
+ * life, alpha peak ~0.45 — hyperdrive wash, not fire.
  */
-const T_COUNT = 240;
-const T_LIFE = 2.0;
-const T_RATE = 90; // particles/s at full thrust
+const T_COUNT = 260;
+const T_LIFE = 2.4;
+const T_RATE = 80; // particles/s at full thrust
 const T_THRUST_MIN = 0.1;
 
 // Seeded per-slot randomness — identical exhaust every visit.
@@ -365,16 +368,21 @@ const T_SCAT = new Float32Array(T_COUNT * 3);
 const T_SIZE = new Float32Array(T_COUNT);
 const T_SOFT = new Float32Array(T_COUNT);
 const T_SEED = new Float32Array(T_COUNT);
+const T_EMIT = new Float32Array(T_COUNT * 3); // local emit point along the stern band
 {
-  const rand = mulberry32(0x7df9ff);
+  const rand = mulberry32(0x7db8ff);
   for (let i = 0; i < T_COUNT; i++) {
-    T_SPEED[i] = 3.2 + rand() * 1.8;
-    T_SCAT[i * 3] = (rand() - 0.5) * 1.6; // ±0.8 lateral scatter
+    T_SPEED[i] = 2.8 + rand() * 1.7;
+    T_SCAT[i * 3] = (rand() - 0.5) * 1.6;
     T_SCAT[i * 3 + 1] = (rand() - 0.5) * 1.6;
     T_SCAT[i * 3 + 2] = (rand() - 0.5) * 1.6;
-    T_SIZE[i] = 0.13 + rand() * 0.2;
+    T_SIZE[i] = 0.16 + rand() * 0.24;
     T_SOFT[i] = 0.22 + rand() * 0.36;
     T_SEED[i] = rand() * 6.283;
+    const ex = (rand() - 0.5) * 2.2; // spread across the strip, +-1.1
+    T_EMIT[i * 3] = ex;
+    T_EMIT[i * 3 + 1] = (rand() - 0.5) * 0.16;
+    T_EMIT[i * 3 + 2] = Math.sqrt(2.12 * 2.12 - ex * ex) + 0.05; // just behind the band's arc
   }
 }
 
@@ -405,10 +413,8 @@ void main() {
   vStretch = clamp(dl / max(px, 1.5), 1.0, 2.6);
   vRot = dl > 0.75 ? atan(d.y, d.x) : aDrop.w;
   vCore = aDrop.z;
-  vLife = clamp(aDrop.y * 2.0, 0.0, 1.0); // alpha peaks 0.5 at birth -> 1..0 life proxy
+  vLife = clamp(aDrop.y * 2.223, 0.0, 1.0); // alpha peaks ~0.45 at birth -> 1..0 life proxy
   // Fade anything about to swallow the lens rather than splatting a disc.
-  // Floor near zero: at 0.15 the residual still read as pale ovals drifting
-  // across the landing shot (screenshot finding).
   vA = aDrop.y * smoothstep(0.4, 1.6, depth) * mix(1.0, 0.04, smoothstep(22.0, 60.0, px));
   gl_PointSize = clamp(px * vStretch, 1.0, 40.0);
 }`;
@@ -427,9 +433,9 @@ void main() {
   float r = length(q) * 2.0;
   float a = vA * (1.0 - smoothstep(vCore, 1.0, r));
   if (a < 0.004) discard;
-  // White-hot at birth through #7df9ff, dying to a faint violet.
-  vec3 col = mix(vec3(0.42, 0.25, 0.8), vec3(0.49, 0.976, 1.0), smoothstep(0.1, 0.65, vLife));
-  col = mix(col, vec3(1.6, 1.6, 1.5), smoothstep(0.8, 1.0, vLife));
+  // White-blue at birth (#eaf4ff) through #7db8ff, dying to a faint #2c5fa8.
+  vec3 col = mix(vec3(0.172, 0.373, 0.659), vec3(0.49, 0.722, 1.0), smoothstep(0.08, 0.6, vLife));
+  col = mix(col, vec3(0.918, 0.957, 1.0) * 1.45, smoothstep(0.78, 1.0, vLife));
   gl_FragColor = vec4(col, a);
 }`;
 
@@ -437,7 +443,6 @@ void main() {
 const SCRATCH_POS = new THREE.Vector3();
 const SCRATCH_DIR = new THREE.Vector3();
 const SCRATCH_QUAT = new THREE.Quaternion();
-const BELL_LOCAL = new THREE.Vector3(0, 0, 1.9);
 
 type TrailState = {
   pos: Float32Array;
@@ -498,102 +503,89 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
 ) {
   const scene = useThree((s) => s.scene);
   const groupRef = useRef<THREE.Group | null>(null);
-  const plumeRef = useRef<THREE.Group | null>(null);
-  const glowARef = useRef<THREE.Sprite | null>(null);
-  const glowBRef = useRef<THREE.Sprite | null>(null);
+  const dishRef = useRef<THREE.Group | null>(null);
+  const glowRefs = useRef<Array<THREE.Sprite | null>>([null, null, null]);
   const lightRef = useRef<THREE.PointLight | null>(null);
   const trail = useMemo(makeTrailState, []);
 
-  const { mats, plumeU, trailU } = useMemo(() => {
-    const plumeUniforms = { uTime: { value: 0 }, uThrust: { value: 0 } };
+  const { mats, trailU } = useMemo(() => {
     const trailUniforms = {
       uH: { value: 720 },
       uAspect: { value: 16 / 9 },
       uCamVel: { value: new THREE.Vector3() },
     };
     return {
-      plumeU: plumeUniforms,
       trailU: trailUniforms,
       mats: {
         hull: new THREE.MeshStandardMaterial({
-          map: liveryTexture(),
+          map: hullTexture(),
           color: '#ffffff',
-          roughness: 0.35,
-          metalness: 0.05,
-          envMapIntensity: 0.8,
+          roughness: 0.62,
+          metalness: 0.25,
+          envMapIntensity: 0.7,
         }),
-        white: new THREE.MeshStandardMaterial({
-          color: '#f2f3f7',
-          roughness: 0.4,
-          metalness: 0.05,
-          envMapIntensity: 0.8,
+        grey: new THREE.MeshStandardMaterial({
+          color: '#b4b8bc',
+          roughness: 0.62,
+          metalness: 0.25,
+          envMapIntensity: 0.7,
         }),
-        nose: new THREE.MeshStandardMaterial({
-          color: '#14161f',
-          roughness: 0.22,
+        greyDark: new THREE.MeshStandardMaterial({
+          color: '#8e9296',
+          roughness: 0.7,
           metalness: 0.3,
-          envMapIntensity: 1.1,
+          envMapIntensity: 0.6,
         }),
-        silver: new THREE.MeshStandardMaterial({ color: '#c9ccd4', roughness: 0.25, metalness: 0.8 }),
-        metal: new THREE.MeshStandardMaterial({
-          color: '#33363e',
-          roughness: 0.4,
-          metalness: 0.7,
+        dark: new THREE.MeshStandardMaterial({
+          color: '#3a3e46',
+          roughness: 0.5,
+          metalness: 0.6,
           side: THREE.DoubleSide,
         }),
-        teal: new THREE.MeshStandardMaterial({ color: TEAL, roughness: 0.4, metalness: 0.1 }),
-        glass: new THREE.MeshStandardMaterial({
-          color: '#04070c',
-          emissive: '#1b4a5c',
-          emissiveIntensity: 0.8,
-          roughness: 0.15,
-          metalness: 0.1,
-        }),
-        beacon: new THREE.MeshStandardMaterial({
-          color: '#2a1410',
-          emissive: BEACON,
-          emissiveIntensity: 1.4,
-        }),
-        bellInner: new THREE.MeshStandardMaterial({
-          color: '#050505',
-          emissive: '#ff8a50',
-          emissiveIntensity: 1.4,
-          side: THREE.BackSide,
-        }),
-        plume: new THREE.ShaderMaterial({
-          uniforms: plumeUniforms,
-          vertexShader: PLUME_VERT,
-          fragmentShader: PLUME_FRAG,
-          transparent: true,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        }),
-        glowA: new THREE.SpriteMaterial({
-          map: glowTexture(),
-          color: '#bffcff',
-          transparent: true,
-          opacity: 0,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          toneMapped: false,
-        }),
-        glowB: new THREE.SpriteMaterial({
-          map: glowTexture(),
+        canopy: new THREE.MeshStandardMaterial({
+          map: canopyTexture(),
           color: '#ffffff',
+          emissive: '#1a2c42',
+          emissiveIntensity: 0.45,
+          roughness: 0.18,
+          metalness: 0.25,
+        }),
+        glassDark: new THREE.MeshStandardMaterial({
+          color: '#10141a',
+          roughness: 0.15,
+          metalness: 0.3,
+          envMapIntensity: 1.0,
+        }),
+        engineCore: new THREE.MeshStandardMaterial({
+          color: '#0b111c',
+          emissive: HYPER_CORE,
+          emissiveIntensity: 1.2,
+          roughness: 0.4,
+          side: THREE.DoubleSide,
+        }),
+        engineHot: new THREE.MeshStandardMaterial({
+          color: '#0b111c',
+          emissive: HYPER_HOT,
+          emissiveIntensity: 1.7,
+          roughness: 0.4,
+          side: THREE.DoubleSide,
+        }),
+        glow: new THREE.SpriteMaterial({
+          map: glowTexture(),
+          color: '#9cc8ff',
           transparent: true,
           opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           toneMapped: false,
         }),
-        rcs: new THREE.MeshBasicMaterial({
-          color: '#e8f2f8',
+        underGlow: new THREE.SpriteMaterial({
+          map: glowTexture(),
+          color: HYPER_CORE,
           transparent: true,
           opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
-          side: THREE.DoubleSide,
           toneMapped: false,
         }),
         trail: new THREE.ShaderMaterial({
@@ -608,54 +600,49 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     };
   }, []);
 
+  // Per-mount resources go away with the component; module-scope geometry
+  // and cached canvas textures are shared across visits on purpose.
+  useEffect(() => {
+    return () => {
+      trail.geo.dispose();
+      for (const m of Object.values(mats)) m.dispose();
+    };
+  }, [trail, mats]);
+
   useFrame((state, rawDt) => {
     // Clamp dt: a backgrounded tab must not dump a giant step into the sim.
     const dt = Math.min(rawDt, 0.05);
     const thrust = thrustRef.current;
     const t = state.clock.elapsedTime;
 
-    // ---- plume: length/swell track thrust (state, allowed under reduced);
-    // the shader time + length flicker are motion, gated off.
-    plumeU.uThrust.value = Math.min(Math.max(thrust, 0), 1.2);
-    plumeU.uTime.value = reduced ? 0 : t;
-    const plume = plumeRef.current;
-    if (plume) {
-      let flick = 1;
-      if (!reduced) {
-        flick =
-          1 +
-          FLICKER_AMP_A * Math.sin(t * FLICKER_HZ_A * TAU) +
-          FLICKER_AMP_B * Math.sin(t * FLICKER_HZ_B * TAU + 0.9);
+    // ---- hyperdrive band: intensity TRACKS thrust (state, allowed under
+    // reduced); the subtle flicker is motion, gated off.
+    const flick = reduced ? 0 : 0.05 * Math.sin(t * 12.4) + 0.035 * Math.sin(t * 7.9 + 1.3);
+    mats.engineCore.emissiveIntensity = (1.2 + thrust * 2.6) * (1 + flick);
+    mats.engineHot.emissiveIntensity = (1.7 + thrust * 3.0) * (1 + flick);
+
+    // ---- stern glow sprites + hyperdrive light: value-tracking state.
+    mats.glow.opacity = Math.min(1, thrust * 0.95);
+    const gs = 0.55 + thrust * 1.6;
+    for (let i = 0; i < 3; i++) {
+      const spr = glowRefs.current[i];
+      if (spr) {
+        const m = GLOW_BASE[i] ?? 1;
+        spr.scale.set(gs * m * 1.2, gs * m * 0.7, 1);
       }
-      const swell = 1 + thrust * 0.25;
-      plume.scale.set(swell, swell, (0.5 + thrust * 2.6) * flick);
     }
-
-    // ---- nozzle glow sprites + exhaust light: value-tracking state.
-    const ga = glowARef.current;
-    if (ga) {
-      const s = 0.7 + thrust * 1.7;
-      ga.scale.set(s, s, 1);
-    }
-    const gb = glowBRef.current;
-    if (gb) {
-      const s = 0.35 + thrust * 0.9;
-      gb.scale.set(s, s, 1);
-    }
-    mats.glowA.opacity = Math.min(1, thrust * 0.85);
-    mats.glowB.opacity = Math.min(1, thrust * 1.1);
     const light = lightRef.current;
-    if (light) light.intensity = thrust * 26;
+    if (light) light.intensity = thrust * 22;
 
-    // ---- beacon: gentle 1.2 Hz pulse; steady glow under reduced.
-    mats.beacon.emissiveIntensity = reduced ? 1.4 : 1.1 + 0.7 * Math.sin(t * 1.2 * TAU);
+    // ---- belly repulsor under-glow: fades in above thrust 0.6 (landing read).
+    mats.underGlow.opacity = thrust > 0.6 ? Math.min(0.5, (thrust - 0.6) * 1.2) : 0;
 
-    // Everything past here is pure motion — under reduced neither the RCS
-    // jets nor the trail even render, so there is nothing to simulate.
+    // Everything past here is pure motion — parked entirely under reduced.
     if (reduced) return;
 
-    // ---- RCS: attitude puffs only near idle thrust.
-    mats.rcs.opacity = thrust < RCS_THRUST_MAX ? (RCS_THRUST_MAX - thrust) * 0.8 : 0;
+    // ---- radar dish: slow 0.1 rad/s sweep.
+    const dish = dishRef.current;
+    if (dish) dish.rotation.y = (dish.rotation.y + 0.1 * dt) % TAU;
 
     // ---- trail: camera velocity for the screen-space smear.
     const cam = state.camera;
@@ -685,16 +672,15 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       pos[k + 2] = (pos[k + 2] ?? 0) + (vel[k + 2] ?? 0) * dt;
       const u = age / T_LIFE;
       const inv = 1 - u;
-      drop[q] = (T_SIZE[i] ?? 0.2) * (0.65 + u * 1.35); // exhaust expands as it cools
-      drop[q + 1] = 0.5 * inv * inv * Math.min(1, age * 12); // peak ~0.5, quadratic fade
+      drop[q] = (T_SIZE[i] ?? 0.2) * (0.7 + u * 1.5); // wash expands as it cools
+      drop[q + 1] = 0.45 * inv * inv * Math.min(1, age * 10); // peak ~0.45, quadratic fade
     }
 
-    // Emit from the bell's WORLD position, aft along the ship's WORLD +Z.
+    // Emit across the stern strip's WORLD position, aft along WORLD +Z.
     if (thrust > T_THRUST_MIN) {
       const g = groupRef.current;
       if (g) {
         g.updateWorldMatrix(true, false);
-        g.localToWorld(SCRATCH_POS.copy(BELL_LOCAL));
         g.getWorldQuaternion(SCRATCH_QUAT);
         SCRATCH_DIR.set(0, 0, 1).applyQuaternion(SCRATCH_QUAT).normalize();
         trail.accum += T_RATE * Math.min(thrust, 1.2) * dt;
@@ -705,13 +691,17 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
           ages[i] = 0;
           const k = i * 3;
           const q = i * 4;
-          pos[k] = SCRATCH_POS.x + (T_SCAT[k] ?? 0) * 0.06;
-          pos[k + 1] = SCRATCH_POS.y + (T_SCAT[k + 1] ?? 0) * 0.06;
-          pos[k + 2] = SCRATCH_POS.z + (T_SCAT[k + 2] ?? 0) * 0.06;
-          const spd = T_SPEED[i] ?? 4;
-          vel[k] = SCRATCH_DIR.x * spd + (T_SCAT[k] ?? 0) * 0.8;
-          vel[k + 1] = SCRATCH_DIR.y * spd + (T_SCAT[k + 1] ?? 0) * 0.8;
-          vel[k + 2] = SCRATCH_DIR.z * spd + (T_SCAT[k + 2] ?? 0) * 0.8;
+          // Per-slot emit point spread along the band's arc, to world space.
+          SCRATCH_POS.set(T_EMIT[k] ?? 0, T_EMIT[k + 1] ?? 0, T_EMIT[k + 2] ?? 2.1).applyMatrix4(
+            g.matrixWorld,
+          );
+          pos[k] = SCRATCH_POS.x + (T_SCAT[k] ?? 0) * 0.05;
+          pos[k + 1] = SCRATCH_POS.y + (T_SCAT[k + 1] ?? 0) * 0.05;
+          pos[k + 2] = SCRATCH_POS.z + (T_SCAT[k + 2] ?? 0) * 0.05;
+          const spd = T_SPEED[i] ?? 3.5;
+          vel[k] = SCRATCH_DIR.x * spd + (T_SCAT[k] ?? 0) * 0.6;
+          vel[k + 1] = SCRATCH_DIR.y * spd + (T_SCAT[k + 1] ?? 0) * 0.6;
+          vel[k + 2] = SCRATCH_DIR.z * spd + (T_SCAT[k + 2] ?? 0) * 0.6;
           drop[q + 2] = T_SOFT[i] ?? 0.3;
           drop[q + 3] = T_SEED[i] ?? 0;
         }
@@ -733,139 +723,163 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         else if (ref) ref.current = g;
       }}
     >
-      {/* Hull + nose cone — lathes share one profile function; the +90° X
-          rotation maps the lathe axis onto local Z, tip toward -Z. */}
-      <mesh geometry={HULL_GEO} material={mats.hull} position={[0, 0, TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
-      <mesh geometry={NOSE_GEO} material={mats.nose} position={[0, 0, TIP_Z]} rotation={[Math.PI / 2, 0, 0]} />
+      {/* Saucer disc — lathe axis is already local Y, no rotation needed. */}
+      <mesh geometry={DISC_GEO} material={mats.hull} />
 
-      {/* Antenna spike + beacon carrying the silhouette to the -2.2 edge. */}
-      <mesh geometry={ANTENNA_GEO} material={mats.silver} position={[0, 0, -2.08]} rotation={[Math.PI / 2, 0, 0]} />
-      <mesh geometry={BEACON_GEO} material={mats.beacon} position={[0, 0, BEACON_Z]} />
-
-      {/* The big porthole — polished rim, slightly-domed glass, faint cyan
-          interior. Someone rides this thing. */}
-      <group position={[PORT_R - 0.02, 0, PORT_Z]} rotation={[0, Math.PI / 2, 0]}>
-        <mesh geometry={PORT_RIM_GEO} material={mats.silver} scale={[1, 1, 1.6]} />
+      {/* Raised core disc + dome + gun stubs at top centre. */}
+      <mesh geometry={CORE_DISC_GEO} material={mats.grey} position={[0, 0.43, 0]} />
+      <mesh geometry={CORE_DOME_GEO} material={mats.greyDark} position={[0, 0.53, 0]} scale={[1, 0.75, 1]} />
+      {([-1, 1] as const).map((s) => (
         <mesh
-          geometry={PORT_GLASS_GEO}
-          material={mats.glass}
-          position={[0, 0, PORT_GLASS_OFFSET]}
-          rotation={[Math.PI / 2, 0, 0]}
+          key={s}
+          geometry={GUN_GEO}
+          material={mats.dark}
+          position={[s * 0.05, 0.64, -0.08]}
+          rotation={[-1.0, 0, s * 0.12]}
         />
+      ))}
+
+      {/* Belly turret bump at bottom centre. */}
+      <group position={[0, -0.42, 0]}>
+        <mesh geometry={BELLY_TURRET_GEO} material={mats.grey} />
+        <mesh geometry={BELLY_DOME_GEO} material={mats.greyDark} position={[0, -0.07, 0]} scale={[1, 0.7, 1]} />
       </group>
 
-      {/* Two small secondary portholes lower down the same flank. */}
-      <group rotation={[0, 0, -0.3]}>
-        {SMALL_PORTS.map(([z, r]) => (
-          <group key={z} position={[r, 0, z]} rotation={[0, Math.PI / 2, 0]}>
-            <mesh geometry={SMALL_RIM_GEO} material={mats.silver} />
-            <mesh geometry={SMALL_GLASS_GEO} material={mats.glass} position={[0, 0, 0.008]} />
+      {/* Mandibles: tapered prongs, roots buried in the disc at z = -1.0,
+          tips at exactly -2.2, notch 0.5 wide between the inner faces. */}
+      {([-1, 1] as const).map((s) => (
+        <group key={s} position={[s * 0.475, 0, -1.0]}>
+          <mesh geometry={MANDIBLE_GEO} material={mats.grey} rotation={[-Math.PI / 2, 0, 0]} />
+          {/* Inner detail plate facing the notch. */}
+          <mesh
+            geometry={GREEBLE_GEO}
+            material={mats.greyDark}
+            position={[-s * 0.24, 0, -0.62]}
+            scale={[0.05, 0.2, 0.85]}
+          />
+          {/* Jaw pad at the tip, pointing at its twin. */}
+          <mesh
+            geometry={GREEBLE_GEO}
+            material={mats.dark}
+            position={[-s * 0.19, 0, -1.08]}
+            scale={[0.09, 0.31, 0.2]}
+          />
+          {/* Greeble boxes along the top and bottom faces. */}
+          <mesh geometry={GREEBLE_GEO} material={mats.greyDark} position={[0, 0.16, -0.32]} scale={[0.2, 0.07, 0.3]} />
+          <mesh
+            geometry={GREEBLE_GEO}
+            material={mats.dark}
+            position={[-s * 0.05, 0.16, -0.72]}
+            scale={[0.14, 0.05, 0.2]}
+          />
+          <mesh
+            geometry={GREEBLE_GEO}
+            material={mats.greyDark}
+            position={[s * 0.04, -0.16, -0.5]}
+            scale={[0.16, 0.05, 0.22]}
+          />
+        </group>
+      ))}
+
+      {/* Cockpit: starboard tube yawed slightly outboard, dark glazed canopy
+          cone + tip cap overhanging the front-starboard rim. */}
+      <group position={[1.3, 0.02, 0.3]} rotation={[0, COCKPIT_ANGLE, 0]}>
+        <mesh geometry={COCKPIT_TUBE_GEO} material={mats.grey} position={[0, 0, -0.52]} rotation={[-Math.PI / 2, 0, 0]} />
+        <mesh geometry={COCKPIT_RING_GEO} material={mats.greyDark} position={[0, 0, -0.28]} />
+        <mesh geometry={COCKPIT_RING_GEO} material={mats.greyDark} position={[0, 0, -0.72]} />
+        <mesh geometry={CANOPY_GEO} material={mats.canopy} position={[0, 0, -1.2]} rotation={[-Math.PI / 2, 0, 0]} />
+        <mesh geometry={CANOPY_TIP_GEO} material={mats.glassDark} position={[0, 0, -1.36]} scale={[1, 1, 0.55]} />
+      </group>
+
+      {/* Port-side docking ring stub, balancing the cockpit. */}
+      <group position={[-1.72, 0, 0.1]}>
+        <mesh geometry={DOCK_GEO} material={mats.grey} rotation={[0, 0, Math.PI / 2]} />
+        <mesh geometry={DOCK_RING_GEO} material={mats.greyDark} position={[-0.14, 0, 0]} rotation={[0, Math.PI / 2, 0]} />
+      </group>
+
+      {/* Radar dish: slow sweep (parked under reduced), slight tilt. */}
+      <group position={[-0.6, 0.32, -0.2]}>
+        <mesh geometry={DISH_POST_GEO} material={mats.dark} position={[0, 0.07, 0]} />
+        <group
+          ref={(g: THREE.Group | null) => {
+            dishRef.current = g;
+          }}
+          position={[0, 0.17, 0]}
+        >
+          <group rotation={[-0.6, 0, 0]}>
+            <mesh geometry={DISH_GEO} material={mats.dark} rotation={[Math.PI, 0, 0]} />
+            <mesh geometry={DISH_FEED_GEO} material={mats.dark} position={[0, 0.07, 0]} />
           </group>
-        ))}
+        </group>
       </group>
 
-      {/* Three side boosters at 120° azimuths, offset 60° from the fins. */}
-      {BOOSTER_ANGLES.map((a) => (
-        <group key={a} rotation={[0, 0, a]}>
-          <mesh
-            geometry={BOOSTER_BODY_GEO}
-            material={mats.white}
-            position={[BOOSTER_R, 0, BOOSTER_Z]}
-            rotation={[Math.PI / 2, 0, 0]}
-          />
-          <mesh geometry={BOOSTER_TIP_GEO} material={mats.nose} position={[BOOSTER_R, 0, 0.24]} />
-          <mesh geometry={BOOSTER_RING_GEO} material={mats.teal} position={[BOOSTER_R, 0, 0.6]} />
-          <mesh
-            geometry={BOOSTER_NOZZLE_GEO}
-            material={mats.metal}
-            position={[BOOSTER_R, 0, 1.42]}
-            rotation={[Math.PI / 2, 0, 0]}
-          />
-          {[0.42, 1.1].map((z) => (
-            <mesh key={z} geometry={BOOSTER_STRUT_GEO} material={mats.silver} position={[0.88, 0, z]} />
-          ))}
+      {/* Scattered hull greebles, seeded — half-buried machinery boxes. */}
+      {GREEBLES.map((g, i) => (
+        <mesh
+          key={i}
+          geometry={GREEBLE_GEO}
+          material={i % 3 === 0 ? mats.dark : i % 3 === 1 ? mats.greyDark : mats.grey}
+          position={[g.x, g.y, g.z]}
+          rotation={[0, g.ry, 0]}
+          scale={[g.sx, g.sy, g.sz]}
+        />
+      ))}
+
+      {/* Landing gear: three pads, soles at EXACTLY y = -1.0. */}
+      {GEAR_POS.map(([gx, gz], i) => (
+        <group key={i} position={[gx, 0, gz]}>
+          <mesh geometry={GEAR_STRUT_GEO} material={mats.dark} position={[0, -0.56, 0]} />
+          <mesh geometry={GEAR_KNEE_GEO} material={mats.greyDark} position={[0, -0.3, 0]} />
+          <mesh geometry={GEAR_FOOT_GEO} material={mats.dark} position={[0, -0.95, 0]} />
         </group>
       ))}
 
-      {/* Three swept fins + landing pads. Pad soles at exactly z = +2.2 —
-          the aft-most geometry, so the tail-down finale stands on them. */}
-      {FIN_ANGLES.map((a) => (
-        <group key={a} rotation={[0, 0, a]}>
-          <mesh
-            geometry={FIN_GEO}
-            material={mats.white}
-            position={[FIN_ROOT_X, 0, FIN_ROOT_Z]}
-            rotation={[Math.PI / 2, 0, 0]}
-          />
-          <mesh
-            geometry={FIN_STRIPE_GEO}
-            material={mats.teal}
-            position={FIN_STRIPE_POS}
-            rotation={[0, FIN_STRIPE_YAW, 0]}
-          />
-          <mesh geometry={PAD_GEO} material={mats.metal} position={PAD_POS} rotation={[Math.PI / 2, 0, 0]} />
-        </group>
+      {/* THE HYPERDRIVE: curved stern band along the rear arc — dark housing,
+          deck plates bridging to the rim, emissive core + hotter centre. */}
+      <mesh geometry={ENGINE_WALL_GEO} material={mats.dark} />
+      <mesh geometry={ENGINE_PLATE_GEO} material={mats.dark} position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]} />
+      <mesh geometry={ENGINE_PLATE_GEO} material={mats.dark} position={[0, -0.19, 0]} rotation={[-Math.PI / 2, 0, 0]} />
+      <mesh geometry={ENGINE_CORE_GEO} material={mats.engineCore} />
+      <mesh geometry={ENGINE_HOT_GEO} material={mats.engineHot} />
+      {([-1, 1] as const).map((s) => (
+        <mesh
+          key={s}
+          geometry={ENGINE_CAP_GEO}
+          material={mats.dark}
+          position={[s * 1.31, 0, 1.62]}
+          rotation={[0, s * 0.7, 0]}
+        />
       ))}
 
-      {/* Main engine bell: dark flared shell, warm emissive throat. */}
-      <mesh geometry={BELL_GEO} material={mats.metal} position={[0, 0, BELL_Z]} rotation={[Math.PI / 2, 0, 0]} />
-      <mesh
-        geometry={BELL_GEO}
-        material={mats.bellInner}
-        position={[0, 0, BELL_Z]}
-        rotation={[Math.PI / 2, 0, 0]}
-        scale={[0.92, 1, 0.92]}
-      />
+      {/* Row of three stern glow sprites scaling with thrust. */}
+      {GLOW_POS.map((p, i) => (
+        <sprite
+          key={i}
+          material={mats.glow}
+          position={p}
+          ref={(s: THREE.Sprite | null) => {
+            glowRefs.current[i] = s;
+          }}
+        />
+      ))}
 
-      {/* Shader plume — teardrop stretched aft by one scale write per frame. */}
-      <group
-        position={[0, 0, PLUME_Z]}
-        scale={[1, 1, 0.5]}
-        ref={(g) => {
-          plumeRef.current = g;
-        }}
-      >
-        <mesh geometry={PLUME_GEO} material={mats.plume} rotation={[Math.PI / 2, 0, 0]} frustumCulled={false} />
-      </group>
-
-      {/* Nozzle glow: two additive sprites + the exhaust light that paints
-          teal onto nearby hull and planets. */}
-      <sprite
-        material={mats.glowA}
-        position={[0, 0, 1.92]}
-        ref={(s) => {
-          glowARef.current = s;
-        }}
-      />
-      <sprite
-        material={mats.glowB}
-        position={[0, 0, 1.86]}
-        ref={(s) => {
-          glowBRef.current = s;
-        }}
-      />
+      {/* The one hyperdrive light, painting blue onto nearby hull/planets. */}
       <pointLight
-        color={TEAL_BRIGHT}
+        color={HYPER_CORE}
         intensity={0}
-        distance={30}
+        distance={26}
         decay={2}
-        position={[0, 0, 2.05]}
+        position={[0, 0, 2.35]}
         ref={(l) => {
           lightRef.current = l;
         }}
       />
 
-      {/* RCS nose puffs — only near idle (opacity in the frame loop), pure
-          motion, absent entirely under reduced. */}
-      {!reduced &&
-        [1, -1].map((s) => (
-          <group key={s} rotation={[0, 0, s * RCS_AZIMUTH]}>
-            <mesh geometry={RCS_GEO} material={mats.rcs} position={[0, 0.46, -1.52]} rotation={[Math.PI - 0.5, 0, 0]} />
-          </group>
-        ))}
+      {/* Faint repulsor under-glow beneath the hull, thrust > 0.6 only. */}
+      <sprite material={mats.underGlow} position={[0, -0.72, 0.1]} scale={[2.6, 1.3, 1]} />
 
       {/* World-space trail: portaled to the scene root so particles stay
-          where they were emitted and the exhaust arcs along the flight path.
+          where they were emitted and the wash arcs along the flight path.
           Absent entirely under reduced motion. */}
       {!reduced &&
         createPortal(
