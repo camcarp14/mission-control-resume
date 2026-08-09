@@ -7,6 +7,15 @@ import { StationContent } from './StationContent';
  * config, laid out as an ordinary document: real headings, document order,
  * native scroll. This is the canonical accessible version and the honest
  * answer for anyone who just wants to read — it is never a lesser page.
+ *
+ * "See everything" is load-bearing copy, so it is also the one instruction
+ * this page gives StationContent: `disclosure={false}` renders every station
+ * whole, with no control to close it. The flight panel collapses its evidence
+ * because there is a solar system behind it worth uncovering; there is nothing
+ * behind this page, and eleven toggles between a reader and the material would
+ * cost them eleven decisions, eleven tab stops, and both of the things a
+ * reader actually does to a résumé — Cmd-F and print. The long note on
+ * <Evidence> in StationContent.tsx carries the rest of the argument.
  */
 export function StaticMode() {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -49,7 +58,7 @@ export function StaticMode() {
           aria-label={`Station ${i + 1}: ${s.title}`}
           className="mt-10 border-t border-rule pt-8"
         >
-          <StationContent station={s} />
+          <StationContent station={s} disclosure={false} />
         </section>
       ))}
     </main>

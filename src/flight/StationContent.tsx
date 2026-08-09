@@ -1,33 +1,110 @@
-import { useCallback, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from 'react';
+import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import type { MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { stations } from '../content/stations.js';
 
 export type Station = (typeof stations)[number];
 
-/**
- * The station anatomy, rendered identically in flight mode and static mode so
- * the "skip the flight" page is the same resume, not a lesser one. Everything
- * here derives from the config entry — no station-specific code, ever.
+/* ==== THE TOUCH FRAME — the one number, spelled once ======================
+ * Where the phone ends, for the purpose of the evidence disclosure below.
+ *
+ * It is 820 because that is what this component ALREADY says: the artifact
+ * diagram's "Open full-screen" bar is behind max-[820px], matched in turn to
+ * the "mobile ergonomics" block in polish.css. MOBILE_BREAKPOINT (768, in
+ * src/engine/layout.ts) answers a genuinely different question — which axis
+ * the flight travels on and whether panels are world-anchored beside their
+ * planet — and is deliberately not consulted here. Mixing the two would mean
+ * a panel dressed for touch (42px controls, a full-screen diagram bar) that
+ * nonetheless opened with a desktop's worth of copy in it, in the 52px band
+ * where the two files disagree.
+ *
+ * The important half of this decision is that it is made in exactly ONE
+ * place. The default state is computed in JS, from this query, and the
+ * stylesheet contains no breakpoint for the disclosure at all — .expand is
+ * keyed on an `open` class and knows nothing about viewport width. So there
+ * is no second number here that can drift away from the first.
  */
-export function StationContent({ station }: { station: Station }) {
+const TOUCH_FRAME = '(max-width: 820px)';
+
+/* One MediaQueryList for every panel that asks, created on first use rather
+ * than at import: three station panels are mounted at once during a leg, and
+ * they are all asking the same question of the same viewport. */
+let frameQuery: MediaQueryList | undefined;
+const touchFrame = () => (frameQuery ??= window.matchMedia(TOUCH_FRAME));
+const subscribeToFrame = (onChange: () => void) => {
+  const q = touchFrame();
+  q.addEventListener('change', onChange);
+  return () => q.removeEventListener('change', onChange);
+};
+const readFrame = () => touchFrame().matches;
+
+/* ---- what the visitor decided, per station ------------------------------
+ * Keyed by station id and deliberately OUTSIDE React, because the flight deck
+ * windows its panels: only current ±1 stay mounted, so component state would
+ * remember a choice for as long as you stayed in the neighbourhood and forget
+ * it the moment you flew three stations away. A control whose memory depends
+ * on how far you wandered is worse than one with no memory at all — it is
+ * indistinguishable from a bug. This map makes the answer the same either
+ * way: for the life of the page, a station you opened stays open and a
+ * station you closed stays closed, and one you never touched shows the
+ * current frame's default.
+ *
+ * Per station id, so closing STN 03 cannot close STN 07 — the ids are unique
+ * (the schema test owns that), so two stations cannot share an entry.
+ * Session-lived only: a preference this small does not deserve storage, and
+ * writing it there would mean a visitor who collapsed one station on a
+ * previous visit gets a phone-shaped panel on a desktop weeks later. */
+const chosen = new Map<string, boolean>();
+
+/* What is behind the control, in the artifact's own vocabulary — "20-second
+ * walkthrough" is the phrasing the video's own aria-label already uses. The
+ * empty string is not a missing case: a station with no artifact has nothing
+ * to promise beyond its points, and the summary reads correctly without it. */
+const ARTIFACT_NOUN: Record<Station['artifact']['kind'], string> = {
+  none: '',
+  link: 'a link',
+  image: 'a diagram',
+  video: 'a 20-second walkthrough',
+};
+
+/**
+ * The station anatomy. The same component renders the flight panel and the
+ * "skip the flight" page, and the two show the same material in the same
+ * order from the same config — the static page is never a lesser resume.
+ *
+ * The ONE difference is chrome, not content: in the flight panel the bullets
+ * and the artifact sit behind a disclosure (`disclosure`, default on), and in
+ * the document they are simply there. See the note on <Evidence> for why the
+ * document does not get the control, and why the default is the way round it
+ * is.
+ *
+ * Everything here still derives from the config entry — no station-specific
+ * code, ever.
+ */
+export function StationContent({
+  station,
+  disclosure = true,
+}: {
+  station: Station;
+  /** False renders the whole station open, with no control — the document
+   *  mode. It defaults TRUE because the flight panel's call site
+   *  (StationPanel.tsx) belongs to the 3D deck and is not this pass's to
+   *  edit; a new caller therefore has to opt out of the disclosure rather
+   *  than into it. If that file ever opens up, invert this. */
+  disclosure?: boolean;
+}) {
   const a = station.artifact;
-  return (
+
+  /* The bullets and the artifact — the "meat", and everything the disclosure
+     hides. What stays above it is the code, the title and `proves`, which is
+     already exactly one sentence: the station still states its claim in full
+     when it is closed, and what is behind the control is the evidence for a
+     claim you have already read. A collapsed panel is a shorter station, never
+     a vaguer one. */
+  const meat = (
     <>
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full border border-rule-strong" />
-        <span className="font-mono text-2xs uppercase tracking-widest text-faint">
-          {station.code}
-        </span>
-        <span aria-hidden="true" className="h-px flex-1 bg-rule" />
-      </div>
-
-      <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink md:text-2xl">
-        {station.title}
-      </h2>
-
-      {/* The takeaway, not the description — the one line a panelist remembers. */}
-      <p className="mt-2 max-w-prose text-sm leading-relaxed text-dim">{station.proves}</p>
-
+      {/* mt-3 in flight, mt-4 in the document: the control row above supplies
+          the separation from the claim in flight mode and does not exist in
+          the document, which keeps the vertical rhythm it was tuned on. */}
       {/* Same measure as the summary above, and it has to be spelled the same
           way to BE the same: max-w-prose is 65ch, and ch resolves against the
           element's own font-size, so the cap only lands on 517px if text-sm
@@ -37,7 +114,7 @@ export function StationContent({ station }: { station: Station }) {
           different line lengths in one block, which reads as nobody having
           decided. Inside a flight panel the container is narrower than the
           cap either way, so this is invisible there and load-bearing here. */}
-      <ul className="mt-4 max-w-prose space-y-2 text-sm">
+      <ul className={`${disclosure ? 'mt-3' : 'mt-4'} max-w-prose space-y-2 text-sm`}>
         {station.bullets.map((b) => (
           <li key={b} className="flex gap-2.5 leading-relaxed text-ink">
             <span aria-hidden="true" className="select-none text-faint">
@@ -79,6 +156,148 @@ export function StationContent({ station }: { station: Station }) {
           </figcaption>
         </figure>
       )}
+    </>
+  );
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="h-2 w-2 rounded-full border border-rule-strong" />
+        <span className="font-mono text-2xs uppercase tracking-widest text-faint">
+          {station.code}
+        </span>
+        <span aria-hidden="true" className="h-px flex-1 bg-rule" />
+      </div>
+
+      <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink md:text-2xl">
+        {station.title}
+      </h2>
+
+      {/* The takeaway, not the description — the one line a panelist remembers. */}
+      <p className="mt-2 max-w-prose text-sm leading-relaxed text-dim">{station.proves}</p>
+
+      {disclosure ? <Evidence station={station}>{meat}</Evidence> : meat}
+    </>
+  );
+}
+
+/**
+ * The evidence disclosure: the flight panel's bullets and artifact, and the
+ * control that opens and closes them.
+ *
+ * WHY THE PANEL COLLAPSES AT ALL, in the owner's words: "on mobile the meat of
+ * the artifacts should be expandable and start collapsed so the user gets the
+ * experience more". The experience is the 3D — a station panel that fills a
+ * short phone frame is a résumé printed over the top of the reason anyone
+ * stayed. So on the touch frame this starts closed and the panel is a card
+ * (measured: 178-234px at 390x660, against a capped 480px open — half the
+ * frame handed back to the scene), and on a desktop, where the panel is docked
+ * beside its planet with room to spare, it starts open and the control is
+ * there to put it away.
+ *
+ * WHY THE DOCUMENT DOES NOT GET THIS. StaticMode renders with disclosure off,
+ * so this component never mounts there, and that is a deliberate asymmetry
+ * rather than an oversight:
+ *   - Static mode is the canonical accessible version and the honest answer
+ *     for someone who just wants to read. A scrolling document whose material
+ *     is behind eleven toggles is a worse document, not a tidier one — it
+ *     costs eleven decisions, eleven tab stops between sections, and it breaks
+ *     Cmd-F and print, which are the two things a reader does to a résumé.
+ *   - The control's entire justification is that there is something behind the
+ *     panel worth seeing. On the static page there is nothing behind it. A
+ *     control that buys the reader nothing is noise wearing a chevron.
+ * The document therefore renders the same nodes with no wrapper at all, so it
+ * does not even depend on a stylesheet class to be complete. (And if polish.css
+ * ever failed to load, the flight panel degrades the safe way too: with no
+ * .expand rule the region is simply open.)
+ *
+ * FINDABILITY, stated because it is a real trade. A closed region is
+ * visibility:hidden (see .expand in polish.css) — it is out of the tab order,
+ * out of the accessibility tree, and out of in-page find. That is the correct
+ * bargain for a disclosure and it is the CONSISTENT one: the collapsed text is
+ * absent for everybody rather than invisible to the eye but still announced to
+ * a screen reader and still catching Tab, which is the state worth avoiding.
+ * Anyone who wants the whole résumé findable in one pass has the static page
+ * and the PDF, both one click away in the top bar.
+ */
+function Evidence({ station, children }: { station: Station; children: ReactNode }) {
+  const touch = useSyncExternalStore(subscribeToFrame, readFrame);
+  const [choice, setChoice] = useState<boolean | undefined>(() => chosen.get(station.id));
+
+  /* An explicit choice outranks the frame's default, forever, for this
+     station. That is what makes rotating a phone or dragging a window edge
+     safe: crossing 820px re-answers the question only for stations the
+     visitor never answered themselves, so a resize can never undo the tap
+     they just made. Both directions land somewhere defensible — a station
+     collapsed on a desktop stays collapsed on the phone (the phone's default
+     anyway), and one opened on a phone stays open on the desktop (likewise).
+     Stations they never touched simply take the new frame's default. */
+  const open = choice ?? !touch;
+  const regionId = `${station.id}-evidence`;
+
+  /* A count and the artifact's nature, so opening it is an informed choice
+     rather than a "More". This IS the accessible name — there is no aria-label
+     over the top of it, which keeps the name and the visible text the same
+     string (the uppercase is CSS, so a speech-input user says what they see).
+     The plural is safe: the schema test pins every station at 2-3 bullets. */
+  const noun = ARTIFACT_NOUN[station.artifact.kind];
+  const summary = `${station.bullets.length} proof points${noun ? ` and ${noun}` : ''}`;
+
+  return (
+    <>
+      {/* Two states, one control. CLOSED it is a filled bar in the exact
+          vocabulary of the diagram's "Open full-screen" bar below it — a
+          raised surface, a strong hairline, --r-2 because it is a control
+          holding a label — because closed, it is an invitation and has to
+          read as pressable. OPEN it drops the fill and becomes a rule row
+          that rhymes with the STN eyebrow at the top of the panel (label,
+          hairline, glyph): a section header with a handle on it, not a button
+          shouting in the middle of a résumé the owner has signed off fifteen
+          times. The chevron is the constant that says it is the same control,
+          and it is cyan only when closed, where cyan is doing its usual job
+          on this deck — chrome pointing at something. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={() => {
+          const next = !open;
+          chosen.set(station.id, next);
+          setChoice(next);
+        }}
+        className={`btn mt-4 flex w-full items-center gap-3 font-mono text-2xs uppercase tracking-widest ${
+          open ? 'text-faint' : 'rounded border border-rule-strong bg-raised px-3 py-2.5 text-ink'
+        }`}
+      >
+        <span className="num">{summary}</span>
+        {/* One element, two jobs: the spacer that pushes the chevron to the
+            far edge when closed IS the eyebrow's hairline when open. */}
+        <span aria-hidden="true" className={open ? 'h-px flex-1 bg-rule' : 'flex-1'} />
+        {/* Drawn, not typed, for the reason spelled out under ArtifactDiagram:
+            the mono stack is only proven to carry arrows and an em dash, and a
+            control whose glyph renders as a tofu box is not a control. */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 12 12"
+          className={`evidence-chev h-3 w-3 shrink-0${open ? ' open' : ' text-hud'}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2.5 4.75L6 8.25l3.5-3.5" />
+        </svg>
+      </button>
+
+      {/* .expand is the house mechanism: a grid-template-rows 0fr -> 1fr
+          animation that needs no measuring, no max-height guess and no
+          ResizeObserver, and that is already gated under prefers-reduced-
+          motion. The panel's own outer height changes when this runs, which
+          the 3D rig's panel-height cache is being taught to expect. */}
+      <div id={regionId} className={`expand${open ? ' open' : ''}`}>
+        <div>{children}</div>
+      </div>
     </>
   );
 }

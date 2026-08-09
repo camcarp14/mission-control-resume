@@ -145,7 +145,34 @@ a.card:hover, .task:hover { border-color: var(--rule-strong); transform: transla
 /* smooth height-auto expand with ZERO measuring: grid-rows 0fr -> 1fr */
 .expand { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-3) var(--ease-out); }
 .expand.open { grid-template-rows: 1fr; }
-.expand > div { overflow: hidden; min-height: 0; }
+/* ---- the half of a disclosure that is not about height -------------------
+   0fr + overflow:hidden makes a closed region zero pixels tall, and that is
+   ALL it does: the links inside still take Tab, the text inside is still read
+   out by a screen reader, and neither is on screen. That state — focusable
+   and announced but invisible — is the one genuinely bad answer available
+   here, and it is the one you get for free, which is why this rule exists.
+
+   visibility, specifically, because it is the only property that removes an
+   element from the focus order AND the accessibility tree AND in-page find
+   without removing it from the DOM, so the mechanism stays a pure CSS
+   height animation with no aria bookkeeping to forget. It transitions
+   correctly by construction: per spec an interpolation touching `visible`
+   is visible for the whole duration bar the endpoint, so a region turns
+   visible the instant it starts opening and stays visible for every frame of
+   the collapse, then vanishes.
+
+   The trade this makes, stated once: text inside a closed region cannot be
+   found with Cmd-F. That is the right bargain for a disclosure — the
+   alternative is find-in-page scrolling to a match nobody can see — and it is
+   the consistent one, because the content is equally absent for every kind of
+   reader. On this site the whole résumé stays findable in one pass on the
+   static page and in the PDF, both one click away in the top bar. */
+.expand > div { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility var(--dur-3) var(--ease-out); }
+.expand.open > div { visibility: visible; }
+/* The station disclosure's handle. Rotates rather than swapping glyphs, so
+   the control reads as one object in two states rather than two controls. */
+.evidence-chev { transition: transform var(--dur-2) var(--ease-out); }
+.evidence-chev.open { transform: rotate(180deg); }
 
 /* toasts: spring in, fade out, never shift layout */
 .toasts {
@@ -502,7 +529,14 @@ kbd {
   .pagefade, .stagger > *, .toast { animation: none !important; }
   /* flight-deck chrome loops: status blink, advance drift, hero entrance */
   .hero-dot, .advance-dot, .hero-in > * { animation: none !important; }
-  .expand, .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot { transition: none !important; }
+  /* .expand > div joins its parent here for a reason beyond taste: the
+     visibility transition is what takes a closed region out of the focus
+     order, and leaving it running while the height snapped to zero would
+     hold a 0px region focusable for the length of a duration token. Both
+     halves of the mechanism have to stop together or the disclosure is
+     briefly the exact broken state the rule up there exists to prevent. */
+  .expand, .expand > div, .evidence-chev,
+  .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot { transition: none !important; }
   .sk::after { animation: none; }
   html { scroll-behavior: auto; }
 }
