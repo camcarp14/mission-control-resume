@@ -11,11 +11,12 @@
  * a second plate over the same planet would collide with the first.
  * ========================================================================= */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import type { Waypoint } from '../engine';
+import { MOBILE_BREAKPOINT } from '../engine';
 import { stations } from '../content/stations.js';
 
 /* ---- tunables ----------------------------------------------------------- */
@@ -95,6 +96,94 @@ const LABEL_NEAR_FACE = 0.92;
 const LABEL_MIN_DEPTH = 6;
 const LABEL_FRACTION = 0.23; // of the frame width at that depth
 
+/* ---- the phone ----------------------------------------------------------
+ *
+ * PORTRAIT BROKE THE DOCK-FRAME TRICK, and it broke it twice. The placement
+ * above composes every plate against a FIXED 1.5 frame — the desktop shape it
+ * was tuned in — and then trusts that one ray at every breakpoint. On a phone
+ * neither half of that survives: the frame is about 0.6 wide-to-tall, so NDC
+ * -0.62 sits far closer to the physical edge than it does at 1.5, and the
+ * plate is sized to a fraction of a frame that is now much narrower. Scene3D
+ * also widens the docked fov by nine degrees on mobile, which moves it again.
+ * Both of the owner's phone screenshots are that arithmetic: one plate cut at
+ * x=0 with a sliver of a glyph showing through the panel's left gutter, one
+ * cut at the right edge. Measured at 390x660 the plate spans x = -160..47 of
+ * a 390 frame — four fifths of it off screen, at EVERY station.
+ *
+ * So mobile does not re-tune the constants. It composes in the LIVE frame and
+ * clamps the plate's projected box against that frame's edges: a clamp cannot
+ * clip by construction, at any fov, aspect or plate width, where a tuned
+ * number is only ever right for the widths that happened to get tested.
+ *
+ * WHERE A PLATE CAN LIVE AT ALL on a phone is the second half of the answer,
+ * and it is a much smaller place than it looks. Measured at all eleven
+ * stations at 360x640, 390x660 and 430x700 — Safari with its toolbars up,
+ * which is the only height worth testing, since emulating the spec 844/932
+ * hides every one of these bugs — the DOM station card cannot floor lower
+ * than its wrapper's bottom padding (112px) and the rail bar's roof is 62px
+ * up, while the card's TOP reaches 69 at the tallest stations and the top bar
+ * already owns down to 62. The sky above the card is therefore seven pixels
+ * at worst: there is no "above it" to place a label in. The one band that is
+ * free at every station and every width is the 50px strip between the card's
+ * floor and the rail. The mobile plate is a nameplate in that strip —
+ * centred, sized by HEIGHT so the type lands the same size at every station
+ * (the desktop plate is sized by width, which is why its type runs 27px at
+ * the longest name and 65px at the shortest — a spread a 36px slot cannot
+ * afford), never behind the card, never touching a frame edge.
+ * ------------------------------------------------------------------------- */
+
+/** Degrees of extra field of view the docked camera takes on a phone.
+ *
+ *  A label placed against the wrong fov lands in the wrong place, so this
+ *  number has to be the SAME number the rig flies with — it was briefly a
+ *  copy of it, which is a silent-drift bug waiting for whoever tunes the
+ *  mobile framing next and edits one of the two. It lives here rather than in
+ *  Scene3D because Scene3D already imports this module, and the reverse would
+ *  close a cycle. */
+export const MOBILE_FOV_BONUS = 9;
+// The strip is MEASURED, never assumed. Its two edges are the station card's
+// floor (the panel wrapper's bottom padding — the card can grow to it and no
+// further) and the rail bar's roof, both of which live in polish.css, change
+// by breakpoint, and are being tuned independently of this file. Duplicating
+// either number here would leave the plate parked over a card the stylesheet
+// had since moved; the same reasoning already makes Scene3D measure the
+// telemetry column rather than restate its width. These two are only the
+// floor if neither element can be found at all (static mode, a rename).
+const MOBILE_RAIL_H = 62;
+const MOBILE_CARD_PAD = 112;
+// Air between the plate and each edge of the strip, and it is spent twice
+// over: once so the card's rounded bottom edge stays visibly separate, and
+// once on the docked camera's breathing, which was sampled at four stations
+// over sixteen seconds and moves the plate ±6px vertically. Seven is what is
+// left of a 50px strip once a plate worth reading is in it — the plate rides
+// out its cycle a pixel inside both edges, and the pixel it would ever spend
+// is its own top padding, never a glyph.
+const MOBILE_SLOT_GAP = 7;
+// Plate height in CSS px: as tall as the strip allows, capped so a roomier
+// strip cannot turn the nameplate into a billboard, floored so a tighter one
+// cannot shrink it away entirely (at which point it would be better hidden,
+// and the frame clamp still guarantees it is whole).
+const MOBILE_SLOT_MAX_H = 40;
+const MOBILE_SLOT_MIN_H = 22;
+// Air kept between the plate and the left/right frame edges, on top of the
+// breathing allowance below.
+const MOBILE_SIDE_INSET = 14;
+// The dock frame is NOT static: the rig breathes the camera by ±0.5 world
+// units and swings the gaze with it, so the frame the placement was solved
+// for is never quite the frame on screen. One world unit of allowance is
+// ~15px at label depth, comfortably over the ±6px measured, and it is what
+// keeps "inside the frame" true at both ends of the cycle rather than only at
+// the pose the arithmetic used.
+const DOCK_BREATH = 1;
+// A plate the frame is about to cut is not shown: opacity ramps to zero as
+// its box comes within this fraction of the frame's width of an edge. The
+// docked plate never sees it — the clamp parks it a hundred-odd pixels clear
+// — but a NEIGHBOUR's plate, composed for a dock you are not standing at, can
+// drift onto an edge at any time, and that is the second screenshot the owner
+// sent. Fading is right where hiding is not: what is whole stays, what would
+// be cut leaves, and the change reads as depth rather than a pop.
+const EDGE_BAND = 0.05;
+
 /* ---- shared resources --------------------------------------------------- */
 
 const LABEL_GEOMETRY = new THREE.PlaneGeometry(1, 1);
@@ -103,12 +192,26 @@ const noRaycast = () => undefined; // labels are decoration; never hit-test
 const dockCam = new THREE.PerspectiveCamera(50, LABEL_ASPECT, 0.5, 2600);
 const dockCamPos = new THREE.Vector3();
 const dockRay = new THREE.Vector3();
+const dockRight = new THREE.Vector3();
+const dockUp = new THREE.Vector3();
+const dockFwd = new THREE.Vector3();
+const dockPos = new THREE.Vector3();
 
 /* ---- canvas painting ---------------------------------------------------- */
 
 /** Paint one label plate: glowing display line, gradient underline, rotated
- *  diamond, mono sub-line. Pure draw — fonts must already be loaded. */
-function paintLabel(main: string, sub: string): HTMLCanvasElement {
+ *  diamond, mono sub-line. Pure draw — fonts must already be loaded.
+ *
+ *  `compact` drops the diamond and the sub-line, and that is a phone-only
+ *  composition for one reason: the slot the mobile plate has to live in is 36
+ *  screen pixels tall, and at that height the 34px mono line renders under
+ *  four pixels high — a grey smudge, which is exactly the "shrunk into noise"
+ *  failure. Removing it takes 84px off a 334px canvas, so the same 36px slot
+ *  now buys a display line a third larger (120px type landing at 17 screen px
+ *  rather than 13), and it costs the visitor nothing: the sub-line says
+ *  "STN 05 // 11", and the DOM panel is printing STN 05 in mono a hundred
+ *  pixels above it. */
+function paintLabel(main: string, sub: string, compact = false): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   let spaced = main.split('').join(HAIR_SPACE);
@@ -136,7 +239,11 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   const squeeze = Math.min(1, (CANVAS_MAX_W - PAD_X * 2) / Math.max(1, mainW));
   const innerW = Math.max(mainW * squeeze, subW);
   const w = Math.min(CANVAS_MAX_W, Math.ceil(innerW) + PAD_X * 2);
-  const h = PAD_TOP + MAIN_BLOCK_H + BAR_GAP + BAR_H + SUB_GAP + SUB_BLOCK_H + PAD_BOTTOM;
+  // Everything below measures from the bottom of the drawn content, so the
+  // compact plate is the same composition with its last two rows removed —
+  // the plate rect, the canvas and the feather all follow it down.
+  const contentH = PAD_TOP + MAIN_BLOCK_H + BAR_GAP + BAR_H + (compact ? 0 : SUB_GAP + SUB_BLOCK_H);
+  const h = contentH + PAD_BOTTOM;
   canvas.width = w;
   canvas.height = h;
 
@@ -156,7 +263,7 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
     const plateX = padX;
     const plateY = PAD_TOP - padY;
     const plateW = w - padX * 2;
-    const plateH = PAD_TOP + MAIN_BLOCK_H + BAR_GAP + BAR_H + SUB_GAP + SUB_BLOCK_H + padY * 1.5 - plateY;
+    const plateH = contentH + padY * 1.5 - plateY;
     const r = 20;
     const scrim = c.createLinearGradient(0, plateY, 0, plateY + plateH);
     scrim.addColorStop(0, PLATE_TOP);
@@ -215,6 +322,10 @@ function paintLabel(main: string, sub: string): HTMLCanvasElement {
   c.fillStyle = grad;
   c.fillRect(cx - barW / 2, barY, barW, BAR_H);
 
+  // The bar is the compact plate's last row: below it there is nothing left
+  // that would survive being drawn a fifth of the size it was authored at.
+  if (compact) return canvas;
+
   // Diamond tick between the bar and the sub-line.
   c.save();
   c.translate(cx, barY + BAR_H + DIAMOND_GAP);
@@ -261,17 +372,37 @@ function signage(title: string): string {
   return head.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-type LabelSpec = {
+/** One painted plate. Textures are expensive (nine canvases, up to 1600px
+ *  wide) and depend only on the text, so they are built once and outlive every
+ *  reflow — placement is the cheap half and is redone against the live
+ *  frame. Before the split, teaching placement about the viewport would have
+ *  repainted all nine on every Safari toolbar collapse. */
+type Plate = {
   index: number;
   texture: THREE.CanvasTexture;
   /** canvas height / width — sizes the plane without distortion */
   aspect: number;
+};
+
+type LabelSpec = Plate & {
   position: [number, number, number];
   width: number;
 };
 
-function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
-  const specs: LabelSpec[] = [];
+/** The frame the plates are composed in. Read from the canvas rather than the
+ *  window so it is the surface actually being rendered to. */
+type Frame = {
+  w: number;
+  h: number;
+  mobile: boolean;
+  /** The free strip, in CSS px from the top of the frame: the station card
+   *  can reach down to `slotTop`, the rail bar starts at `slotBottom`. */
+  slotTop: number;
+  slotBottom: number;
+};
+
+function paintPlates(waypoints: Waypoint[], compact: boolean): Plate[] {
+  const plates: Plate[] = [];
   for (const wp of waypoints) {
     // The homecoming reuses waypoint 0's Earth — a second label would collide.
     if (wp.kind === 'earthReturn') continue;
@@ -288,19 +419,33 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
     // line reads as a position in the mission rather than a stutter.
     const sub = `${station?.code ?? 'STN'} // ${stations.length.toString().padStart(2, '0')}`;
 
-    const canvas = paintLabel(main, sub);
+    const canvas = paintLabel(main, sub, compact);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
+    plates.push({
+      index: wp.index,
+      texture,
+      aspect: canvas.height / Math.max(1, canvas.width),
+    });
+  }
+  return plates;
+}
 
-    // Above the body, shifted toward the flight line so it sits between the
-    // planet and the camera path — never behind the planet. Field kinds have
-    // no crisp limb, so their label rides higher to clear the haze.
-    // Dock-frame placement: rebuild this waypoint's docked camera, cast a
-    // ray through the fixed upper-left screen point, park the label at 80%
-    // of the body's distance, and size it to a fixed screen fraction.
-    dockCam.fov = wp.fov;
-    dockCam.aspect = LABEL_ASPECT;
+function placeSpecs(waypoints: Waypoint[], plates: Plate[], frame: Frame): LabelSpec[] {
+  const specs: LabelSpec[] = [];
+  for (const plate of plates) {
+    // voyage() indexes its waypoints by position, and the plates were painted
+    // from this same array.
+    const wp = waypoints[plate.index];
+    if (!wp) continue;
+
+    // Dock-frame placement: rebuild this waypoint's docked camera and park
+    // the label at ~80% of the body's distance, in front of its near face.
+    // Both breakpoints share that much; where they part is the screen point
+    // the plate is composed at, and against which frame shape.
+    dockCam.fov = frame.mobile ? wp.fov + MOBILE_FOV_BONUS : wp.fov;
+    dockCam.aspect = frame.mobile ? frame.w / frame.h : LABEL_ASPECT;
     dockCamPos.set(wp.camPos[0], wp.camPos[1], wp.camPos[2]);
     dockCam.position.copy(dockCamPos);
     dockCam.up.set(0, 1, 0);
@@ -316,19 +461,75 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
       LABEL_MIN_DEPTH,
       Math.min(bodyDist * LABEL_DEPTH, (bodyDist - wp.bodyRadius) * LABEL_NEAR_FACE),
     );
-    dockRay.set(LABEL_NDC_X, LABEL_NDC_Y, 0.5).unproject(dockCam).sub(dockCamPos).normalize();
-    const width =
-      2 * depth * Math.tan(THREE.MathUtils.degToRad(wp.fov) / 2) * LABEL_ASPECT * LABEL_FRACTION;
+
+    if (!frame.mobile) {
+      // Above the body, shifted toward the flight line so it sits between the
+      // planet and the camera path — never behind the planet. Cast a ray
+      // through the fixed upper-left screen point and size the plate to a
+      // fixed fraction of the (fixed 1.5) frame.
+      dockRay.set(LABEL_NDC_X, LABEL_NDC_Y, 0.5).unproject(dockCam).sub(dockCamPos).normalize();
+      const width =
+        2 * depth * Math.tan(THREE.MathUtils.degToRad(wp.fov) / 2) * LABEL_ASPECT * LABEL_FRACTION;
+      specs.push({
+        ...plate,
+        position: [
+          dockCamPos.x + dockRay.x * depth,
+          dockCamPos.y + dockRay.y * depth,
+          dockCamPos.z + dockRay.z * depth,
+        ],
+        width,
+      });
+      continue;
+    }
+
+    // ---- the phone, composed in the frame it will actually be seen in -----
+    // Everything here is solved in the dock camera's own space rather than in
+    // NDC, because the plate is billboarded: its plane is parallel to the
+    // image plane, so its four corners are the centre ± half a width and half
+    // a height at ONE view depth, and "is the box inside the frame" is then a
+    // comparison of two numbers rather than four projections.
+    const tanH = Math.tan(THREE.MathUtils.degToRad(wp.fov + MOBILE_FOV_BONUS) / 2);
+    const aspect = frame.w / frame.h;
+    const slotH = Math.max(
+      MOBILE_SLOT_MIN_H,
+      Math.min(MOBILE_SLOT_MAX_H, frame.slotBottom - frame.slotTop - MOBILE_SLOT_GAP * 2),
+    );
+    const ndcX = 0; // centred: on a phone no panel owns a side of the frame
+    // The strip's midpoint, in NDC. The halving of (top + bottom) and the
+    // doubling that px -> NDC needs cancel, which is why neither appears.
+    const ndcY = 1 - (frame.slotTop + frame.slotBottom) / frame.h;
+    // The view depth is fixed HERE, from the ray the plate would have ridden,
+    // and never touched again — which is what makes the clamps below exact in
+    // one pass. It also keeps the near-face cap honest: clamping only pulls
+    // the centre toward the view axis, and that can only shorten the distance
+    // from the camera, never push the plate into the planet.
+    const z = depth / Math.hypot(1, ndcX * tanH * aspect, ndcY * tanH);
+    const halfY = z * tanH;
+    const halfX = halfY * aspect;
+    const perPx = (2 * halfY) / frame.h; // world units per CSS pixel, both axes
+    const room = MOBILE_SIDE_INSET * perPx + DOCK_BREATH;
+    // Sized by HEIGHT, then capped against both frame axes: whichever of the
+    // three wins, the box cannot be bigger than the frame it has to sit in.
+    const halfW = Math.min(
+      (slotH * perPx) / plate.aspect / 2,
+      halfX - room,
+      (halfY - room) / plate.aspect,
+    );
+    const halfH = halfW * plate.aspect;
+    const cx = THREE.MathUtils.clamp(ndcX * halfX, -(halfX - halfW - room), halfX - halfW - room);
+    const cy = THREE.MathUtils.clamp(ndcY * halfY, -(halfY - halfH - room), halfY - halfH - room);
+    dockRight.setFromMatrixColumn(dockCam.matrixWorld, 0);
+    dockUp.setFromMatrixColumn(dockCam.matrixWorld, 1);
+    dockFwd.setFromMatrixColumn(dockCam.matrixWorld, 2).negate();
+    dockPos
+      .copy(dockCamPos)
+      .addScaledVector(dockRight, cx)
+      .addScaledVector(dockUp, cy)
+      .addScaledVector(dockFwd, z);
     specs.push({
-      index: wp.index,
-      texture,
-      aspect: canvas.height / Math.max(1, canvas.width),
-      position: [
-        dockCamPos.x + dockRay.x * depth,
-        dockCamPos.y + dockRay.y * depth,
-        dockCamPos.z + dockRay.z * depth,
-      ],
-      width,
+      ...plate,
+      position: [dockPos.x, dockPos.y, dockPos.z],
+      width: halfW * 2,
     });
   }
   return specs;
@@ -337,8 +538,44 @@ function buildSpecs(waypoints: Waypoint[]): LabelSpec[] {
 /* ---- one floating plate -------------------------------------------------- */
 
 const tmpLabelPos = new THREE.Vector3();
+const tmpLabelView = new THREE.Vector3();
 
-function FloatingLabel({ spec, reduced }: { spec: LabelSpec; reduced: boolean }) {
+/**
+ * How much of the frame's edge the plate still has to spare, as a 0..1 fade —
+ * 1 well inside, 0 the moment any corner reaches an edge. Billboards are
+ * parallel to the image plane, so the box IS the centre ± half a width and
+ * half a height at one view depth, and the whole test is two subtractions.
+ *
+ * Mobile only, and it is the half of the fix that placement cannot do: a
+ * plate is composed for its OWN dock, and from the dock next door it can sit
+ * anywhere at all — including straddling the right edge, which is the second
+ * screenshot the owner sent. Placement guarantees the plate you are docked at;
+ * this guarantees every other one in the frame.
+ */
+function edgeFade(cam: THREE.PerspectiveCamera, pos: THREE.Vector3, spec: LabelSpec): number {
+  tmpLabelView.copy(pos).applyMatrix4(cam.matrixWorldInverse);
+  const z = -tmpLabelView.z;
+  if (z <= 0) return 0; // behind the lens
+  const halfY = z * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+  const halfX = halfY * cam.aspect;
+  const halfW = spec.width / 2;
+  const slack = Math.min(
+    halfX - (Math.abs(tmpLabelView.x) + halfW),
+    halfY - (Math.abs(tmpLabelView.y) + halfW * spec.aspect),
+  );
+  const k = Math.min(1, Math.max(0, slack / (halfX * 2 * EDGE_BAND)));
+  return k * k * (3 - 2 * k);
+}
+
+function FloatingLabel({
+  spec,
+  reduced,
+  mobile,
+}: {
+  spec: LabelSpec;
+  reduced: boolean;
+  mobile: boolean;
+}) {
   const groupRef = useRef<THREE.Group>(null);
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
 
@@ -352,8 +589,19 @@ function FloatingLabel({ spec, reduced }: { spec: LabelSpec; reduced: boolean })
       );
       const k = Math.min(1, Math.max(0, (d - FADE_NEAR) / (FADE_FAR - FADE_NEAR)));
       m.opacity = LABEL_OPACITY * (1 - k * k * (3 - 2 * k));
+      // The plate does not float on mobile, so its static position IS where
+      // the box is — no need to read the group back.
+      if (mobile) {
+        m.opacity *= edgeFade(state.camera as THREE.PerspectiveCamera, tmpLabelPos, spec);
+      }
     }
-    if (reduced) return; // the float below is motion — sacred-off
+    // The float is motion — sacred-off under reduced — and it is off on the
+    // phone too, for a reason that has nothing to do with motion preference:
+    // 0.4 world units is ±6px at label depth, and on top of the ±6px the rig's
+    // own breathing already spends, a 36px plate in a 50px strip would ride
+    // out of it and slide behind the card. Desktop has nine hundred pixels of
+    // frame to float in and keeps it.
+    if (reduced || mobile) return;
     const g = groupRef.current;
     if (!g) return;
     g.position.y =
@@ -392,7 +640,15 @@ export function StationLabels({
   waypoints: Waypoint[];
   reduced: boolean;
 }) {
-  const [specs, setSpecs] = useState<LabelSpec[]>([]);
+  // The canvas' own size, not the window's: this is the surface being drawn
+  // to, and it is what R3F re-reports when Safari's toolbars come and go.
+  // Scene3D derives its `mobile` from the same viewport width but does not
+  // pass it down — plumbing it through is the tidier fix and belongs to that
+  // file, so the breakpoint is read locally here rather than guessed at.
+  const size = useThree((s) => s.size);
+  const mobile = size.width < MOBILE_BREAKPOINT;
+  const [plates, setPlates] = useState<Plate[]>([]);
+  const [slot, setSlot] = useState<{ top: number; bottom: number } | null>(null);
 
   // Wait for the vendored display face before painting — a canvas drawn with
   // the fallback font would bake the wrong letterforms into the texture
@@ -404,26 +660,61 @@ export function StationLabels({
       .catch(() => {})
       .then(() => {
         if (!alive) return;
-        setSpecs(buildSpecs(waypoints));
+        setPlates(paintPlates(waypoints, mobile));
       });
     return () => {
       alive = false;
     };
-  }, [waypoints]);
+  }, [waypoints, mobile]);
+
+  // Both edges of the strip belong to elements that are SIBLINGS of the
+  // canvas, so neither is in the document while this component renders —
+  // measuring after the commit is the only reading that can be trusted, and
+  // re-measuring on resize is what keeps it true when Safari's toolbars come
+  // and go. The card's floor is read as the wrapper's bottom padding rather
+  // than any mounted panel's box: panels are per-station and their heights
+  // differ by 90px, while the padding is the one line that says how far down
+  // the tallest of them may ever reach.
+  useEffect(() => {
+    if (!mobile) return; // desktop composes in open sky; there is no strip to fit
+    const bar = document.querySelector('.hudbar')?.getBoundingClientRect();
+    const bottom = bar && bar.height > 0 ? bar.top : size.height - MOBILE_RAIL_H;
+    const wrap = document.querySelector('.panelwrap');
+    const pad = wrap ? Number.parseFloat(getComputedStyle(wrap).paddingBottom) : Number.NaN;
+    setSlot({
+      top: size.height - (Number.isFinite(pad) && pad > 0 ? pad : MOBILE_CARD_PAD),
+      bottom,
+    });
+  }, [size.width, size.height, mobile]);
+
+  // Placement is pure arithmetic over the plates — recomposing the phone's
+  // frame costs nothing and touches no texture.
+  const specs = useMemo(
+    () =>
+      placeSpecs(waypoints, plates, {
+        w: size.width,
+        h: size.height,
+        mobile,
+        slotTop: slot ? slot.top : size.height - MOBILE_CARD_PAD,
+        slotBottom: slot ? slot.bottom : size.height - MOBILE_RAIL_H,
+      }),
+    [waypoints, plates, size.width, size.height, mobile, slot],
+  );
 
   // Textures live in state; whichever set is current gets disposed when it is
-  // replaced (waypoints change) or on unmount.
+  // replaced (waypoints change, or the breakpoint changes the composition) or
+  // on unmount. Placement never replaces them.
   useEffect(
     () => () => {
-      for (const s of specs) s.texture.dispose();
+      for (const p of plates) p.texture.dispose();
     },
-    [specs],
+    [plates],
   );
 
   return (
     <group>
       {specs.map((spec) => (
-        <FloatingLabel key={spec.index} spec={spec} reduced={reduced} />
+        <FloatingLabel key={spec.index} spec={spec} reduced={reduced} mobile={mobile} />
       ))}
     </group>
   );

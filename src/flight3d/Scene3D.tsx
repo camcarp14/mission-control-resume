@@ -13,7 +13,7 @@ import {
   SUN_LIGHT_PULSE,
   sunLightIntensity,
 } from './SolarBodies';
-import { StationLabels } from './StationLabels';
+import { MOBILE_FOV_BONUS, StationLabels } from './StationLabels';
 import { Meteors } from './Meteors';
 import { Rocket3D } from './Rocket3D';
 import { Dressing } from './Dressing';
@@ -240,9 +240,9 @@ function Rig({
     // Travel breathes the fov wider mid-leg — but a zoom breathing on top
     // of the descent read as chop, so the landing leg locks to its final
     // fov early.
-    let fov = fovAt(points, tv) + (mobile ? 9 : 0);
+    let fov = fovAt(points, tv) + (mobile ? MOBILE_FOV_BONUS : 0);
     if (landing && homeRaw > 0) {
-      fov = fov + (landing.fov + (mobile ? 9 : 0) - fov) * smooth(homeRaw, 0.45, 0.75);
+      fov = fov + (landing.fov + (mobile ? MOBILE_FOV_BONUS : 0) - fov) * smooth(homeRaw, 0.45, 0.75);
     }
 
     // ==== PANEL ANCHORS — "the artifact is ON the planet". Each mounted
