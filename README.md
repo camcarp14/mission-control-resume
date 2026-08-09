@@ -147,11 +147,10 @@ visit's own progress row, so replay is harmless by construction.
   Scope](https://www.solarsystemscope.com/textures/), licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Vendored under
   `public/textures/`.
-- **Astronaut model** — [Quaternius Ultimate Space Kit](https://quaternius.com)
-  (CC0). Vendored under `public/models/`, mesh-compressed with
-  `EXT_meshopt_compression` and stripped of the eighteen animation clips
-  nothing plays. (The distant ship used to be a second Quaternius model; it is
-  procedural now — see `src/flight3d/Dressing.tsx`.)
+- **Models** — none. The project used to vendor two
+  [Quaternius](https://quaternius.com) (CC0) models; the last of them, a
+  tumbling astronaut near the outpost, was cut on the owner's call, and
+  `public/models/` went with it.
 - **HDRI lighting** — "Dikhololo Night" from [Poly Haven](https://polyhaven.com)
   (CC0), used for image-based lighting only, never as a backdrop. Vendored
   under `public/hdri/` at 256×128: three.js prefilters it through PMREM before
@@ -164,8 +163,9 @@ visit's own progress row, so replay is harmless by construction.
   arrows the copy actually uses, wght 300–700 axis intact) and loaded lazily
   after the gate — the entry chunk stays on the system stack.
 - Everything else on screen — the crew shuttle, asteroid fields, nebula, relay
-  outpost, star cluster, dust, HUD — is generated procedurally in this repo's
-  code.
+  outpost, satellite, star cluster, dust, the Chicago skyline, the HUD — is
+  generated procedurally in this repo's code. Textures, one HDRI and one
+  typeface are the only things it downloads.
 
 ## Escape hatches (deliberate, load-bearing)
 

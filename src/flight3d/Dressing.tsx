@@ -3,8 +3,12 @@
  * The "world is alive" layer — everything that makes the voyage feel occupied
  * and in motion without belonging to any one station: a dust corridor that
  * sweeps past the lens during travel (the single biggest "we are moving" cue),
- * a lost astronaut tumbling near the outpost, a distant ship crossing the deep
- * background, and the occasional rock cluster drifting off the flight line.
+ * a distant ship crossing the deep background, and the occasional rock cluster
+ * drifting off the flight line.
+ *
+ * Everything in here is procedural. A vendored astronaut GLB used to tumble
+ * near the outpost and was cut on the owner's call; with it went the last
+ * model in the project, so this layer now costs the network nothing at all.
  *
  * Everything is seeded through mulberry32 so the scene is identical on every
  * visit, all continuous motion is gated behind `reduced` (which renders a
@@ -15,15 +19,13 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture } from '@react-three/drei';
+import { useTexture } from '@react-three/drei';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../engine';
 import type { Vec3, Waypoint } from '../engine';
 
-const ASTRONAUT_URL = '/models/astronaut.glb';
 const MOON_TEXTURE_URL = '/textures/2k_moon.webp'; // same vendored map SolarBodies uses
 
-useGLTF.preload(ASTRONAUT_URL);
 useTexture.preload(MOON_TEXTURE_URL);
 
 /* ---- tunables ----------------------------------------------------------- */
@@ -44,15 +46,6 @@ const DUST_SPIN = 0.004; // rad/s around the flight axis
 const DUST_BOB_AMP = 1.4; // world units of vertical breathing
 const DUST_BOB_FREQ = 0.07; // rad/s
 
-// Astronaut: a tiny lost human near the outpost relay.
-const ASTRONAUT_OFFSET: [number, number, number] = [14, 6, -8]; // from outpost bodyPos
-const ASTRONAUT_HEIGHT = 2.5; // world units tall
-const ASTRONAUT_TUMBLE_X = 0.06; // rad/s — slow end-over-end
-const ASTRONAUT_TUMBLE_Y = 0.03;
-const ASTRONAUT_STILL_POSE: [number, number, number] = [0.55, 0.9, 0.12];
-const GLOW_COLOR = '#4cc9f0'; // permitted cool cyan, kept faint
-const GLOW_OPACITY = 0.3;
-const GLOW_SCALE = 5.5;
 
 // Flyby: a small satellite crossing the deep background near mid-voyage.
 //
@@ -192,9 +185,6 @@ const HERO_ROCK_CLEARANCE = 12; // min world units from the camera flight path
 
 /* ---- module-scope temps and shared resources (zero per-frame allocs) ---- */
 
-const _box = new THREE.Box3();
-const _size = new THREE.Vector3();
-const _center = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _up = new THREE.Vector3(0, 1, 0);
@@ -377,8 +367,8 @@ const ROCK_MATERIAL = new THREE.MeshStandardMaterial({
   metalness: 0.04,
 });
 
-// Soft radial disc, drawn once: map for the dust points (round, soft-edged
-// sprites instead of hard GL squares) and for the astronaut's back-glow.
+// Soft radial disc, drawn once: the map that makes the dust points read as
+// round, soft-edged sprites instead of hard GL squares.
 let glowTexture: THREE.CanvasTexture | null = null;
 function getGlowTexture(): THREE.CanvasTexture {
   if (glowTexture) return glowTexture;
@@ -551,38 +541,6 @@ function getCellTexture(): THREE.CanvasTexture {
 
 /* ---- GLB fitting -------------------------------------------------------- */
 
-const preparedScenes = new WeakSet<THREE.Object3D>();
-
-/** Traverse ONCE to set envMapIntensity (the only sanctioned mutation), then
- *  measure the scene so callers get a scale that hits a target world size and
- *  an offset that recentres the model on its bounds — a centred pivot is what
- *  makes the tumbles read as tumbles instead of orbits. */
-function fitGltfScene(
-  scene: THREE.Object3D,
-  target: number,
-  byHeight: boolean,
-): { scale: number; offset: [number, number, number] } {
-  if (!preparedScenes.has(scene)) {
-    preparedScenes.add(scene);
-    scene.traverse((obj) => {
-      const mesh = obj as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const m of mats) {
-        if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
-          (m as THREE.MeshStandardMaterial).envMapIntensity = ENV_MAP_INTENSITY;
-        }
-      }
-    });
-  }
-  _box.setFromObject(scene);
-  _box.getSize(_size);
-  const dim = byHeight ? _size.y : Math.max(_size.x, _size.y, _size.z);
-  const scale = dim > 1e-6 ? target / dim : 1;
-  _box.getCenter(_center);
-  return { scale, offset: [-_center.x * scale, -_center.y * scale, -_center.z * scale] };
-}
-
 /** Deepest z across all waypoints (camera anchors and bodies alike). */
 function deepestZ(waypoints: Waypoint[]): number {
   let z = 0;
@@ -635,68 +593,6 @@ function DustCorridor({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: 
         depthWrite={false}
       />
     </points>
-  );
-}
-
-/* ---- 2. drifting astronaut ---------------------------------------------- */
-
-function LostAstronaut({ anchor, reduced }: { anchor: Waypoint; reduced: boolean }) {
-  const { scene } = useGLTF(ASTRONAUT_URL);
-  const fit = useMemo(() => {
-    // The Quaternius kit ships this figure holding a handgun, as a separate
-    // 2,348-triangle node named "Pistol", and it is genuinely legible in
-    // frame — an audit pass reading the model's own mesh list caught it
-    // dangling below the tumbling astronaut. Charming in a space-shooter
-    // asset pack; an odd thing for a hiring panel to notice on a résumé.
-    // Stripping the NODE rather than hiding it matters: Box3 traverses the
-    // graph without consulting visibility, so an invisible pistol would
-    // still inflate the bounds and fitGltfScene would keep scaling the
-    // astronaut down to make room for something nobody can see.
-    // Collected first, detached after: removing during a traverse mutates
-    // the children array the walk is iterating and silently skips siblings.
-    const armed: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      if (/pistol|gun|weapon/i.test(o.name)) armed.push(o);
-    });
-    for (const o of armed) o.removeFromParent();
-    return fitGltfScene(scene, ASTRONAUT_HEIGHT, true);
-  }, [scene]);
-  const tumbleRef = useRef<THREE.Group>(null);
-
-  useFrame((_, delta) => {
-    if (reduced) return;
-    const g = tumbleRef.current;
-    if (!g) return;
-    g.rotation.x += delta * ASTRONAUT_TUMBLE_X;
-    g.rotation.y += delta * ASTRONAUT_TUMBLE_Y;
-  });
-
-  return (
-    <group
-      position={[
-        anchor.bodyPos[0] + ASTRONAUT_OFFSET[0],
-        anchor.bodyPos[1] + ASTRONAUT_OFFSET[1],
-        anchor.bodyPos[2] + ASTRONAUT_OFFSET[2],
-      ]}
-    >
-      {/* Faint cool halo behind the figure so the silhouette-dark suit still
-          reads against near-black space. */}
-      <sprite scale={[GLOW_SCALE, GLOW_SCALE, 1]} position={[0, 0.3, -2.2]}>
-        <spriteMaterial
-          map={getGlowTexture()}
-          color={GLOW_COLOR}
-          transparent
-          opacity={GLOW_OPACITY}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </sprite>
-      {/* The still pose doubles as the tumble's starting phase, so reduced
-          motion sees a composed drift, not a T-pose. */}
-      <group ref={tumbleRef} rotation={ASTRONAUT_STILL_POSE}>
-        <primitive object={scene} scale={fit.scale} position={fit.offset} />
-      </group>
-    </group>
   );
 }
 
@@ -1563,7 +1459,6 @@ function HeroNeighborhood({ waypoints, reduced }: { waypoints: Waypoint[]; reduc
 /* ---- public surface ------------------------------------------------------ */
 
 export function Dressing({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boolean }) {
-  const outpost = useMemo(() => waypoints.find((w) => w.kind === 'outpost') ?? null, [waypoints]);
   const clusters = useMemo(() => buildClusters(waypoints), [waypoints]);
 
   if (waypoints.length === 0) return null;
@@ -1575,14 +1470,7 @@ export function Dressing({ waypoints, reduced }: { waypoints: Waypoint[]; reduce
         <RockCluster key={spec.key} spec={spec} reduced={reduced} />
       ))}
       <HeroNeighborhood waypoints={waypoints} reduced={reduced} />
-      {/* The flyby satellite is fully procedural now, so it sits OUTSIDE the
-          model boundary — it must never be held back by the astronaut GLB. */}
       <DeepFlyby waypoints={waypoints} reduced={reduced} />
-      {/* GLBs suspend while loading; everything above must not wait on the
-          network, so the one remaining model prop gets its own boundary. */}
-      <Suspense fallback={null}>
-        {outpost ? <LostAstronaut anchor={outpost} reduced={reduced} /> : null}
-      </Suspense>
     </group>
   );
 }
