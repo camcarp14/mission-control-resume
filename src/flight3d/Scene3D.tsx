@@ -131,6 +131,21 @@ function Rig({
   // finding, reproduced in screenshots at both widths). Measured once per
   // viewport size, alongside the panel heights, never per frame.
   const rightSafe = useRef(0);
+  // Panel heights were measured ONCE per station because offsetHeight forces
+  // layout and must never run per frame. That was sound while a panel's height
+  // was a function of its content and the viewport alone — and it stopped being
+  // sound the moment the station detail became collapsible, because a stale
+  // height puts the vertical clamp around a box that no longer exists and the
+  // panel drifts off its planet.
+  //
+  // A ResizeObserver is the cheap correct answer: it fires only when a box
+  // actually changes, so the common case (nothing toggling) costs nothing, and
+  // the toggle case pays exactly the one-off measurement the initial dock
+  // already pays. It clears rather than recomputes — the next frame re-measures
+  // whatever is mounted, which keeps the read inside the existing code path
+  // instead of duplicating it in a callback that runs outside the frame.
+  const panelRO = useRef<ResizeObserver | null>(null);
+  const observedAnchors = useRef(new WeakSet<Element>());
 
   const { points, camPath, gazePath } = useMemo(() => {
     const pts = voyage(n);
@@ -140,6 +155,25 @@ function Rig({
       gazePath: makePath3(pts.map((p) => p.gaze)),
     };
   }, [n]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      panelHeights.current.clear();
+      panelWidths.current.clear();
+      // lastAnchor too, or the "skip the write when the rounded px are
+      // unchanged" optimisation would happily skip the corrected write.
+      lastAnchor.current.clear();
+      // Under reduced motion the loop runs on demand, so a resize that nothing
+      // else is animating would otherwise never be drawn.
+      invalidate();
+    });
+    panelRO.current = ro;
+    return () => {
+      ro.disconnect();
+      panelRO.current = null;
+    };
+  }, []);
 
   useFrame((state) => {
     const tv = t.get();
@@ -284,6 +318,15 @@ function Rig({
       anchorMap.forEach((el, i) => {
         const wp = points[i];
         if (!wp) return;
+        // Panels mount and unmount as the flight window moves, so they are
+        // observed the first time the rig sees them rather than from a list
+        // that would have to be kept in sync. A WeakSet because the anchors
+        // outlive nothing: when React drops the element, both the set entry
+        // and the observation go with it.
+        if (!observedAnchors.current.has(el)) {
+          observedAnchors.current.add(el);
+          panelRO.current?.observe(el);
+        }
         let ph = panelHeights.current.get(i);
         if (ph === undefined || ph === 0) {
           ph = el.offsetHeight;
