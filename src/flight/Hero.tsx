@@ -107,13 +107,26 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
         </div>
       </div>
 
-      {/* advance hint — bottom: 96px clears the .hudbar control strip */}
-      <div className="absolute inset-x-0 bottom-24 flex items-center justify-center gap-4">
+      {/* Advance hint. Desktop sits 96px up, which clears the .hudbar control
+          strip. Phones tuck it lower and smaller: the desktop position put a
+          44px pill straight through the station panel's last bullet on the
+          short frame Safari actually gives you, and the panel now reserves
+          exactly the band this occupies (see the mobile block in polish.css),
+          so the two are separated by construction rather than by luck. */}
+      <div
+        className={`absolute inset-x-0 flex items-center justify-center ${
+          mobile ? 'bottom-[4.5rem] gap-3' : 'bottom-24 gap-4'
+        }`}
+      >
         {!mobile && <span className="hero-rule w-32" />}
         <span className="font-mono text-2xs uppercase tracking-[0.25em] text-hud/80">
           {mobile ? 'SWIPE' : 'PRESS'}
         </span>
-        <span className="relative h-11 w-7 rounded-full border border-hud/50">
+        <span
+          className={`relative rounded-full border border-hud/50 ${
+            mobile ? 'advance-pill-sm h-7 w-[1.125rem]' : 'h-11 w-7'
+          }`}
+        >
           <span className="advance-dot" />
         </span>
         <span className="font-mono text-2xs uppercase tracking-[0.25em] text-hud/80">

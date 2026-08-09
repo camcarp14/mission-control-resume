@@ -189,7 +189,27 @@ kbd {
    the 16px root that every viewport under 1920px uses, these are the same
    76/16/96 pixels they always were. */
 .panelwrap { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; padding: 4.75rem 1rem calc(6rem + env(safe-area-inset-bottom)); }
-.panelwrap > * { pointer-events: auto; }
+/* Only the DOCKED panel takes pointer events. `.panelwrap > *` used to hand
+   them to every direct child, and on a phone all three mounted panels stack
+   in the same grid cell — the neighbours are merely translated 340px and
+   faded to opacity 0, and opacity 0 still swallows taps. So the next
+   station's invisible wrapper lay across the bottom of the panel you were
+   reading and ate anything you tried to press there.
+
+   Nothing had landed in that band before, which is why it went unnoticed:
+   the one bottom-of-panel control on the site is the closing CTA at station
+   11, and station 11 has no next station to stack over it. The moment the
+   phone's "open full-screen" bar appeared under the artifact diagram, it was
+   unpressable at 360, 390 and 430 — elementFromPoint at its centre returned
+   the neighbour's wrapper, not the bar.
+
+   Keyed on `inert` because that is already the truth: StationPanel sets it
+   from `active`, and it is a reflected attribute, so the selector and the
+   accessibility tree cannot drift apart. The wrapper is exactly the panel's
+   own box, so the interactive area is unchanged for the panel that IS
+   docked — on desktop this is a no-op the geometry probe confirms. */
+.panelwrap > * { pointer-events: none; }
+.panelwrap .panel:not([inert]) { pointer-events: auto; }
 /* World-anchored panels (desktop flight mode): the wrap stops centering and
    the .anchorpos child is pinned to its planet — the Rig projects a point
    beside the body every frame and writes translate3d directly. The CSS
@@ -409,14 +429,66 @@ kbd {
   .toasts { bottom: calc(14px + env(safe-area-inset-bottom)); }
   .rail button { padding: 17px 5px; }
   .panel { padding: 1.125rem 1rem 1.25rem; }
-  /* Clears the rocket's berth AND, at station 0, the hero identity column.
-     The old 132px let the hero's role line print straight across the panel's
-     headline at 320px (screenshot finding); the compacted mobile hero in
-     Hero.tsx now measures 100px from a 62px top, so 164px is the first value
-     that clears it with a margin. The 96px bottom bought that back: the
-     .hudbar is 62px tall there, so 80px is still 18px of clearance and the
-     panel keeps almost exactly the height it had. */
-  .panelwrap { padding-top: 10.25rem; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+
+  /* ---- THE PHONE FRAME IS SHORTER THAN THE PHONE -------------------------
+     Everything below was measured on the frame iOS Safari actually gives a
+     visitor with its address bar and tab strip on screen: about 660 CSS px
+     on a phone whose spec height is 844, about 700 on one whose spec height
+     is 932. Emulating at the spec height hides every one of these bugs,
+     which is exactly how they shipped.
+
+     Reserve the hero identity column ONLY at the station that has one.
+     Stations 2-11 carry no identity block above them, and paying its 164px
+     there cost the panel a quarter of a short phone screen for nothing;
+     4.25rem is the top bar plus air. */
+  .panelwrap { padding-top: 4.25rem; padding-bottom: calc(7rem + env(safe-area-inset-bottom)); }
+  .panelwrap.hero { padding-top: 10.25rem; }
+
+  /* The panel's height, and why it has to be restated here rather than
+     inherited from `max-height: 100%` up in .panel. That percentage resolves
+     against the grid item wrapping the panel, and on the mobile dock that
+     item is content-sized rather than stretched — a percentage against an
+     indefinite height computes to `none`. So on a phone the panel was not
+     capped at all: STN 06 measured 599px tall inside a 416px box, 73px of it
+     sitting behind the control bar with no way to reach it, which is the
+     "grey smudge at the bottom" in the owner's screenshot.
+
+     dvh, never vh: iOS Safari resolves vh against the LARGE viewport, the
+     one with the toolbars retracted — i.e. against the only frame the
+     visitor is NOT looking at while they read.
+
+     Stating a real height is also what switches ON the overflow machinery
+     the panel already carries. The fade bands, the cyan edge cues and the
+     readout scrollbar were all written for the 1280x720 laptop case and were
+     silently inert here, because nothing ever overflowed a box with no
+     limit. One declaration lights all of it. */
+  .panel { max-height: calc(100dvh - 11.25rem - env(safe-area-inset-bottom)); }
+  .panelwrap.hero .panel { max-height: calc(100dvh - 17.25rem - env(safe-area-inset-bottom)); }
+
+}
+
+/* The compact advance pill. At the desktop size it is a 44px capsule sitting
+   96px up, and on the short frame Safari actually gives a phone that put it
+   straight through the station panel's last bullet — measured at 10px of
+   overlap on a 430x700 frame, 50px at 390x660, 81px at 360x640, worse the
+   smaller the phone. The panel now reserves exactly the band below itself
+   that this occupies (see .panelwrap above), so the two cannot meet again at
+   any height.
+
+   Keyed on a class Hero.tsx sets from its own `mobile` prop rather than on
+   the media query above, because the two disagree: the JS flag cuts at 768
+   and the query at 820, and a 52px band where the markup says one size and
+   the stylesheet says another is a bug waiting for a tablet.
+
+   The dot travels a shorter distance rather than the pill being scaled: a
+   transform: scale() would have taken the 1px border down to 0.64px, which
+   subpixel-renders to a grey smear on exactly the screens this is for. */
+.advance-pill-sm .advance-dot { top: 5px; animation-name: advance-drift-sm; }
+@keyframes advance-drift-sm {
+  0% { transform: translateY(0); opacity: 0; }
+  18% { opacity: 1; }
+  70% { opacity: 0.9; }
+  100% { transform: translateY(12px); opacity: 0; }
 }
 
 /* the mandate: everything above is optional to the user's nervous system.

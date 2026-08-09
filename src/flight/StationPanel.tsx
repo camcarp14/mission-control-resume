@@ -83,9 +83,14 @@ export function StationPanel({
     </section>
   );
 
+  // `hero` marks the one station that has an identity column floated above
+  // it. Only the mobile block in polish.css reads it — on desktop the class
+  // matches no rule, so the anchored layout is untouched by construction.
+  const wrap = index === 0 ? 'panelwrap hero' : 'panelwrap';
+
   if (flat) {
     return (
-      <div className="panelwrap">
+      <div className={wrap}>
         <div className="xfade w-full max-w-[560px]">{body}</div>
       </div>
     );
@@ -104,7 +109,7 @@ export function StationPanel({
   }
 
   return (
-    <div className="panelwrap">
+    <div className={wrap}>
       <m.div style={{ transform, opacity, scale }} className="w-full max-w-[560px]">
         {body}
       </m.div>
