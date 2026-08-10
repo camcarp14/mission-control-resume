@@ -402,12 +402,62 @@ kbd {
   background: linear-gradient(transparent, var(--ground) 45%);
 }
 .rail { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; }
+/* ---- the rail is a ROUTE, not eleven dots ---------------------------------
+   The diamonds always said "you are here" perfectly well and said nothing at
+   all about the other two questions a map has to answer: how far have I come,
+   and how much is left. Measured on the shipped build, a visited diamond
+   (--dim hairline over a 35%-alpha grey) and an unvisited one (a --faint
+   hairline over nothing) differed by a few percent of luminance at 1x — the
+   distinction existed in the stylesheet and not on the screen, so at STN 11
+   the rail looked exactly as it did at STN 01.
+
+   The track is what turns the row into a route, and it is not an invention:
+   the right-edge telemetry column is already a hairline with a lit fill and
+   diamonds sitting on it. This is that same instrument laid on its side, so
+   the two rails in the visitor's field of view finally read as one system
+   rather than two answers to the same question.
+
+   left/right: 10px is half a rail cell, so the track starts and stops on the
+   first and last diamond's CENTRE rather than running off into the empty
+   flex space either side. The cell is 20px at every breakpoint by
+   construction — min-width: 20px below wins over 7px of dot plus 12px (or
+   10px, on the phone step) of padding — and it is stated in px rather than
+   rem precisely so the large-display step cannot drift the two apart. */
+/* flex: none is not tidiness. The nav is `flex-1 min-w-0`, so on a 320px
+   phone it is narrower than the eleven 20px cells inside it — that was true
+   before this wrapper existed, and the nav's justify-content: center spilled
+   the row symmetrically off both ends, which is the behaviour the mobile
+   round signed off. As a shrinkable flex ITEM the wrapper would instead be
+   squeezed to the nav's width while its own content overflowed to the right
+   only, sliding the whole rail off-centre at the narrowest widths — and the
+   track's 10px endpoints, which are half a cell, would stop landing on the
+   first and last diamond. Refusing to shrink reproduces the shipped geometry
+   to the pixel and keeps the track honest at every width. */
+.railtrack { position: relative; display: flex; align-items: center; flex-wrap: nowrap; flex: none; }
+.railtrack::before, .railtrack::after {
+  content: ''; position: absolute; left: 10px; right: 10px;
+  top: calc(50% - 0.5px); height: 1px; pointer-events: none;
+}
+.railtrack::before { background: var(--rule); }
+/* The travelled half. scaleX of a gradient compresses the ramp into the lit
+   run, which is the behaviour we want and not a compromise: the brightest
+   point is always the head of the route, matching the telemetry fill's own
+   head-bright gradient exactly. --dur-3 because this is a map redrawing
+   itself, not a control acknowledging a press. */
+.railtrack::after {
+  background: linear-gradient(90deg, rgba(154, 220, 255, 0.16), rgba(76, 201, 240, 0.5));
+  transform: scaleX(var(--reach, 0));
+  transform-origin: left center;
+  transition: transform var(--dur-3) var(--ease-out);
+}
 .rail button {
   /* a 7px dot with a ≥42px hit area — the padding IS the tap target, and the
      min-height is the guarantee (17+7+17 alone measured 41px: one pixel of
      shame a breakpoint check caught) */
   padding: 17px 6px; min-height: 42px; min-width: 20px;
   background: none; border: none; cursor: pointer; display: grid; place-items: center;
+  /* the anchor for the station tag below */
+  position: relative;
 }
 .rail button .dot {
   /* a 7px rotated-45° instrument diamond — the rotation is part of the
@@ -415,11 +465,60 @@ kbd {
   width: 7px; height: 7px;
   background: transparent; border: 1px solid var(--faint);
   transform: rotate(45deg);
+  /* --dur-1 and the spring, not --dur-2 and the ease: this transform is now
+     carrying a PRESS as well as a docking, and the press-physics block at the
+     top of this file puts every other control's transform on --dur-1. The
+     rail was the one interactive surface on the flight deck that acknowledged
+     a click with nothing at all. */
   transition: background var(--dur-1) ease, border-color var(--dur-1) ease,
-              transform var(--dur-2) var(--ease-out);
+              transform var(--dur-1) var(--ease-spring);
 }
-.rail button.visited .dot { border-color: var(--dim); background: rgba(139,146,156,0.35); }
-.rail button:hover .dot { border-color: var(--hud); }
+/* Behind you: lit, and spent. Cyan-tinted rather than grey because the track
+   under it is cyan — a travelled waypoint should belong to the travelled
+   line. It stays well under the current diamond, which is a SOLID saturated
+   cyan with a glow and a 1.35 scale; there is no ambiguity about which one is
+   "here" at any width. */
+.rail button.visited .dot {
+  border-color: rgba(154, 220, 255, 0.7);
+  background: rgba(154, 220, 255, 0.3);
+}
+.rail button:hover .dot {
+  border-color: var(--hud); background: rgba(154, 220, 255, 0.18);
+  transform: rotate(45deg) scale(1.32);
+}
+.rail button:active .dot { transform: rotate(45deg) scale(0.86); }
+/* ---- the tag: hovering a waypoint tells you what it is --------------------
+   Eleven identical diamonds are a map only if you already know the territory.
+   The name is the SAME head-of-title the 3D signage paints beside the planet
+   (Rail.tsx derives it with the same split), so hovering STN 05 down here and
+   flying to it up there name the station identically — the tag reads as a
+   readout of the scene rather than as a second, competing label.
+
+   Decoration by construction: the button's aria-label already carries
+   "Station 5 of 11: Pipeline — Events to Answers", and an aria-label wins the
+   accessible name outright, so generated content cannot double it up.
+
+   Hover is gated behind (hover: hover) so a phone does not leave a tag
+   stranded under a thumb after a tap; :focus-visible is not, because that is
+   how a keyboard reads the map. */
+.rail button::after {
+  content: attr(data-tag);
+  position: absolute; bottom: calc(100% - 8px); left: 50%;
+  transform: translate(-50%, 4px);
+  opacity: 0; pointer-events: none; white-space: nowrap;
+  font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: 0.16em;
+  color: var(--hud); background: var(--raised);
+  border: 1px solid var(--rule-strong);
+  /* the same instrument-glass top edge the station panel carries */
+  border-top-color: rgba(76, 201, 240, 0.32);
+  border-radius: var(--r-1); padding: 4px 7px 3px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6);
+  transition: opacity var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+@media (hover: hover) {
+  .rail button:hover::after { opacity: 1; transform: translate(-50%, 0); }
+}
+.rail button:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 /* Focus on the rail is the one place the systemized :focus-visible rule was
    wrong: it drew a 2px ring around the BUTTON, and the button is a 20x42
    tap column wrapped around a 7px diamond — so the indicator was a tall
@@ -443,11 +542,18 @@ kbd {
   outline: 2px solid var(--hud);
   outline-offset: 3px;
 }
+/* "Here" is stated LAST on purpose. The hover and press rules above match at
+   the same specificity, so source order is the only thing that keeps a
+   hovered neighbour from outranking the docked station — and the current
+   diamond restates its own hover and press so it stays a live control rather
+   than the one dot on the rail that ignores the mouse. */
 .rail button[aria-current='step'] .dot {
   border-color: var(--cyan); background: var(--cyan);
   box-shadow: 0 0 10px rgba(76,201,240,0.8);
   transform: rotate(45deg) scale(1.35);
 }
+.rail button[aria-current='step']:hover .dot { transform: rotate(45deg) scale(1.5); }
+.rail button[aria-current='step']:active .dot { transform: rotate(45deg) scale(1.15); }
 
 /* mobile ergonomics */
 @media (max-width: 820px) {
@@ -527,8 +633,9 @@ kbd {
    receipt. */
 @media (prefers-reduced-motion: reduce) {
   .pagefade, .stagger > *, .toast { animation: none !important; }
-  /* flight-deck chrome loops: status blink, advance drift, hero entrance */
-  .hero-dot, .advance-dot, .hero-in > * { animation: none !important; }
+  /* flight-deck chrome loops: status blink, advance drift, hero entrance
+     (identity column and the advance cue that lands after it) */
+  .hero-dot, .advance-dot, .hero-in > *, .hero-cue { animation: none !important; }
   /* .expand > div joins its parent here for a reason beyond taste: the
      visibility transition is what takes a closed region out of the focus
      order, and leaving it running while the height snapped to zero would
@@ -536,7 +643,10 @@ kbd {
      halves of the mechanism have to stop together or the disclosure is
      briefly the exact broken state the rule up there exists to prevent. */
   .expand, .expand > div, .evidence-chev,
-  .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot { transition: none !important; }
+  .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot,
+  /* the rail's travelled route and its station tag: both are STATE, and state
+     under this preference is drawn instantly rather than travelled to */
+  .railtrack::after, .rail button::after { transition: none !important; }
   .sk::after { animation: none; }
   html { scroll-behavior: auto; }
 }
@@ -550,8 +660,26 @@ kbd {
    they carry no animation or transition of their own. */
 
 /* hero root: fixed overlay above canvas + panels, below the top bar (z 10).
-   Opacity/transform/visibility are written per-frame from Flight's t. */
-.hero {
+   Opacity/transform/visibility are written per-frame from Flight's t.
+
+   :not(.panelwrap) is a collision guard, and the collision is real rather
+   than theoretical. StationPanel marks the FIRST station's wrapper
+   `panelwrap hero` — "the wrap under the identity block" — and this rule,
+   written for a completely different element, matched it: measured with
+   getComputedStyle, station 1's wrapper resolved to position fixed, z-index
+   5, will-change opacity+transform instead of the absolute, z-index 2 its own
+   rule declares, purely because `.hero` is later in this file at equal
+   specificity.
+   The visible consequence is one transition: `.veil` sits at z-index 3 and IS
+   the reduced-motion station change, so at station 1 — and only station 1 —
+   the panel floated above the curtain that exists to fade it. Everything else
+   about the two boxes is identical (an absolute inset-0 child of the fixed,
+   untransformed .stage occupies the same rect a fixed one does), which is why
+   this went unseen.
+   Scoping the selector to the element it was written for is the half of the
+   fix that lives in this file; renaming the marker class at its source is
+   listed under needsIntegration, and would let this guard go away. */
+.hero:not(.panelwrap) {
   position: fixed; inset: 0; z-index: 5;
   pointer-events: none;
   will-change: opacity, transform;
@@ -606,7 +734,8 @@ kbd {
   filter: blur(14px);
 }
 
-/* entrance: the three identity children rise in, 120ms apart */
+/* entrance: the three identity children rise in, 120ms apart, and the advance
+   cue lands last — the identity, then the invitation. */
 .hero-in > * {
   animation: hero-rise 450ms var(--ease-out) both;
   animation-delay: calc(var(--hi, 0) * 120ms);
@@ -614,7 +743,26 @@ kbd {
 .hero-in > *:nth-child(1) { --hi: 0; }
 .hero-in > *:nth-child(2) { --hi: 1; }
 .hero-in > *:nth-child(3) { --hi: 2; }
+.hero-cue { animation: hero-rise 450ms var(--ease-out) both; animation-delay: 480ms; }
 @keyframes hero-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* ---- and it is HELD until there is somebody to watch it -------------------
+   This choreography shipped four rounds ago and has never once been seen. The
+   hero mounts in the same React commit as the boot overlay, so the three
+   children rose behind an opaque curtain: probed on this machine, all three
+   animations read `finished` at 1ms into the boot, and the overlay left 24
+   SECONDS later (software renderer — on real hardware it is two to four, and
+   the ordering is identical either way). What the visitor actually saw at the
+   most important moment on the site was a fully-formed identity block simply
+   being there.
+   Pausing rather than withholding the class is what makes the held state
+   correct: with fill-mode `both` a paused animation sits on its `from`
+   keyframe, so the hero is genuinely absent during the boot instead of
+   flashing in at full opacity and then dropping out to rise again.
+   Under prefers-reduced-motion the reduce block turns these animations off
+   entirely, so there is nothing to pause and the hero is simply present —
+   which is the right answer for that reader, and the reason this needs no
+   branch of its own. */
+.hero-hold .hero-in > *, .hero-hold .hero-cue { animation-play-state: paused; }
 
 /* advance hint: a dot drifts down the pill and fades, like a held key.
    Travel stays inside the 44px pill (top 8px + 20px drift + 4px dot). */
@@ -639,12 +787,93 @@ kbd {
    finding). */
 .telemetry { z-index: 6; text-shadow: 0 1px 4px rgba(4, 8, 12, 0.95), 0 0 12px rgba(4, 8, 12, 0.7); }
 .telemetry span { filter: drop-shadow(0 1px 3px rgba(4, 8, 12, 0.6)); }
+/* One shadow per line, not one per fragment. Splitting a figure into padding
+   / digits / unit spans put three nested filters inside the cell's own, and
+   stacked drop-shadows on 9px type read as a smudge rather than as relief. */
+.telemetry-read .tv span { filter: none; }
+/* The travelled line, and which END of it is bright.
+   It shipped as cyan-bright at the TOP fading through cyan to #7c3aed at the
+   bottom, which is wrong twice over. The bottom of this element is the HEAD
+   of the fill — the ship's position — so the gradient put its brightest point
+   on the part of the route furthest behind the visitor and its dimmest on the
+   only part that is live. And the violet is the single off-palette colour on
+   the flight deck: nothing else in the console is purple, so at the landing,
+   where the fill runs the full height against a lit sky, it read as an
+   artefact rather than as an instrument.
+   Reversed, the head is always the brightest point and the trail falls away
+   behind it — which is exactly what the horizontal rail's travelled track
+   does at the bottom of the screen, and the two now match by construction. */
 .telemetry-fill {
-  background: linear-gradient(180deg, var(--cyan-bright), var(--cyan), #7c3aed);
+  background: linear-gradient(180deg, rgba(76, 201, 240, 0.32), var(--cyan) 62%, var(--cyan-bright));
   box-shadow: 0 0 8px rgba(76,201,240,0.7);
   transform: scaleY(0);
   transform-origin: top;
   will-change: transform;
+}
+/* The waypoints. Three states, and the middle one did not exist: every
+   diamond that was not `current` was an opaque --panel bead, so the stations
+   already behind the ship punched dark holes straight through the lit fill
+   they were supposed to be sitting on. Passed now reads the same faint cyan
+   the bottom rail's visited diamond does — one vocabulary, two instruments.
+   `data-lit` is written from `t` in Telemetry.tsx; see the note there for why
+   it is an attribute and not a class. */
+.telemetry-node {
+  position: absolute; left: 50%; width: 6px; height: 6px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1px solid rgba(255, 255, 255, 0.4); background: var(--panel);
+  transition: background var(--dur-2) ease, border-color var(--dur-2) ease;
+}
+.telemetry-node[data-lit='1'] {
+  border-color: rgba(154, 220, 255, 0.7); background: rgba(154, 220, 255, 0.3);
+}
+.telemetry-node.here {
+  border-color: var(--cyan); background: var(--cyan);
+  box-shadow: 0 0 10px rgba(76, 201, 240, 0.8);
+}
+/* ---- the readouts as a gauge, not as three strings -----------------------
+   Two columns: a label column that never moves and a figure column that ends
+   on one straight right edge. The three parts of a figure are then given the
+   three weights an instrument gives them — padding quietest, significant
+   digits brightest, unit in between — so the eye lands on the number rather
+   than reading the line. */
+.telemetry-read {
+  display: grid; grid-template-columns: auto auto;
+  /* 0.5em, not more: the labels carry 0.25em of tracking, which already
+     leaves ~2px of air after the final letter. Setting the gap by eye without
+     accounting for that trailing letterspace is how a two-column instrument
+     ends up looking like two separate blocks. */
+  column-gap: 0.5em; row-gap: 3px; align-items: baseline;
+}
+.telemetry-read .tl { color: rgba(154, 220, 255, 0.5); }
+.telemetry-read .tv { justify-self: end; color: var(--hud); white-space: nowrap; }
+/* the zero padding: present, holding the column still, deliberately not
+   competing with the figure it is padding. No margin — the padding and the
+   significant digits are ONE number and must not be separated. */
+.telemetry-read .tz { color: rgba(154, 220, 255, 0.28); }
+/* SEC's `//` is a separator, not padding, so unlike .tz it takes space on both
+   sides. The left margin is not symmetry for its own sake: SEC carries the
+   LONGEST figure of the three, so it is the row that fills the column edge to
+   edge and the only one where the label and the figure meet at the bare
+   column gap. Widening the gap instead would have pushed ALT and VEL's
+   already-generous columns further apart to fix one crowded row. */
+.telemetry-read .tp { color: rgba(154, 220, 255, 0.28); margin: 0 0.45em 0 0.3em; }
+.telemetry-read .tu { color: rgba(154, 220, 255, 0.55); margin-left: 0.55em; }
+/* ---- legibility over a lit sky ------------------------------------------
+   Ten of the eleven stations sit against deep space and this plate is
+   invisible there. The eleventh is a night-time Chicago whose lit windows
+   pass directly behind this block, and hud-cyan at 9px over a lit window was
+   the weakest type on the site (screenshot finding at STN 11).
+   It is a ::before, absolutely positioned and inset NEGATIVELY, for a
+   structural reason rather than a stylistic one: Scene3D bounds every station
+   panel by this column's measured left edge, so a plate that widened the
+   column by its own padding would silently push the résumé leftward at every
+   station to fix one. An out-of-flow box changes no measurement. The radial
+   falloff is what keeps it from reading as a rectangle floating in space. */
+.telemetry-read { position: relative; }
+.telemetry-read::before {
+  content: ''; position: absolute; inset: -15px -17px; z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(4, 8, 12, 0.92), rgba(4, 8, 12, 0.8) 52%, rgba(4, 8, 12, 0) 84%);
+  pointer-events: none;
 }
 
 /* top bar: instrument hairline along the bottom edge */

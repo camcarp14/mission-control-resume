@@ -21,6 +21,28 @@ import { stations } from '../content/stations.js';
 const pad = (v: number, width: number) =>
   String(Math.min(10 ** width - 1, Math.max(0, Math.round(v)))).padStart(width, '0');
 
+/**
+ * Split a zero-padded gauge figure into [leading zeros, significant run].
+ *
+ * This is the one detail that turns three lines of monospace into an
+ * instrument. Every real gauge that pads to a fixed width — an odometer, an
+ * altimeter drum, an aircraft fuel totaliser — prints its leading zeros
+ * quieter than its significant digits, because the padding is there to hold
+ * the column still, not to be read. Rendering all five digits at one weight
+ * is what made ALT 07819 read as a string that happens to contain numbers.
+ * Dimmed, the boundary between the two runs slides left as the ship climbs
+ * and right as it descends, and the readout visibly ROLLS.
+ *
+ * A figure that is all zeros keeps its last digit bright: a gauge reading
+ * zero still has a significant digit, and blanking the line entirely at
+ * touchdown — the one frame a visitor lingers on — would read as an
+ * instrument that had died rather than one that had landed.
+ */
+const digits = (s: string): [string, string] => {
+  const i = s.search(/[^0]/);
+  return i < 0 ? [s.slice(0, -1), s.slice(-1)] : [s.slice(0, i), s.slice(i)];
+};
+
 export function Telemetry({
   t,
   vel,
@@ -33,10 +55,14 @@ export function Telemetry({
   current: number;
 }) {
   const fillRef = useRef<HTMLDivElement>(null);
+  const altPadRef = useRef<HTMLSpanElement>(null);
   const altRef = useRef<HTMLSpanElement>(null);
+  const velPadRef = useRef<HTMLSpanElement>(null);
   const velRef = useRef<HTMLSpanElement>(null);
   const secRef = useRef<HTMLSpanElement>(null);
+  const nodes = useRef<(HTMLSpanElement | null)[]>([]);
   const lastText = useRef(-Infinity);
+  const lastLit = useRef(-1);
 
   // ALT used to be `(t / (n-1)) * 420`, which is not an altitude at all — it
   // is the progress bar wearing a unit. Its worst symptom was the finale:
@@ -74,15 +100,38 @@ export function Telemetry({
       // station panels, so a readout that grows a digit mid-flight would
       // silently invalidate that measurement and let the panels drift back
       // into the instruments. Constant width makes the two agree forever.
-      if (altRef.current) altRef.current.textContent = `${pad(alt(v), 5)} KM`;
-      if (velRef.current) {
-        velRef.current.textContent = `${pad(Math.abs(vel.get()) * 900, 4)} M/S`;
-      }
-      if (secRef.current) secRef.current.textContent = `// ${stations[Math.round(v)]?.code ?? ''}`;
+      const [az, ad] = digits(pad(alt(v), 5));
+      if (altPadRef.current) altPadRef.current.textContent = az;
+      if (altRef.current) altRef.current.textContent = ad;
+      const [vz, vd] = digits(pad(Math.abs(vel.get()) * 900, 4));
+      if (velPadRef.current) velPadRef.current.textContent = vz;
+      if (velRef.current) velRef.current.textContent = vd;
+      if (secRef.current) secRef.current.textContent = stations[Math.round(v)]?.code ?? '';
     };
     const apply = (v: number) => {
       const fill = fillRef.current;
       if (fill) fill.style.transform = `scaleY(${Math.min(1, Math.max(0, v / denom))})`;
+      // ---- the waypoints light as the fill head passes them ---------------
+      // Driving this off React's `current` was the obvious wiring and the
+      // wrong one: `current` becomes the TARGET the moment a leg starts, so a
+      // rail jump from 5 to 8 lit three waypoints instantly while the fill
+      // was still leaving 5 — lit diamonds floating a hundred pixels ahead of
+      // the lit line for the whole two seconds. Reading `t` puts the two on
+      // the same clock, and it costs nothing: `lit` only crosses an integer
+      // ten times in the entire voyage, so the classList writes below are ten
+      // events, not a per-frame loop.
+      //
+      // It rides `data-lit` rather than className deliberately. React owns
+      // className on these spans and rewrites it on every docking; it has
+      // never heard of data-lit, so an imperative write here survives the
+      // next render instead of being quietly reverted.
+      const lit = Math.floor(v + 1e-6);
+      if (lit !== lastLit.current) {
+        lastLit.current = lit;
+        nodes.current.forEach((el, i) => {
+          if (el) el.dataset.lit = i <= lit ? '1' : '0';
+        });
+      }
       const now = performance.now();
       if (now - lastText.current < 125) {
         // ~8Hz — instruments tick, they don't blur. The gate can swallow the
@@ -101,6 +150,7 @@ export function Telemetry({
       writeText();
     };
     lastText.current = -Infinity; // the mount apply must always write text
+    lastLit.current = -1; // ...and the mount apply must always seat the nodes
     const offT = t.on('change', apply);
     // Velocity decays to 0 AFTER t stops changing — without this subscription
     // the settle never reaches the readout.
@@ -135,26 +185,38 @@ export function Telemetry({
         {Array.from({ length: n }, (_, i) => (
           <span
             key={i}
-            className={`absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border ${
-              i === current
-                ? 'border-cyan bg-cyan shadow-[0_0_10px_rgba(76,201,240,0.8)]'
-                : 'border-white/40 bg-panel'
-            }`}
+            ref={(el) => {
+              nodes.current[i] = el;
+            }}
+            className={`telemetry-node${i === current ? ' here' : ''}`}
             style={{ top: `${(i / Math.max(1, n - 1)) * 100}%` }}
           />
         ))}
       </div>
 
-      {/* readouts — written via refs, never state */}
-      <div className="flex flex-col items-end gap-1 whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.25em] text-hud/70">
-        <span className="num">
-          ALT <span ref={altRef} />
+      {/* Readouts — written via refs, never state. Two columns, because three
+          right-aligned strings of unequal length is not a gauge: SEC's line
+          is one character longer than ALT's and VEL's, so the three labels
+          used to sit on a ragged left edge with SEC hanging a character out
+          into space. A label column and a figure column give the block two
+          straight edges and cost nothing. */}
+      <div className="telemetry-read font-mono text-[9px] uppercase tracking-[0.25em]">
+        <span className="tl">ALT</span>
+        <span className="tv num">
+          <span className="tz" ref={altPadRef} />
+          <span ref={altRef} />
+          <span className="tu">KM</span>
         </span>
-        <span className="num">
-          VEL <span ref={velRef} />
+        <span className="tl">VEL</span>
+        <span className="tv num">
+          <span className="tz" ref={velPadRef} />
+          <span ref={velRef} />
+          <span className="tu">M/S</span>
         </span>
-        <span className="num">
-          SEC <span ref={secRef} />
+        <span className="tl">SEC</span>
+        <span className="tv num">
+          <span className="tp">//</span>
+          <span ref={secRef} />
         </span>
       </div>
 

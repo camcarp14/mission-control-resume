@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useProgress } from '@react-three/drei';
-import { useReducedMotion } from 'framer-motion';
+import { PreflightConsole, type PreflightRow } from '../ui/primitives';
 
 /* ==== BOOT SEQUENCE — the pre-flight loading overlay =======================
  * Plain DOM rendered as a sibling above the canvas: drei's useProgress reads
@@ -8,12 +8,13 @@ import { useReducedMotion } from 'framer-motion';
  * pattern is a determinate bar plus counters — an indeterminate loop would
  * hide how much of the ~2 MB of planets remains, and the repo bans it anyway.
  *
- * This overlay is also the ONLY thing standing between "Begin the flight" and
- * a starfield, so it does a second job: it has to read as a launch sequence
- * rather than as a second loading screen. The visitor has just pressed a
- * button that promised a flight; a bar on its own answers "wait", not "here
- * we go". The checklist below is the answer, and every line of it is a real
- * state — nothing on this screen advances on a timer pretending to be work.
+ * This overlay is the SECOND half of one sequence, not a screen of its own.
+ * The first half is the Suspense fallback in gate/Experience.tsx, which
+ * renders the same <PreflightConsole> with the later rows still pending while
+ * the flight chunk downloads. Everything about the layout therefore lives in
+ * ui/primitives.tsx, where both chunks can import it without dragging the
+ * WebGL stack into the gate's entry graph; this file owns only the states.
+ * If you change what a row says, change it there or the seam will show.
  *
  * The root element must stay `div.fixed.z-30`: Scene3D's shader dress
  * rehearsal uses that selector to know the canvas is still covered, and skips
@@ -32,61 +33,88 @@ const HOLD_MS = 620;
 // and the raw number lives here (not in a style) so timings stay tokenised.
 const FADE_MS = 420;
 
-type Phase = 'idle' | 'visible' | 'fading' | 'done';
+// ---- HOW LONG "QUIET" HAS TO LAST BEFORE IT COUNTS AS IGNITION -------------
+// The overlay used to call T-0 the instant drei reported no active downloads,
+// and drei goes quiet BETWEEN batches: the planets, the sky and the landing
+// site register with the loading manager as their modules evaluate, not all at
+// once. Measured on a production build at 1440x900, the loader sat idle for
+// 176ms after the very first texture — long enough that the screen said
+// "Cleared for launch · CELESTIAL BODIES 1/1", lit the card's edge, filled the
+// bar cyan, and then quietly went back to loading. An instrument that
+// announces a launch and takes it back is exactly the class of dishonesty the
+// bar-vs-counter note below exists to stamp out.
+//
+// This window sits INSIDE the existing hold rather than in front of it, which
+// is the whole trick: quiet for 300ms declares ignition, quiet for the full
+// 620ms starts the fade, and the moment the loader wakes up both are
+// cancelled. Time-to-first-station is unchanged to the millisecond — the beat
+// is bought out of the hold that was already being spent, not added to it.
+const CONFIRM_MS = 300;
 
-/** One checklist row. `state` is observed, never scheduled. */
-function Step({
-  label,
-  state,
-  value,
-}: {
-  label: string;
-  state: 'done' | 'active' | 'pending';
-  value?: string;
-}) {
-  return (
-    <li className="flex items-baseline gap-2">
-      {/* The rail's diamond vocabulary: filled once a step is behind us. The
-          glyph is the only thing carrying the state visually, so the same fact
-          is spelled out for a screen reader rather than left to a lozenge. */}
-      <span aria-hidden="true" className={state === 'pending' ? 'text-faint' : 'text-cyan'}>
-        {state === 'done' ? '◆' : '◇'}
-      </span>
-      <span className="sr-only">
-        {state === 'done' ? 'complete: ' : state === 'active' ? 'in progress: ' : 'pending: '}
-      </span>
-      <span
-        className={`flex-1 uppercase tracking-widest ${
-          state === 'pending' ? 'text-faint' : state === 'active' ? 'text-ink' : 'text-dim'
-        }`}
-      >
-        {label}
-      </span>
-      {value ? <span className="num text-dim">{value}</span> : null}
-    </li>
-  );
-}
+// The safety valve for the case that cannot happen. `total` is cumulative, so
+// it latches above zero the moment the loading manager is told about anything
+// at all, and every visit has planets to fetch — but "the overlay waits for a
+// signal that never comes" fails to a black screen forever, which is too
+// expensive a bet to leave open. If nothing has registered this long after the
+// overlay appears, treat the scene as having nothing to stream. Firing early
+// is harmless and self-correcting: the moment a texture does register, `active`
+// flips and the effect below cancels everything in flight.
+const NO_WORK_MS = 1200;
+
+type Phase = 'visible' | 'fading' | 'done';
 
 export function BootSequence() {
   // `progress` is deliberately NOT destructured — see the note below the
   // early return for why that number cannot drive the bar.
   const { active, loaded, total } = useProgress();
-  const [phase, setPhase] = useState<Phase>('idle');
-  const reduced = useReducedMotion() ?? false;
+  // ---- WHY THIS STARTS 'visible' AND NOT 'idle' ---------------------------
+  // It used to wait for drei to report real work before mounting, on the
+  // theory that a fully cached visit deserved no overlay at all. What that
+  // actually bought was a ~500ms window — measured, at 1440x900 — between the
+  // Suspense fallback going away and the first texture registering, in which
+  // the ENTIRE flight deck was on screen with nothing drawn behind it: hero,
+  // station panel, rail, telemetry, all of it, over a blank canvas, before a
+  // black overlay dropped on top of it. The worst frame on the site, on the
+  // one visit that decides everything, and the fix is that this component is
+  // simply up from the moment it exists.
+  //
+  // The theory was wrong anyway: every texture goes through the loading
+  // manager whether or not the browser serves it from cache, so `active`
+  // flips true on any visit that has a scene to build. The cached case the
+  // old guard was protecting is the case where Scene3D's dress rehearsal
+  // ALSO silently skipped itself — this overlay is its only cue — so that
+  // branch was not a fast path, it was the first-visit compile stall coming
+  // back on a reload.
+  const [phase, setPhase] = useState<Phase>('visible');
+  // Ignition is a CONFIRMED state, not a sampled one — see CONFIRM_MS.
+  const [cleared, setCleared] = useState(false);
+  const [noWork, setNoWork] = useState(false);
 
-  // Only appear once the loader reports real work — if the chunk arrives with
-  // everything cached (active never flips true), the overlay never mounts.
   useEffect(() => {
-    if (active) setPhase((p) => (p === 'idle' ? 'visible' : p));
-  }, [active]);
+    const id = window.setTimeout(() => setNoWork(true), NO_WORK_MS);
+    return () => window.clearTimeout(id);
+  }, []);
 
-  // Loading finished: hold briefly, then start the fade. Cleared if a late
-  // asset re-activates the loader before the hold elapses.
+  // Loading finished: declare ignition once the quiet holds, then start the
+  // fade. Both are cancelled if a late asset re-activates the loader, which is
+  // what makes the announcement honest rather than merely early.
   useEffect(() => {
-    if (phase !== 'visible' || active) return;
+    if (active) {
+      setCleared(false);
+      return;
+    }
+    // Not `phase !== 'visible'` with the reset above it: once the fade has
+    // begun the card must STAY lit through it, and an early return that also
+    // un-lit it turned the exit into a blink.
+    if (phase !== 'visible') return;
+    if (total === 0 && !noWork) return;
+    const go = window.setTimeout(() => setCleared(true), CONFIRM_MS);
     const hold = window.setTimeout(() => setPhase('fading'), HOLD_MS);
-    return () => window.clearTimeout(hold);
-  }, [active, phase]);
+    return () => {
+      window.clearTimeout(go);
+      window.clearTimeout(hold);
+    };
+  }, [active, phase, total, noWork]);
 
   // Unmount after the fade completes; 'done' latches so a mid-voyage texture
   // fetch can never flash the boot screen over a live scene.
@@ -96,7 +124,7 @@ export function BootSequence() {
     return () => window.clearTimeout(gone);
   }, [phase]);
 
-  if (phase === 'idle' || phase === 'done') return null;
+  if (phase === 'done') return null;
 
   /* THE BAR AND THE COUNTER ARE ONE QUANTITY.
    *
@@ -112,88 +140,37 @@ export function BootSequence() {
   const frac = total > 0 ? loaded / total : 0;
   const pct = Math.round(frac * 100);
 
-  // The last beat: assets are in, the scene has its first frame, and the only
-  // thing left is to get out of the way.
-  const igniting = !active;
-  const ease = reduced ? 'none' : 'width var(--dur-2) var(--ease-out)';
+  /* Four real states, in the order they actually resolve. The first two are
+     already true by the time this component can exist at all: the gate has
+     blessed the session and the WebGL flight module is running — which is
+     exactly why they are worth showing, because the visitor has no other
+     evidence that the button did anything. The fallback in Experience.tsx
+     shows this same list with row two still in flight, so the only thing that
+     changes across the chunk boundary is that row completing. */
+  const rows: PreflightRow[] = [
+    { label: 'Access verified', state: 'done', value: 'OK' },
+    { label: 'Flight deck online', state: 'done', value: 'OK' },
+    {
+      // Keyed on the CONFIRMED state, not on `active`: the loader's mid-flight
+      // lulls used to tick this row complete and then un-tick it, and a
+      // checklist diamond that fills and empties is a checklist nobody trusts.
+      label: 'Celestial bodies',
+      state: cleared ? 'done' : 'active',
+      // total is 0 for the handful of frames before the loader has been told
+      // what it is fetching; printing "0/0" beside a full bar is the exact
+      // class of contradiction the note above exists to prevent.
+      ...(total > 0 ? { value: `${loaded}/${total}` } : {}),
+    },
+    { label: 'Ignition', state: cleared ? 'active' : 'pending', ...(cleared ? { value: 'T-0' } : {}) },
+  ];
 
   return (
-    <div
-      className="fixed inset-0 z-30 flex items-center justify-center bg-ground"
-      style={{
-        opacity: phase === 'fading' ? 0 : 1,
-        // Opacity-only exit on the shared tokens — .xfade is reserved for the
-        // reduced-motion panels, so this fade carries its own transition. A
-        // cut-fade is the canonical reduced-motion transition, so it stays on
-        // in both modes; only the bar's travel is gated.
-        transition: 'opacity var(--dur-3) var(--ease-out)',
-        pointerEvents: phase === 'fading' ? 'none' : 'auto',
-      }}
-    >
-      <div className="flex w-full max-w-sm flex-col gap-3 px-6">
-        <p className="font-mono text-2xs uppercase tracking-widest text-faint">
-          Mission Control · Pre-flight
-        </p>
-
-        {/* The one line that pays off the button. It states where the sequence
-            is, and it is the only copy on the overlay that changes. */}
-        <p className="text-sm text-ink" aria-live="polite">
-          {igniting ? 'Cleared for launch.' : 'Bringing the flight deck online.'}
-        </p>
-
-        {/* Four real states, in the order they actually resolve. The first two
-            are already true by the time this component can exist at all: the
-            gate has blessed the session and the WebGL flight module is running
-            — which is exactly why they are worth showing, because the visitor
-            has no other evidence that the button did anything. */}
-        <ul className="flex flex-col gap-1.5 font-mono text-2xs">
-          <Step label="Access verified" state="done" />
-          <Step label="Flight deck online" state="done" />
-          <Step
-            label="Celestial bodies"
-            state={active ? 'active' : 'done'}
-            value={`${loaded}/${total}`}
-          />
-          <Step
-            label="Ignition"
-            state={igniting ? 'active' : 'pending'}
-            {...(igniting ? { value: 'T-0' } : {})}
-          />
-        </ul>
-
-        <div
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          aria-label="Streaming planet textures"
-          // The extra top margin keeps a 2px determinate bar from reading as
-          // an underline rule beneath the checklist's last row.
-          className="mt-1 h-0.5 w-full overflow-hidden bg-raised"
-        >
-          {/* Determinate ink fill — width is the one property that moves, and
-              it moves on loaded/total, the same pair printed above. It goes
-              cyan at ignition: the instrument palette's way of saying the
-              measurement is finished and the thing it measured is ready. */}
-          <div
-            className={`h-full ${igniting ? 'bg-cyan' : 'bg-ink'}`}
-            style={{ width: `${pct}%`, transition: ease }}
-          />
-        </div>
-
-        {/* The escape hatch stays honest even while the heavy path streams. */}
-        <p className="font-mono text-2xs text-faint">
-          first flight streams ~2 MB of planets — the{' '}
-          <a
-            className="text-dim underline decoration-rule-strong underline-offset-2"
-            href="/resume.pdf"
-            download
-          >
-            PDF
-          </a>{' '}
-          needs none of it
-        </p>
-      </div>
-    </div>
+    <PreflightConsole
+      headline={cleared ? 'Cleared for launch.' : 'Bringing the flight deck online.'}
+      rows={rows}
+      pct={pct}
+      cleared={cleared}
+      leaving={phase === 'fading'}
+    />
   );
 }

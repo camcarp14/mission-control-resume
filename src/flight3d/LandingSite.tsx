@@ -20,12 +20,23 @@
  * beyond x=-175, the city glow banks low toward (-1, 0, -0.5), and the moon
  * hangs opposite, over the lake.
  *
+ * The lake is the one surface here that is NOT lit: water at night is a
+ * mirror, so every value in it is painted into its canvas and the material is
+ * MeshBasic. That is both the physically honest model and the reason the
+ * finale stopped reading as a pier on a floating disc — see paintWater. The
+ * pier head under the pad is a quay with a coping, a waterline strake, timber
+ * fenders and bollards for the same reason: it has to look like it is
+ * STANDING in something.
+ *
  * Everything is procedural and seeded (mulberry32(0xC0FFEE), one rng, fixed
- * order), merged RR-style into 15 draw calls — the ENTIRE city (four depth
- * rows, ~84 fill towers, five signature masses, shoreline, piers, street
- * lights, beacons, billboards) lives in exactly TWO of them: the site-wide
- * opaque `archGeo` batch and the emissive `windowGeo` batch. The opacity ramp is STATE (it
- * tracks the flight position) times a camera-distance gate, so it runs under
+ * order — plus two small private streams, WATER_SEED and PIER_SEED, whose
+ * only job is to let this file's paint and detailing change without re-rolling
+ * the signed-off skyline downstream of them), merged RR-style into 15 draw
+ * calls — the ENTIRE city (four depth rows, ~84 fill towers, five signature
+ * masses, shoreline, piers, street lights, beacons, billboards) lives in
+ * exactly TWO of them: the site-wide opaque `archGeo` batch and the emissive
+ * `windowGeo` batch. The opacity ramp is STATE (it tracks the flight
+ * position) times a camera-distance gate, so it runs under
  * reduced motion; the continuous animations — wheel spin, gull circling,
  * moon-path shimmer — are gated off and parked when `reduced` is true.
  * ========================================================================= */
@@ -72,6 +83,11 @@ const PAD_RADIUS = 4.0;
 const PAD_LIFT = 0.02;
 const PAD_CYAN = '#7df9ff';
 const PAD_LABEL = 'CC-01';
+// The pier head's added detailing (coping, wale, fenders, bollards) comes off
+// its own stream for the same reason the lake's glitter does: the site's one
+// seeded rng feeds the whole city downstream of here, and its order is the
+// only thing guaranteeing the skyline is the same skyline on every visit.
+const PIER_SEED = 0x9e75ca11;
 
 // Centennial Wheel (scaled to the mini-pier).
 const WHEEL_X = -60;
@@ -179,6 +195,19 @@ const HAZE_Y = 2;
 const HAZE_SEGS = 32;
 const HAZE_OPACITY = 0.5;
 const HAZE_CITY_U = 0.676; // cylinder-u of the city azimuth: glow warmest there
+// A SECOND, taller and much fainter veil standing between the near tower rows
+// and the back row — real aerial perspective, which the palette/atlas ladder
+// only approximates. It rides the SAME geometry batch and the SAME texture as
+// the near band (one merged mesh, one draw call, one material, no new
+// program): its faintness comes from mapping its v into the upper reach of
+// the existing haze gradient rather than from a second material. Because it
+// is depth-TESTED, rows 0–2 stand in front of it and are untouched, while row
+// 3 sits behind it and recedes — which is exactly the separation that was
+// missing between the near buildings and the far ones.
+const HAZE_FAR_R = 243;
+const HAZE_FAR_H = 34;
+const HAZE_FAR_Y = 13;
+const HAZE_FAR_V0 = 0.18; // start this far up the gradient: ~55% the strength
 
 // Skyline water reflection: one additive plane of smeared warm columns,
 // painted FROM the seeded tower z-positions so light lands under towers.
@@ -191,8 +220,17 @@ const REFL_SPAN = 340; // extent across the skyline
 const REFL_OPACITY = 0.34; // night: the lit skyline owns more of the water
 
 // Water: calm night lake, rim alpha baked so it dissolves into haze.
+// The radius is NOT what made the finale read as a floating disc — measured
+// from the landing camera the lake's rim sits behind the 172-unit shoreline
+// on every azimuth the 62° frame contains, so it is never on screen and
+// growing it would have bought nothing. What was missing was LIGHT ON THE
+// WATER; see paintWater.
 const WATER_Y = -3.5;
 const WATER_RADIUS = 260;
+// The lake's glitter comes off its own stream so the site's fixed seed order
+// — and with it the entire signed-off skyline — survives this file's paint
+// changes untouched.
+const WATER_SEED = 0x1a4ec0de;
 
 // Night azimuths: the CITY (residual skyglow) sits toward (-tHat + 0.5·bHat)
 // → pier space (-1, 0, -0.5); the MOON hangs on the opposite azimuth, high
@@ -440,12 +478,39 @@ function paintDeck(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () 
       ctx.fillRect(0, r * rowH + 1, w, rowH - 2);
     }
   }
-  const wash = ctx.createLinearGradient(0, 0, 0, h);
-  wash.addColorStop(0, 'rgba(255,150,90,0.10)');
-  wash.addColorStop(0.5, 'rgba(255,150,90,0.04)');
-  wash.addColorStop(1, 'rgba(255,150,90,0.10)');
-  ctx.fillStyle = wash;
+  // LAMP SPILL. The pier lamps are emissive bulbs, not lights — there is no
+  // point light on this deck and there cannot be one, because a new light in
+  // the scene changes every material's light-count define and recompiles the
+  // whole night pipeline at exactly the wrong moment. So the pooling is baked
+  // here, and the tile is REGISTERED to the lamps to make it possible: the
+  // deck runs 178 units and the lamps stand every 22, so at repeat 178/22
+  // one tile is exactly one lamp bay and a half-tile offset parks each lamp
+  // on the canvas centreline. Two pools, one per deck edge at the lamp
+  // stations (z = ±5.25 lands 6% in from each canvas edge), falling off
+  // toward the tile ends — which is the dark stretch halfway between lamps.
+  //
+  // Registering the tile also shortens the plank run from ~6-9 units to
+  // ~3-6, which is the one knock-on: closer to real boardwalk decking, and
+  // it costs nothing since the painter's rng draw count is untouched (this
+  // block draws none) and the site's seed order therefore survives intact.
+  const dim = ctx.createLinearGradient(0, 0, w, 0);
+  dim.addColorStop(0, 'rgba(6,8,14,0.34)');
+  dim.addColorStop(0.5, 'rgba(6,8,14,0)');
+  dim.addColorStop(1, 'rgba(6,8,14,0.34)');
+  ctx.fillStyle = dim;
   ctx.fillRect(0, 0, w, h);
+  for (const cy of [0.06, 0.94]) {
+    ctx.save();
+    ctx.translate(w / 2, cy * h);
+    ctx.scale(1, (h * 0.62) / (w * 0.34));
+    const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.34);
+    pool.addColorStop(0, 'rgba(255,176,104,0.30)');
+    pool.addColorStop(0.45, 'rgba(255,164,96,0.14)');
+    pool.addColorStop(1, 'rgba(255,160,90,0)');
+    ctx.fillStyle = pool;
+    ctx.fillRect(-w, -h * 2, w * 2, h * 4);
+    ctx.restore();
+  }
 }
 
 /** The pad: concrete over the pier-tip deck, one bold glowing cyan ring, an
@@ -467,6 +532,35 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // CONTACT. Without this the ship reads as parked above the deck rather
+  // than set down on it: there is no shadow-casting light in this scene (a
+  // shadow map on the descent is not affordable, and adding a light would
+  // change every material's light-count define and recompile the whole night
+  // pipeline mid-flight), so the ship's ambient occlusion is painted here,
+  // centred where it comes to rest. It is on the pad from the moment the pad
+  // is legible, which is the right answer anyway — a ship on approach should
+  // throw a shadow onto its own pad.
+  const ao = ctx.createRadialGradient(c, c, 0, c, c, R * 0.66);
+  ao.addColorStop(0, 'rgba(0,0,0,0.66)');
+  ao.addColorStop(0.4, 'rgba(0,0,0,0.5)');
+  ao.addColorStop(0.72, 'rgba(0,0,0,0.2)');
+  ao.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = ao;
+  ctx.beginPath();
+  ctx.arc(c, c, R * 0.66, 0, Math.PI * 2);
+  ctx.fill();
+  // …and the release: a cool lift immediately outside the occlusion, which
+  // is the pad's own ring light bouncing back up off the concrete. A shadow
+  // with no bounce around it reads as a painted spot, not as darkness.
+  const bounce = ctx.createRadialGradient(c, c, R * 0.5, c, c, R * 0.86);
+  bounce.addColorStop(0, 'rgba(125,249,255,0)');
+  bounce.addColorStop(0.55, 'rgba(140,214,232,0.11)');
+  bounce.addColorStop(1, 'rgba(125,249,255,0)');
+  ctx.fillStyle = bounce;
+  ctx.beginPath();
+  ctx.arc(c, c, R * 0.86, 0, Math.PI * 2);
+  ctx.fill();
 
   // Bold outer ring with a slight glow — high contrast against the wood.
   ctx.strokeStyle = PAD_CYAN;
@@ -512,28 +606,176 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
   }
 }
 
-/** Calm night lake: near-black navy base, soft elongated swell mottling,
- *  darkening toward the rim, and the outer 22% alpha-faded so the disc
- *  dissolves into horizon haze instead of ending in an edge. */
+/** Calm night lake.
+ *
+ *  THIS CANVAS *IS* THE LAKE'S LOOK. The water used to be a MeshLambert with
+ *  a near-black map, and the arithmetic guaranteed a black rectangle: the
+ *  plane's normal is +Y, the moon rakes it at N·L 0.16, the city point light
+ *  at N·L 0.05, the hemisphere fill contributes ~0.01 — total irradiance
+ *  ~0.08 against an albedo of 0.01. Nothing multiplied by nothing is nothing,
+ *  and the entire lower third of the finale rendered as void, which is what
+ *  made the pier read as a disc floating in space (screenshot finding at
+ *  1440x900 and 390x660). Water at night is never lit BY the scene lights —
+ *  it is a mirror, and everything you see in it is reflected. So the material
+ *  is now MeshBasic and every photon is painted here, which is both the
+ *  correct model and one fewer lit surface on the largest fragment bill in
+ *  the scene.
+ *
+ *  World → canvas: the disc's UVs are linear in position, so +X (toward the
+ *  landing camera) runs RIGHT and +Z runs DOWN. The camera parks at x=+32
+ *  looking down -X, which means every reflection smears toward +X — to the
+ *  right — and that is why the streaks below are drawn horizontally. */
 function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () => number): void {
-  ctx.fillStyle = '#0a1622';
+  const S = w / (2 * WATER_RADIUS); // canvas px per world unit
+  const px = (x: number) => w / 2 + x * S;
+  const py = (z: number) => h / 2 + z * S;
+  const c = w / 2;
+
+  ctx.fillStyle = '#05090f'; // the lake with nothing on it: deep, not black
   ctx.fillRect(0, 0, w, h);
+
+  // The city's glow lying on the water. The shoreline arc wraps 170° of the
+  // horizon, so this is a RING that brightens toward the far water, not a
+  // one-sided wash — and it is what stops the mid-distance lake from being a
+  // hole between the pier and the skyline.
+  //
+  // The alphas here were cut ~4x from the first pass after an A/B: enough
+  // reflected light to read as a lake and the finale looked like a mudflat,
+  // with the water competing with the skyline for the eye. A night lake
+  // returns maybe a tenth of the city that lights it. The city stays the
+  // brightest thing in the frame; the water only has to stop being a hole.
+  const glow = ctx.createRadialGradient(c, c, 0, c, c, c);
+  glow.addColorStop(0.0, 'rgba(96,62,36,0)');
+  glow.addColorStop(0.3, 'rgba(120,76,42,0.03)');
+  glow.addColorStop(0.5, 'rgba(150,96,52,0.08)');
+  glow.addColorStop(0.66, 'rgba(190,120,62,0.17)');
+  glow.addColorStop(0.8, 'rgba(150,96,54,0.10)');
+  glow.addColorStop(1, 'rgba(96,66,44,0.03)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+  // …biased toward the city azimuth: the towers are banked to -X, so that
+  // half of the lake carries more of their light than the open water behind.
+  const bias = ctx.createLinearGradient(0, 0, w, 0);
+  bias.addColorStop(0, 'rgba(160,100,54,0.06)');
+  bias.addColorStop(0.5, 'rgba(160,100,54,0.02)');
+  bias.addColorStop(1, 'rgba(160,100,54,0)');
+  ctx.fillStyle = bias;
+  ctx.fillRect(0, 0, w, h);
+
+  // Swell: long, low ridges lying ACROSS the view so their faces alternately
+  // catch and shed the city glow. Elongated on canvas x — the smear axis.
+  //
+  // THE DRAW COUNT HERE IS LOAD-BEARING. The whole site comes off one seeded
+  // mulberry32 in a fixed order, and this painter runs BEFORE the window
+  // atlas and before every building is placed. Consuming one more or one
+  // fewer value would re-roll the entire Chicago skyline the owner has
+  // signed off across sixteen review rounds. So this loop keeps its original
+  // 130 iterations × 5 draws exactly, and everything NEW below reads from a
+  // private stream instead — the same discipline the fireworks use.
   for (let i = 0; i < 130; i++) {
     const x = rng() * w;
     const y = rng() * h;
-    const long = 30 + rng() * 130; // elongated across the camera's view
-    const short = 4 + rng() * 12;
-    ctx.fillStyle = rng() < 0.5 ? 'rgba(5,12,20,0.18)' : 'rgba(24,50,72,0.12)';
+    const long = 12 + rng() * 44;
+    const short = 1.5 + rng() * 4;
+    ctx.fillStyle = rng() < 0.5 ? 'rgba(3,7,13,0.34)' : 'rgba(150,104,66,0.05)';
     ctx.beginPath();
-    ctx.ellipse(x, y, short, long, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, long, short, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  const c = w / 2;
-  const ring = ctx.createRadialGradient(c, c, 0, c, c, c);
-  ring.addColorStop(0.6, 'rgba(4,10,18,0)');
-  ring.addColorStop(1, 'rgba(4,10,18,0.5)');
-  ctx.fillStyle = ring;
-  ctx.fillRect(0, 0, w, h);
+
+  const grng = mulberry32(WATER_SEED);
+
+  // A finer swell pass on top of the seeded one. The lake is seen at a very
+  // grazing angle from a camera 8 units above it, so one texel smears across
+  // tens of screen pixels along the view axis: without small-scale structure
+  // the whole surface resolves to the gradient underneath it and reads as a
+  // dusty plain, which is exactly how the first calibration looked. These
+  // are short, so they survive the smear as texture rather than as brush
+  // strokes; the earlier long ones did the opposite.
+  for (let i = 0; i < 900; i++) {
+    const a = grng() * Math.PI * 2;
+    const rr = Math.pow(grng(), 0.62) * c;
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
+    const long = 3 + grng() * 16;
+    ctx.fillStyle =
+      grng() < 0.55
+        ? `rgba(2,6,12,${(0.12 + grng() * 0.24).toFixed(3)})`
+        : `rgba(168,120,78,${(0.03 + grng() * 0.07).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, long, 1 + grng() * 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Broken glitter: the single detail that separates "dark plane" from
+  // "water". Density follows the glow ring, and every facet is a DASH, never
+  // a round dot — a wave face turned toward the city smears along the view
+  // axis, and dots read as dust on the lens.
+  for (let i = 0; i < 520; i++) {
+    const a = grng() * Math.PI * 2;
+    const rr = (0.24 + Math.pow(grng(), 0.5) * 0.68) * c;
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
+    const near = 1 - Math.abs(rr / c - 0.6); // brightest out where the glow is
+    const len = 1.5 + grng() * 7;
+    ctx.fillStyle =
+      grng() < 0.22
+        ? `rgba(206,222,244,${(0.1 + grng() * 0.16).toFixed(3)})` // moon-silver facets
+        : `rgba(255,186,116,${(0.1 + grng() * 0.26 * near).toFixed(3)})`;
+    ctx.fillRect(x, y, len, 1 + (grng() < 0.3 ? 1 : 0));
+  }
+
+  // Pier-lamp spill. The MIRROR image of each lamp lands under the deck (the
+  // camera is almost in line with the pier, so the reflected ray passes
+  // straight through the planking) and is never visible — what a visitor
+  // actually sees is the lamp's light scattering on the water OUTSIDE the
+  // deck edge. So these are two soft pools per lamp station, hugging the
+  // ±z edges and stretched toward the camera, receding down the pier. This
+  // is the detail that anchors the pier to the lake.
+  for (let x = 6; x > DECK_END; x -= LAMP_STEP) {
+    for (const s of [-1, 1]) {
+      const gx = px(x + 5);
+      const gy = py(s * 9.5);
+      const rad = 13 * S;
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.scale(1.5, 0.62); // stretched toward the camera, flattened across
+      const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
+      pool.addColorStop(0, 'rgba(255,198,132,0.30)');
+      pool.addColorStop(0.42, 'rgba(255,168,96,0.11)');
+      pool.addColorStop(1, 'rgba(255,160,90,0)');
+      ctx.fillStyle = pool;
+      ctx.fillRect(-rad, -rad, rad * 2, rad * 2);
+      ctx.restore();
+    }
+  }
+
+  // The pier head's own halo: the lamps, the pad's cyan ring and the lit
+  // deck all throw light onto the water immediately around the caisson. An
+  // unlit waterline is exactly what reads as "floating"; a halo reads as
+  // "standing in water".
+  {
+    const hx = px(-1);
+    const hy = py(0);
+    const r0 = 10.5 * S;
+    const r1 = 27 * S;
+    const halo = ctx.createRadialGradient(hx, hy, r0, hx, hy, r1);
+    halo.addColorStop(0, 'rgba(255,190,124,0.14)');
+    halo.addColorStop(0.3, 'rgba(226,168,116,0.06)');
+    halo.addColorStop(1, 'rgba(200,150,110,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(hx - r1, hy - r1, r1 * 2, r1 * 2);
+    // A whisper of the pad's cyan, tight to the stone — the one place in the
+    // finale where the accent instrument colour touches the world.
+    const cy = ctx.createRadialGradient(hx, hy, r0, hx, hy, 17 * S);
+    cy.addColorStop(0, 'rgba(125,249,255,0.10)');
+    cy.addColorStop(1, 'rgba(125,249,255,0)');
+    ctx.fillStyle = cy;
+    ctx.fillRect(hx - r1, hy - r1, r1 * 2, r1 * 2);
+  }
+
+  // The outer 22% is alpha-faded so the disc dissolves into the horizon haze
+  // instead of ending in an edge.
   ctx.globalCompositeOperation = 'destination-out';
   const fade = ctx.createRadialGradient(c, c, 0, c, c, c);
   fade.addColorStop(0, 'rgba(0,0,0,0)');
@@ -800,6 +1042,36 @@ function tintGeom(geo: THREE.BufferGeometry, hex: number, jitter: number, rng: (
   return geo;
 }
 
+/** Write a vertical two-colour vertex gradient over a geometry: `lo` at y0,
+ *  `hi` at y1, smoothstepped between. The pier head's wall is three units of
+ *  stone across the bottom of the finale, and ONE flat tone over it reads as
+ *  a cut-out silhouette however well the tone is chosen — a hemisphere fill
+ *  on a vertical face has no gradient to give it. This puts warm lamp-lit
+ *  concrete at the coping and cold wet stone at the waterline, which is the
+ *  whole difference between a black band and a quay standing in a lake.
+ *  Free: no extra draw, no extra attribute, no extra material. */
+function tintGradY(
+  geo: THREE.BufferGeometry,
+  loHex: number,
+  hiHex: number,
+  y0: number,
+  y1: number,
+): THREE.BufferGeometry {
+  const lo = new THREE.Color().setHex(loHex);
+  const hi = new THREE.Color().setHex(hiHex);
+  const pos = geo.getAttribute('position');
+  const n = pos.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const f = sstep((pos.getY(i) - y0) / (y1 - y0));
+    col[i * 3] = lo.r + (hi.r - lo.r) * f;
+    col[i * 3 + 1] = lo.g + (hi.g - lo.g) * f;
+    col[i * 3 + 2] = lo.b + (hi.b - lo.b) * f;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+
 function mergeAll(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const merged = mergeGeometries(list, false);
   for (const g of list) g.dispose();
@@ -1011,6 +1283,13 @@ type FwShell = {
   off: number; // starting offset into the spark table
   gap: number; // seconds to the next rocket while docked, 7–9
   salvoGap: number; // stagger inside the opening salvo, ~0.8
+  // Shell TYPE. A real show is not one effect repeated: roughly a third of
+  // these are willows — slower sparks that live nearly twice as long, so
+  // gravity has time to bend them into the long drooping golden strands
+  // everyone recognises — and the rest are chrysanthemums whose outer sparks
+  // crackle out. Both fall straight out of the existing integrator; neither
+  // costs a particle, a draw call or a byte.
+  willow: number; // 1 = long drooping strands, 0 = crackling burst
 };
 
 // A seeded spark: unit-sphere direction plus speed / life / brightness / size
@@ -1043,6 +1322,11 @@ type FwParticle = {
   b: number;
   size: number;
   trail: number; // rocket only: trail-tick accumulator
+  // Spark only: 0 = steady, otherwise a per-particle crackle phase. Real
+  // shells do not fade out smoothly — the outer stars sputter, and that
+  // stutter is most of what the eye recognises as a firework rather than a
+  // particle system. One sine per crackling spark per frame.
+  crackle: number;
 };
 
 type FwSim = {
@@ -1092,6 +1376,7 @@ function buildFireworks(): FwSim {
       off: Math.floor(rng() * FW_SPARK_COUNT),
       gap: 7 + rng() * 2,
       salvoGap: 0.7 + rng() * 0.25,
+      willow: rng() < 0.34 ? 1 : 0,
     });
   }
 
@@ -1129,6 +1414,7 @@ function buildFireworks(): FwSim {
       b: 0,
       size: 0,
       trail: 0,
+      crackle: 0,
     });
   }
 
@@ -1220,6 +1506,7 @@ function fwLaunch(fw: FwSim, sh: FwShell, shellIdx: number): void {
   p.b = FW_PAL[c + 2] ?? 0.7;
   p.size = FW_ROCKET_SIZE;
   p.trail = 0;
+  p.crackle = 0;
 }
 
 /** Faint ember tick left behind the ascending mote — pool particles reused
@@ -1242,6 +1529,7 @@ function fwTrailTick(fw: FwSim, src: FwParticle): void {
   p.b = src.b * 0.5;
   p.size = FW_TRAIL_SIZE;
   p.trail = 0;
+  p.crackle = 0;
 }
 
 function fwBurst(fw: FwSim, x: number, y: number, z: number, shellIdx: number): void {
@@ -1257,26 +1545,40 @@ function fwBurst(fw: FwSim, x: number, y: number, z: number, shellIdx: number): 
   // spike is not.
   const budget = FW_LIVE_CAP - fw.aliveEst;
   const n = sh.count < budget ? sh.count : budget;
+  const willow = sh.willow === 1;
   for (let j = 0; j < n; j++) {
     const sp = fw.sparks[(sh.off + j) % fw.sparks.length];
     if (!sp) continue;
     const p = fwAlloc(fw);
     if (!p) continue;
+    // The first dozen stars of any shell are the FLASH: whiter, faster and
+    // gone in half a second. Real bursts open with a hard white core and
+    // resolve into colour — without it every shell reads as a slow puff.
+    const core = j < 12;
+    // Willow: slow stars with a long life, so the constant gravity in the
+    // integrator has time to turn them over into strands. Chrysanthemum:
+    // full speed, and the outer stars sputter as they die.
+    const spd = sp.spd * (willow ? 0.56 : core ? 1.3 : 1);
+    const life = sp.life * (willow ? 1.95 : core ? 0.5 : 1);
     p.kind = 1;
     p.shell = 0;
     p.x = x;
     p.y = y;
     p.z = z;
-    p.vx = sp.dx * sp.spd;
-    p.vy = sp.dy * sp.spd + FW_LIFT;
-    p.vz = sp.dz * sp.spd;
+    p.vx = sp.dx * spd;
+    p.vy = sp.dy * spd + FW_LIFT;
+    p.vz = sp.dz * spd;
     p.age = 0;
-    p.life = sp.life;
-    p.r = br * sp.jit;
-    p.g = bg * sp.jit;
-    p.b = bb * sp.jit;
-    p.size = sp.size;
+    p.life = life;
+    const mix = core ? 0.6 : 0; // toward white for the opening flash
+    p.r = (br + (1 - br) * mix) * sp.jit;
+    p.g = (bg + (1 - bg) * mix) * sp.jit;
+    p.b = (bb + (1 - bb) * mix) * sp.jit;
+    p.size = sp.size * (core ? 1.15 : willow ? 0.82 : 1);
     p.trail = 0;
+    // Phase, not a boolean: every crackling star has to stutter on its own
+    // beat or the whole shell blinks in unison, which reads as a bug.
+    p.crackle = !willow && !core && sp.jit > 1.0 ? 0.3 + sp.life : 0;
   }
 }
 
@@ -1394,7 +1696,12 @@ function fwUpdate(fw: FwSim, e: number, k: number, docked: boolean): void {
         p.z += p.vz * dt;
         const u0 = 1 - p.age / p.life;
         const u = u0 < 0 ? 0 : u0;
-        const a = u * u;
+        let a = u * u;
+        // Crackle: the sputter of the outer stars over the back half of
+        // their life. One sine per crackling spark, on its own phase.
+        if (p.crackle > 0 && u < 0.62) {
+          a *= 0.42 + 0.58 * Math.abs(Math.sin((p.age + p.crackle) * 23));
+        }
         pos[i * 3] = p.x;
         pos[i * 3 + 1] = p.y;
         pos[i * 3 + 2] = p.z;
@@ -1462,7 +1769,7 @@ type SiteAssets = {
   glassMat: THREE.MeshStandardMaterial;
   steelMat: THREE.MeshStandardMaterial;
   cabinMat: THREE.MeshLambertMaterial;
-  waterMat: THREE.MeshLambertMaterial;
+  waterMat: THREE.MeshBasicMaterial;
   streakMat: THREE.MeshBasicMaterial;
   domeMat: THREE.ShaderMaterial;
   gullMat: THREE.MeshBasicMaterial;
@@ -1488,7 +1795,12 @@ function buildAssets(): SiteAssets {
   /* -- textures (one rng, fixed order) -- */
   const deckTex = makeCanvasTexture(1024, 256, (ctx, w, h) => paintDeck(ctx, w, h, rng));
   deckTex.wrapS = THREE.RepeatWrapping;
-  deckTex.repeat.set(5, 1);
+  // Registered to the lamp bays, not to a round number: u runs 0 at the shore
+  // end to 1 at the pier tip over 178 units, so a repeat of 178/LAMP_STEP
+  // makes one tile exactly one bay and the half-tile offset centres each
+  // lamp on the pool painted into it. See paintDeck.
+  deckTex.repeat.set((DECK_TIP - DECK_END) / LAMP_STEP, 1);
+  deckTex.offset.x = 0.5;
   deckTex.anisotropy = 4;
   const padTex = makeCanvasTexture(512, 512, (ctx, w) => paintPad(ctx, w, rng));
   // Texture budget: the atlas doubled its variant count (8 → 16) at the SAME
@@ -1496,6 +1808,13 @@ function buildAssets(): SiteAssets {
   // angle or are pure soft gradients — the lake 1024² → 512² and the moon
   // path 256² → 128². Net budget DOWN ~30% (2.92 Mpx → 2.04 Mpx).
   const waterTex = makeCanvasTexture(512, 512, (ctx, w, h) => paintWater(ctx, w, h, rng));
+  // The lake is the ONE surface in this scene seen almost edge-on: the camera
+  // sits 8 units above a 520-unit plane, so along the view axis a single texel
+  // covers tens of pixels and the isotropic mip chain collapses every wavelet
+  // into the gradient beneath it. Anisotropy is what lets the swell and the
+  // glitter survive the angle they are actually viewed at, and it costs
+  // sampling only — no extra texel, no extra byte.
+  waterTex.anisotropy = 8;
   const streakTex = makeCanvasTexture(128, 128, paintStreak);
   const atlasTex = makeCanvasTexture(ATLAS_PX, ATLAS_PX, (ctx) => paintWindowAtlas(ctx, rng));
   atlasTex.anisotropy = 4;
@@ -1513,13 +1832,95 @@ function buildAssets(): SiteAssets {
   deckGeo.translate(deckMid, -DECK_THICK / 2, 0);
 
   // Pier-head caisson under the pad: covers the planet's surface bulge near
-  // the tangent point (the globe pokes ~2u above the lake plane within ~10u
-  // of the pad) and reads as the stone base the pad stands on.
+  // the tangent point (Earth's radius is 17, so the globe stands above the
+  // lake plane out to 10.3 units from the pad) and reads as the stone base
+  // the pad stands on.
+  //
+  // THIS DRUM WAS THE FLOATING DISC. Three separate faults, all of them
+  // visible at 1440x900 and worse at 390x660:
+  //   · it was 0x3a4048 — the LIGHTEST large surface in the lower third of
+  //     the finale, brighter than the deck it is supposed to sit under, so
+  //     the eye read it as the subject rather than as ground;
+  //   · at 3.5 tall its bottom cap sat three tenths of a unit under the
+  //     lake plane, which is nothing once the camera lifts on the descent —
+  //     at ramp 0.86 you could see the whole drum END in mid-air;
+  //   · nothing marked where it met the water, and an unlit waterline
+  //     against an unlit lake is the definition of "floating".
+  // So: dark wet stone, sunk far enough that the base can never come out
+  // from under the water at any point on the descent, thirty facets instead
+  // of twenty (at 30px per unit on screen, twenty read as a bevelled nut),
+  // and the contact detail below.
   {
-    const caisson = new THREE.CylinderGeometry(11.5, 12.2, 3.5, 20);
-    caisson.translate(-1, -2.05, 0);
-    tintGeom(caisson, 0x3a4048, 0.06, rng);
+    // 11.0 is the smallest radius that still buries the bulge (the globe
+    // crosses the lake plane at 10.35), and every unit shaved off it is a
+    // unit of stone out of the bottom of the finale.
+    // Four height segments purely so the wall can carry a gradient: with the
+    // default single segment the only vertices are at y -0.3 and y -6.9 and
+    // any shading over it interpolates across the buried half as well, which
+    // wastes most of the ramp on stone nobody sees.
+    const caisson = new THREE.CylinderGeometry(11.0, 11.8, 6.6, 30, 4);
+    caisson.translate(-1, -3.6, 0); // apron at y -0.3, base buried at -6.9
+    // The one rng draw the old flat tint took, kept so the seed order holds;
+    // the gradient overwrites the colours it wrote.
+    tintGeom(caisson, 0x2a323d, 0.06, rng);
+    tintGradY(caisson, 0x11161d, 0x424b58, -3.9, -0.4);
     arch.push(caisson);
+
+    // Everything from here down is NEW pier-head detail, and it reads from
+    // its OWN stream. The site's single seeded rng runs in a fixed order and
+    // this block sits upstream of the window atlas and of every building
+    // placement — one extra draw here would re-roll the entire Chicago
+    // skyline that sixteen review rounds have signed off. The caisson's own
+    // tintGeom above still takes exactly the one value it always did.
+    const prng = mulberry32(PIER_SEED);
+
+    // Coping roll capping the apron's outer edge. A raw cylinder rim is a
+    // cut; a rounded stone edge is a decision, and it gives the moon a
+    // continuous highlight to run around, which is what actually describes
+    // the curve to the eye.
+    const coping = new THREE.TorusGeometry(11.42, 0.24, 4, 36);
+    coping.rotateX(Math.PI / 2);
+    coping.translate(-1, -0.42, 0);
+    tintGeom(coping, 0x454d59, 0.05, prng);
+    arch.push(coping);
+
+    // The waterline itself: a rubbing strake straddling y = -3.5, sitting
+    // proud of the drum by a couple of tenths. A TORUS, not the open
+    // cylinder this started as — an open band is single-sided, so during the
+    // descent (when the lake is still on the transparent path and does not
+    // occlude it) its far half culled away and the near half read as a hoop
+    // hovering off the stone. A closed tube can only ever look attached.
+    const wale = new THREE.TorusGeometry(11.62, 0.2, 4, 30);
+    wale.rotateX(Math.PI / 2);
+    wale.translate(-1, -3.3, 0);
+    tintGeom(wale, 0x3d4a5a, 0.05, prng);
+    arch.push(wale);
+
+    // Creosoted timber fenders hung down the face into the water. They break
+    // the silhouette into something that was BUILT — a bare drum of any
+    // colour still reads as a primitive — and they carry the eye down into
+    // the lake instead of stopping dead at the rim.
+    for (let i = 0; i < 13; i++) {
+      const a = (i / 13) * Math.PI * 2 + 0.12;
+      const fx = -1 + Math.cos(a) * 11.55;
+      const fz = Math.sin(a) * 11.55;
+      const f = new THREE.BoxGeometry(0.46, 4.2, 0.62);
+      f.rotateY(-a);
+      f.translate(fx, -2.5, fz);
+      tintGeom(f, 0x1d1710, 0.14, prng);
+      arch.push(f);
+    }
+
+    // Mooring bollards around the apron. Small, but they are the one thing
+    // on that stone ring with a vertical edge for the moonlight to catch,
+    // and they turn a blank grey annulus into a working quay.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.5;
+      const b = new THREE.CylinderGeometry(0.2, 0.28, 0.82, 6);
+      b.translate(-1 + Math.cos(a) * 9.1, 0.11, Math.sin(a) * 9.1);
+      tintGeom(b, 0x4c525b, 0.1, prng);
+      arch.push(b);
+    }
   }
 
   // Wooden pilings along both deck faces — the working-wharf read.
@@ -1939,7 +2340,17 @@ function buildAssets(): SiteAssets {
 
   // Horizon haze ring (open cylinder, seen from inside) + the reflection
   // plane lying just above the water: u runs toward the camera on it.
-  const hazeGeo = new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, HAZE_SEGS, 1, true);
+  const hazeGeo = mergeAll([
+    new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, HAZE_SEGS, 1, true),
+    (() => {
+      const far = new THREE.CylinderGeometry(HAZE_FAR_R, HAZE_FAR_R, HAZE_FAR_H, HAZE_SEGS, 1, true);
+      const uv = far.getAttribute('uv') as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setY(i, HAZE_FAR_V0 + uv.getY(i) * (1 - HAZE_FAR_V0));
+      uv.needsUpdate = true;
+      far.translate(0, HAZE_FAR_Y - HAZE_Y, 0); // the mesh carries HAZE_Y
+      return far;
+    })(),
+  ]);
   const reflGeo = new THREE.PlaneGeometry(REFL_W, REFL_SPAN);
   reflGeo.rotateX(-Math.PI / 2); // flat on the water: u → +x, v → -z
 
@@ -2042,15 +2453,25 @@ function buildAssets(): SiteAssets {
     transparent: true,
     opacity: 0,
   });
+  // The gondolas are OCCUPIED at night. A dim warm emissive is free — every
+  // Lambert program already carries the emissive uniform, so this adds no
+  // define, no variant and no texture — and it is the difference between a
+  // wheel that is lit and a wheel that is merely pale.
   const cabinMat = new THREE.MeshLambertMaterial({
     vertexColors: true,
+    emissive: 0x33240f,
     transparent: true,
     opacity: 0,
   });
   // The single biggest fragment bill in the scene (a 260-unit disc filling the
-  // lower half of the frame). The night lake's look lives in its texture and
-  // in the additive moon path lying on top of it, not in a PBR specular lobe.
-  const waterMat = new THREE.MeshLambertMaterial({
+  // lower half of the frame) — and now the CHEAPEST per fragment, because it
+  // is unlit. Water is a mirror: at night nothing about it is diffuse, so a
+  // Lambert term over it was both physically wrong and the reason the lake
+  // rendered black (see paintWater). MeshBasic hands the painted canvas
+  // straight to the framebuffer, deletes the lighting loop from the largest
+  // surface on the perf-critical descent, and shares its transparent program
+  // with the haze/reflection/streak planes that are already Basic+map.
+  const waterMat = new THREE.MeshBasicMaterial({
     map: waterTex,
     transparent: true,
     opacity: 0,

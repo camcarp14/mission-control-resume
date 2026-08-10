@@ -13,8 +13,9 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { Waypoint } from '../engine';
+import type { Vec3, Waypoint } from '../engine';
 import { mulberry32 } from '../engine';
+import { FILL_FROM, FILL_INTENSITY, SUN_LIGHT_INTENSITY } from './SpaceEnvironment';
 
 export type SolarBodiesProps = {
   waypoints: Waypoint[];
@@ -28,6 +29,8 @@ export type SolarBodiesProps = {
 };
 
 type BodyProps = { wp: Waypoint; reduced: boolean };
+/** Bodies that carry an atmosphere also need to know where the light is. */
+type LitBodyProps = BodyProps & { sunPos: Vec3 };
 
 /* ---- tunable constants ---------------------------------------------------
  * Spin rates are rad/s — tuned so every body is unmistakably TURNING within
@@ -239,6 +242,43 @@ export const SUN_LIGHT_CUTOFF = 4.2; // × bodyRadius (≈109u) — hard zero, w
 export const SUN_LIGHT_PULSE = 0.12; // ± fraction, split across two detuned sines
 const CORONA_BREATHE = 0.04; // ± scale fraction on the corona sprites
 const CORONA_ROT = 0.01; // rad/s outer corona drift; inner counter-rotates
+/* ---- the sun's photosphere and corona --------------------------------------
+ * The finale was a textured sphere with the emissive channel turned up and two
+ * gaussian halos over it, and the screenshots said so: a flat pancake, edge as
+ * bright as the middle, sitting in a frame-wide brown haze that lifted the
+ * black out of the whole shot and took the in-scene label plates with it.
+ *
+ * Two fixes, and they are the same fix seen from either end.
+ *
+ * LIMB DARKENING. A star is a ball of gas, and a sightline at its edge passes
+ * through a longer, cooler column than one at its centre — so the disc falls
+ * off toward the rim and reddens as it goes. That is the entire difference
+ * between "sphere" and "sticker", and it costs one dot product. It also does
+ * the contrast work for free: the darkened limb drops under the bloom pass's
+ * luminance threshold, so the halo stops swelling off the edge of the disc and
+ * the silhouette becomes crisp.
+ *
+ * A CORONA WITH STRUCTURE. The old halo was a radial gradient with a long
+ * shallow tail — the shape that, spread over a sprite two body-radii wide,
+ * paints the sky beige. The replacement is drawn to a real profile: an
+ * exponential aureole hugging the limb (the light that appears to bend around
+ * the edge) plus seeded radial streamers reaching much further out at a
+ * fraction of the brightness. Same two sprites, same draw calls, no shipped
+ * bytes — and the sky between the streamers goes back to black. */
+const SUN_LIMB_DARKEN = 0.58; // Eddington-ish; 0 is a flat disc, 1 a black rim
+const SUN_GAIN = 2.3; // disc-centre emission — above the bloom threshold on purpose
+const SUN_CELL_CONTRAST = 1.12; // granulation expansion about the map's mid grey
+/* Both are MULTIPLIERS over the map, not replacements for it: white leaves
+ * the photosphere its own colour at disc centre, and the limb value is the
+ * reddening a longer sightline through the gas actually does to it. */
+const SUN_CORE = '#fffdf4';
+const SUN_LIMB = '#ff8c3c';
+/* Sprite reach, in body radii from the centre. The sprite's SCALE is twice
+ * this, since three sizes sprites by full width. */
+const CORONA_REACH = 2.3; // streamers
+const AUREOLE_REACH = 1.34; // the hot ring on the limb
+const CORONA_STREAMERS = 9;
+const CORONA_SEED = 0x50143;
 
 /* Bump relief per textured body — the surface map doubles as its own bump
  * map, which is cheap and honest for these albedos. three r150+ treats
@@ -408,18 +448,11 @@ function makeRadialTexture(stops: ReadonlyArray<readonly [number, string]>): THR
   return tex;
 }
 
-let emberTexCache: THREE.CanvasTexture | null = null;
-/** Ember puff: faint white core through #ff5c37 into deep char — the accent
- *  is allowed here because the nebula IS the fire imagery. */
-function emberTexture(): THREE.CanvasTexture {
-  emberTexCache ??= makeRadialTexture([
-    [0, 'rgba(255,241,230,0.85)'],
-    [0.22, 'rgba(255,92,55,0.5)'],
-    [0.55, 'rgba(42,14,8,0.32)'],
-    [1, 'rgba(0,0,0,0)'],
-  ]);
-  return emberTexCache;
-}
+/* The ember puff that used to live here — a soft #ff5c37 gradient with a long
+ * shallow tail — was the sun's outer corona, and the tail is precisely what
+ * painted the finale's sky beige. The corona now draws its own profile (see
+ * coronaTexture), and the nebula has always had its own atlas, so nothing is
+ * left that wants a gradient shaped like that. */
 
 let glowTexCache: THREE.CanvasTexture | null = null;
 /** Neutral warm-white glow for star haze — warm enough to sit near the ember
@@ -608,6 +641,138 @@ function solarCellTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/* ---- the corona pair ------------------------------------------------------
+ * Both are painted per pixel because the profile that matters here — a hard
+ * exponential off the limb, not a gaussian — is exactly what a canvas radial
+ * gradient cannot express, and the shallow tail of a gradient is what washed
+ * the old finale beige. All randomness is precomputed OUTSIDE the pixel loop,
+ * so this stays a few hundred thousand cheap flops at load and never calls
+ * the PRNG per pixel (the same discipline the nebula atlas records). */
+
+/** Shared painter: `profile(x, angle)` returns alpha at x body-radii out. */
+function paintCorona(
+  reach: number,
+  profile: (x: number, ang: number) => number,
+  ramp: ReadonlyArray<readonly [number, readonly [number, number, number]]>,
+): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  const c = size / 2;
+
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const dx = (px + 0.5 - c) / c;
+      const dy = (py + 0.5 - c) / c;
+      const u = Math.sqrt(dx * dx + dy * dy);
+      const i = (py * size + px) * 4;
+      if (u >= 1) continue; // ImageData starts zeroed — outside is already clear
+      // Feather the sprite's own circular edge to nothing, or the quad's
+      // corners cut a visible disc out of the sky.
+      const edge = smooth01(1, 0.84, u);
+      const a = profile(u * reach, Math.atan2(dy, dx)) * edge;
+      if (a <= 0.002) continue;
+      // Colour by distance, not by alpha: the aureole is near-white and the
+      // far streamers are ember, and interpolating in between is what keeps
+      // the corona from reading as one flat tint.
+      const x = u * reach;
+      let lo = ramp[0] as readonly [number, readonly [number, number, number]];
+      let hi = lo;
+      for (let k = 1; k < ramp.length; k++) {
+        const stop = ramp[k] as readonly [number, readonly [number, number, number]];
+        if (stop[0] >= x) {
+          hi = stop;
+          break;
+        }
+        lo = stop;
+        hi = stop;
+      }
+      const span = hi[0] - lo[0];
+      const t = span > 1e-4 ? Math.min(1, Math.max(0, (x - lo[0]) / span)) : 0;
+      data[i] = lo[1][0] + (hi[1][0] - lo[1][0]) * t;
+      data[i + 1] = lo[1][1] + (hi[1][1] - lo[1][1]) * t;
+      data[i + 2] = lo[1][2] + (hi[1][2] - lo[1][2]) * t;
+      data[i + 3] = Math.min(255, a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+let coronaTexCache: THREE.CanvasTexture | null = null;
+/** The outer corona: a short bright body off the limb plus seeded streamers
+ *  that carry structure out to CORONA_REACH at a fraction of the brightness.
+ *  Nine lobes of varying width and weight, which is enough for the eye to
+ *  read "plasma following a field" and few enough that the counter-rotating
+ *  pair never turns into moiré. */
+function coronaTexture(): THREE.CanvasTexture {
+  if (coronaTexCache) return coronaTexCache;
+  const rand = mulberry32(CORONA_SEED);
+  const lobes = Array.from({ length: CORONA_STREAMERS }, (_, k) => ({
+    // Evenly spaced then jittered: a purely random set clumps, and a clump of
+    // streamers reads as one lopsided smear.
+    ang: (k / CORONA_STREAMERS) * Math.PI * 2 + (rand() - 0.5) * 0.5,
+    // NARROW, and that is the whole point: a first pass at half a radian
+    // apiece overlapped its neighbours into a perfectly smooth ring, which
+    // is the beige donut this work exists to get rid of. At a tenth of a
+    // radian the gaps between them stay black.
+    width: 0.05 + rand() * 0.1,
+    weight: 0.5 + rand() * 0.5,
+  }));
+  coronaTexCache = paintCorona(
+    CORONA_REACH,
+    (x, ang) => {
+      if (x < 0.94) return 0;
+      const h = x - 1;
+      let s = 0;
+      for (const l of lobes) {
+        let d = ang - l.ang;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        s += l.weight * Math.exp((-d * d) / (2 * l.width * l.width));
+      }
+      // Aureole first, streamers second, and the streamer term is the only
+      // one with a long tail — so what survives past ~1.4 radii is structure
+      // rather than haze. Subtracting a floor off the lobe sum is what stops
+      // nine overlapping tails from adding back up into a ring.
+      const plume = Math.max(0, s - 0.12);
+      return Math.min(1, Math.exp(-h / 0.19) * 0.85 + Math.exp(-h / 0.8) * 0.34 * Math.min(1.5, plume));
+    },
+    [
+      [0.94, [255, 244, 216]],
+      [1.15, [255, 190, 108]],
+      [1.6, [235, 108, 46]],
+      [2.3, [128, 44, 20]],
+    ],
+  );
+  return coronaTexCache;
+}
+
+let aureoleTexCache: THREE.CanvasTexture | null = null;
+/** The inner ring: a very tight, very hot band sitting on the silhouette.
+ *  This is the "light bending around the edge" read, and it is also what
+ *  replaces the brightness the limb darkening just took off the disc — the
+ *  sun ends up hotter at the rim than before, over a much smaller area. */
+function aureoleTexture(): THREE.CanvasTexture {
+  if (aureoleTexCache) return aureoleTexCache;
+  aureoleTexCache = paintCorona(
+    AUREOLE_REACH,
+    (x) => (x < 0.9 ? 0 : Math.exp(-(x - 0.98) / 0.1)),
+    [
+      [0.9, [255, 250, 233]],
+      [1.08, [255, 214, 143]],
+      [1.34, [255, 150, 72]],
+    ],
+  );
+  return aureoleTexCache;
+}
+
 let nebulaAtlasCache: THREE.CanvasTexture | null = null;
 /** Three soft turbulent gas blobs packed side by side in one 384x128 atlas —
  *  one texture, so the whole billboard layer stays a single draw call.
@@ -687,50 +852,142 @@ function nebulaAtlas(): THREE.CanvasTexture {
   return tex;
 }
 
-/* ==== ATMOSPHERE — the fresnel limb glow that makes a sphere read as a
-   world. Rendered on a slightly larger BackSide shell so only the rim
-   survives; additive, so it costs one draw and never occludes. ==== */
+/* ==== ATMOSPHERE — the limb glow that makes a sphere read as a world ========
+ *
+ * Still one additive BackSide shell and one draw call, but the glow is now
+ * shaped by the two things a real limb is shaped by, because the previous
+ * fresnel model got both of them backwards and photographed as an outline
+ * stroke rather than as air (live screenshots of Mars and Neptune):
+ *
+ *   ALTITUDE. A fresnel term peaks where the SHELL is tangent to the eye —
+ *   i.e. at the outer edge of the glow — and falls to ~36% of that at the
+ *   planet's own silhouette. So the band was dimmest against the planet,
+ *   brightest in the void, and then cut off hard at the shell's rim: a ring
+ *   standing off the planet with a visible gap under it. Real air is DENSEST
+ *   at the surface and thins away exponentially. So the shader recovers the
+ *   ray's impact parameter — its closest approach to the body centre — and
+ *   drives density off altitude above the limb instead, peaking against the
+ *   surface and dying out well inside the shell so there is no outer edge to
+ *   see at all.
+ *
+ *   THE SUN. The old shell glowed identically all the way round, including
+ *   across the unlit crescent, which is exactly where the eye reads it as a
+ *   drawn outline. Modulating by the limb's own angle to the key light gives
+ *   a bright arc on the day side falling to a whisper of airglow on the night
+ *   side — and, at the crossing, a warm terminator band, which is the
+ *   sunrise line you know from every photograph taken from orbit.
+ *
+ * Both are a handful of ALU on a thin annulus, no new geometry, and every
+ * instance still compiles to the SAME program because the source is shared. */
 
 const ATMOS_VERT = `
-varying vec3 vNormal;
-varying vec3 vView;
+varying vec3 vWorld;
+varying vec3 vCentre;
 void main() {
-  vNormal = normalize(normalMatrix * normal);
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  vView = normalize(-mv.xyz);
-  gl_Position = projectionMatrix * mv;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vWorld = world.xyz;
+  // modelMatrix's translation IS the body centre: every Atmosphere is a
+  // direct child of the group parked at waypoint.bodyPos, so the centre
+  // needs no uniform of its own and can never drift out of sync with it.
+  // (three declares modelMatrix in the vertex prefix only, hence the varying
+  // rather than reading it again in the fragment stage.)
+  vCentre = modelMatrix[3].xyz;
+  gl_Position = projectionMatrix * viewMatrix * world;
 }`;
 
 const ATMOS_FRAG = `
 uniform vec3 uColor;
+uniform vec3 uWarm;
+uniform vec3 uLight;
 uniform float uIntensity;
+uniform float uDusk;
 uniform float uFade;
-varying vec3 vNormal;
-varying vec3 vView;
+uniform float uInner;
+uniform float uOuter;
+varying vec3 vWorld;
+varying vec3 vCentre;
 void main() {
-  float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6) * uFade;
-  gl_FragColor = vec4(uColor * rim * uIntensity, rim * uIntensity);
+  vec3 view = normalize(cameraPosition - vWorld);
+  vec3 d = vWorld - vCentre;
+  // Impact parameter: how far this ray passes from the body centre. On a
+  // sphere's silhouette that is exactly the sphere's radius, which is what
+  // makes the altitude below an honest number rather than a fudge.
+  vec3 perp = d - dot(d, view) * view;
+  float b = length(perp);
+  float alt = (b - uInner) / max(uOuter - uInner, 1e-4);
+
+  // Exponential thinning with height, ramped in across the planet's own limb
+  // so the shell can never paint a disc over the globe if depth sorting ever
+  // puts it in front.
+  float density = exp(-max(alt, 0.0) * 3.4) * smoothstep(-0.05, 0.06, alt);
+
+  // Which way this piece of limb faces relative to the key light.
+  float ndl = dot(perp / max(b, 1e-4), uLight);
+  float day = smoothstep(-0.28, 0.34, ndl);
+  // The terminator band: a narrow lobe either side of the crossing, where a
+  // real atmosphere is both thickest along the ray and reddened by it.
+  float dusk = exp(-ndl * ndl * 11.0) * uDusk;
+  vec3 tint = mix(uColor, uWarm, dusk * 0.75);
+
+  // 0.07 of night-side airglow — a limb that cuts to pure black reads as a
+  // clipped shape, and the faintest rim is what keeps the sphere round.
+  float lit = 0.07 + 0.93 * day;
+  // Belt and braces for the landing. A shell you are INSIDE has no limb, and
+  // the impact parameter above would happily smear a bright band across the
+  // touchdown pad instead — which is the exact artefact the landing fade was
+  // added to kill once already. Folding the guard into the shader means it
+  // does not depend on that ramp staying tuned, and it only bites in the last
+  // few units of the descent, long after the fade has taken over.
+  float clear = smoothstep(uOuter, uOuter * 1.35, length(cameraPosition - vCentre));
+  float a = density * lit * (1.0 + 0.55 * dusk * day) * clear * uIntensity * uFade;
+  gl_FragColor = vec4(tint * a, a);
 }`;
+
+/* Shell height as a fraction of the body radius. Generous on purpose: the
+ * glow now dies out inside the shell instead of at it, so the extra room is
+ * headroom for the falloff, not a thicker-looking band. */
+const ATMOS_THICKNESS = 0.1;
+/* The warm end of every limb — one shared terminator colour, because the
+ * reddening is Rayleigh scattering doing the same thing to every atmosphere
+ * and giving each world its own sunset colour would read as decoration. */
+const ATMOS_WARM = '#ffa869';
 
 function Atmosphere({
   radius,
   color,
+  light,
   intensity = 1,
+  dusk = 1,
   fadeRef,
 }: {
+  /** The BODY's radius — the shell is derived, so the shader knows both. */
   radius: number;
   color: string;
+  /** World-space direction toward the key light for this body. */
+  light: readonly [number, number, number];
   intensity?: number;
+  /** How much sunrise the terminator gets. Earth earns all of it — it is the
+   *  body the camera closes on, and the warm crossing line is the single
+   *  detail that says "photographed from orbit". The gas giants get a
+   *  fraction: at full strength a salmon band around Neptune reads as a
+   *  colour grade rather than as weather. */
+  dusk?: number;
   /** 0 = full shell, 1 = invisible — driven by the landing ramp. */
   fadeRef?: { current: number };
 }) {
+  const outer = radius * (1 + ATMOS_THICKNESS);
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
         uniforms: {
           uColor: { value: new THREE.Color(color) },
+          uWarm: { value: new THREE.Color(ATMOS_WARM) },
+          uLight: { value: new THREE.Vector3() },
           uIntensity: { value: intensity },
+          uDusk: { value: dusk },
           uFade: { value: 1 },
+          uInner: { value: radius },
+          uOuter: { value: outer },
         },
         vertexShader: ATMOS_VERT,
         fragmentShader: ATMOS_FRAG,
@@ -739,8 +996,15 @@ function Atmosphere({
         transparent: true,
         depthWrite: false,
       }),
-    [color, intensity],
+    [color, intensity, dusk, radius, outer],
   );
+  // The key direction is written, never memo-keyed: a fresh [x,y,z] literal
+  // from the caller would otherwise rebuild the material on every render and
+  // hand the compiler a new program mid-flight.
+  useLayoutEffect(() => {
+    const u = material.uniforms['uLight'];
+    if (u) (u.value as THREE.Vector3).set(light[0], light[1], light[2]);
+  }, [material, light]);
   useEffect(() => () => material.dispose(), [material]);
   useFrame(() => {
     const u = material.uniforms['uFade'];
@@ -755,22 +1019,51 @@ function Atmosphere({
   });
   return (
     <mesh material={material}>
-      <sphereGeometry args={[radius, 48, 36]} />
+      <sphereGeometry args={[outer, 48, 36]} />
     </mesh>
   );
 }
 
+/* ---- where the light comes from, per body ---------------------------------
+ * The limb shader needs ONE direction, and guessing it would be worse than a
+ * uniform ring: an atmosphere lit from the wrong side is a lie the eye spots
+ * immediately. So it is derived from the rig itself — the sun point light
+ * (decay 0, so it delivers its full intensity at any range) plus the cool
+ * directional that actually carves the terminators — weighted by the exact
+ * intensities SpaceEnvironment ships. That sum is the dominant irradiance
+ * direction on a lambertian surface, which is to say: the direction the
+ * planet's own shading is already using. */
+const FILL_DIR = new THREE.Vector3(FILL_FROM[0], FILL_FROM[1], FILL_FROM[2]).normalize();
+const _keyV = new THREE.Vector3();
+
+function keyLight(bodyPos: Vec3, sunPos: Vec3): readonly [number, number, number] {
+  _keyV
+    .set(sunPos[0] - bodyPos[0], sunPos[1] - bodyPos[1], sunPos[2] - bodyPos[2])
+    .normalize()
+    .multiplyScalar(SUN_LIGHT_INTENSITY)
+    .addScaledVector(FILL_DIR, FILL_INTENSITY)
+    .normalize();
+  return [_keyV.x, _keyV.y, _keyV.z];
+}
+
 /* Limb tints per world — restrained, never neon; the moon gets none (it has
  * no atmosphere and pretending otherwise reads as a rendering bug). */
-const ATMOS_TINT: Partial<Record<RockyKind, { color: string; intensity: number }>> = {
-  mars: { color: '#c77b57', intensity: 0.5 },
-  jupiter: { color: '#d8c2a0', intensity: 0.55 },
-  neptune: { color: '#5f86e8', intensity: 0.7 },
-};
+const ATMOS_TINT: Partial<Record<RockyKind, { color: string; intensity: number; dusk: number }>> =
+  {
+    mars: { color: '#c77b57', intensity: 0.85, dusk: 0.8 },
+    jupiter: { color: '#d8c2a0', intensity: 0.9, dusk: 0.45 },
+    neptune: { color: '#5f86e8', intensity: 1.15, dusk: 0.4 },
+  };
 
 /* ==== EARTH ==== */
 
-function Earth({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current: number } }) {
+function Earth({
+  wp,
+  reduced,
+  sunPos,
+  landingRef,
+}: LitBodyProps & { landingRef?: { current: number } }) {
+  const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const day = useSurfaceTexture(TEX.earthDay);
   const night = useSurfaceTexture(TEX.earthNight);
   // Clouds drive alpha, not color, so they stay in linear space.
@@ -831,11 +1124,14 @@ function Earth({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current
         />
       </mesh>
       {/* The blue limb is most of what makes it read as HOME — and it doubles
-          as the landing glow on the return approach. */}
+          as the landing glow on the return approach. Earth is the one body
+          the camera gets close to, so it is also where the warm terminator
+          band the shader draws actually reads as a sunrise. */}
       <Atmosphere
-        radius={wp.bodyRadius * 1.07}
+        radius={wp.bodyRadius}
         color="#6f9fe8"
-        intensity={1.15}
+        light={light}
+        intensity={1.7}
         {...(landingRef ? { fadeRef: landingRef } : {})}
       />
     </group>
@@ -855,9 +1151,10 @@ const PLANET_TUNING: Record<RockyKind, { url: string; spin: number; tilt: number
   neptune: { url: '/textures/2k_neptune.webp', spin: 0.18, tilt: 0.49 },
 };
 
-function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
+function Planet({ wp, reduced, sunPos, kind }: LitBodyProps & { kind: RockyKind }) {
   const spec = PLANET_TUNING[kind];
   const tex = useSurfaceTexture(spec.url);
+  const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const ref = useRef<THREE.Mesh>(null);
 
   useFrame((_state, delta) => {
@@ -881,7 +1178,13 @@ function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
         />
       </mesh>
       {tint && (
-        <Atmosphere radius={wp.bodyRadius * 1.06} color={tint.color} intensity={tint.intensity} />
+        <Atmosphere
+          radius={wp.bodyRadius}
+          color={tint.color}
+          light={light}
+          intensity={tint.intensity}
+          dusk={tint.dusk}
+        />
       )}
     </group>
   );
@@ -889,9 +1192,10 @@ function Planet({ wp, reduced, kind }: BodyProps & { kind: RockyKind }) {
 
 /* ==== SATURN ==== */
 
-function Saturn({ wp, reduced }: BodyProps) {
+function Saturn({ wp, reduced, sunPos }: LitBodyProps) {
   const tex = useSurfaceTexture(TEX.saturn);
   const ringTex = useSurfaceTexture(TEX.saturnRing);
+  const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const sphereRef = useRef<THREE.Mesh>(null);
 
   const inner = wp.bodyRadius * 1.35;
@@ -951,7 +1255,7 @@ function Saturn({ wp, reduced }: BodyProps) {
           metalness={0}
         />
       </mesh>
-      <Atmosphere radius={wp.bodyRadius * 1.06} color="#e0cf9e" intensity={0.5} />
+      <Atmosphere radius={wp.bodyRadius} color="#e0cf9e" light={light} intensity={0.8} dusk={0.6} />
     </group>
   );
 }
@@ -2312,9 +2616,67 @@ function Cluster({ wp }: { wp: Waypoint }) {
 
 /* ==== SUN — the finale ==== */
 
+const SUN_VERT = `
+varying vec2 vUv;
+varying vec3 vN;
+varying vec3 vV;
+void main() {
+  vUv = uv;
+  vN = normalize(normalMatrix * normal);
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vV = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const SUN_FRAG = `
+uniform sampler2D uMap;
+uniform vec3 uCore;
+uniform vec3 uLimb;
+uniform float uGain;
+uniform float uDarken;
+uniform float uContrast;
+varying vec2 vUv;
+varying vec3 vN;
+varying vec3 vV;
+void main() {
+  // mu: 1 looking straight down at the disc centre, 0 at the silhouette.
+  float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+  // The map keeps its own colour — an earlier pass replaced it with a ramp
+  // driven by luminance and the disc photographed as ASH, because a granular
+  // greyscale under a near-white core is a cinder, not a star. The map is a
+  // good orange; all this needs to do is expand its cells a little and then
+  // redden them toward the edge.
+  vec3 cell = texture2D(uMap, vUv).rgb;
+  cell = clamp((cell - 0.5) * uContrast + 0.5, 0.0, 1.5);
+  // Eddington limb darkening. The rim of a star is seen through a longer,
+  // cooler column of gas, so it is both dimmer and redder than the centre —
+  // and the dimming is what drops the silhouette back under the bloom pass's
+  // threshold, which is how the disc gets a hard edge instead of a fuzz.
+  float ld = 1.0 - uDarken + uDarken * mu;
+  vec3 tint = mix(uLimb, uCore, pow(mu, 0.6));
+  gl_FragColor = vec4(cell * tint * ld * uGain, 1.0);
+}`;
+
 function Sun({ wp, reduced }: BodyProps) {
   const tex = useSurfaceTexture(TEX.sun);
   const ref = useRef<THREE.Mesh>(null);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uMap: { value: tex },
+          uCore: { value: new THREE.Color(SUN_CORE) },
+          uLimb: { value: new THREE.Color(SUN_LIMB) },
+          uGain: { value: SUN_GAIN },
+          uDarken: { value: SUN_LIMB_DARKEN },
+          uContrast: { value: SUN_CELL_CONTRAST },
+        },
+        vertexShader: SUN_VERT,
+        fragmentShader: SUN_FRAG,
+      }),
+    [tex],
+  );
+  useEffect(() => () => material.dispose(), [material]);
   const coronaOuterRef = useRef<THREE.Sprite>(null);
   const coronaInnerRef = useRef<THREE.Sprite>(null);
   // Solved, not guessed: the intensity that lands SUN_LIGHT_AT_REF on the ship
@@ -2328,13 +2690,17 @@ function Sun({ wp, reduced }: BodyProps) {
     const t = state.clock.elapsedTime;
     const outer = coronaOuterRef.current;
     if (outer) {
-      const s = wp.bodyRadius * 3.6 * (1 + CORONA_BREATHE * Math.sin(t * 0.23));
+      const s = wp.bodyRadius * CORONA_REACH * 2 * (1 + CORONA_BREATHE * Math.sin(t * 0.23));
       outer.scale.set(s, s, 1);
       outer.material.rotation = t * CORONA_ROT;
     }
     const inner = coronaInnerRef.current;
     if (inner) {
-      const s = wp.bodyRadius * 2.5 * (1 + CORONA_BREATHE * Math.sin(t * 0.31 + 1.7));
+      // The aureole breathes at a fraction of the streamers' amplitude: it
+      // sits ON the silhouette, and a ring that visibly pumps in and out
+      // against a hard edge reads as a rendering wobble, not as plasma.
+      const s =
+        wp.bodyRadius * AUREOLE_REACH * 2 * (1 + CORONA_BREATHE * 0.35 * Math.sin(t * 0.31 + 1.7));
       inner.scale.set(s, s, 1);
       // Counter-rotation against the outer layer — the two halos slide over
       // each other, which is what makes the corona read as plasma, not decal.
@@ -2352,36 +2718,36 @@ function Sun({ wp, reduced }: BodyProps) {
           visible stall on the first flight home). Keeping the light at scene
           level makes the light signature constant, which is what lets the
           cull be free. See SUN_LIGHT_* + sunLightIntensity(), exported. */}
-      <mesh ref={ref}>
+      {/* The photosphere: unlit by construction. The star IS the light, and
+          a standard material here was quietly asking the rig to shade it —
+          which is why the disc had no shape of its own to lose. */}
+      <mesh ref={ref} material={material}>
         <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
-        {/* The texture doubles as emissiveMap so granulation survives into
-            the emissive channel; intensity 1.6 is what the Bloom pass keys
-            off for the finale swell. */}
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive="#ffffff"
-          emissiveIntensity={1.6}
-          roughness={1}
-          metalness={0}
-        />
       </mesh>
-      {/* Two corona layers at different scales avoid a hard halo edge; they
-          breathe ±4% and counter-rotate in useFrame (frozen under reduced). */}
-      <sprite ref={coronaOuterRef} scale={[wp.bodyRadius * 3.6, wp.bodyRadius * 3.6, 1]}>
+      {/* Streamers outside, hot ring on the limb inside. They breathe and
+          counter-rotate in useFrame (frozen under reduced motion), so the two
+          structures slide across each other — which is what sells plasma
+          rather than a decal. */}
+      <sprite
+        ref={coronaOuterRef}
+        scale={[wp.bodyRadius * CORONA_REACH * 2, wp.bodyRadius * CORONA_REACH * 2, 1]}
+      >
         <spriteMaterial
-          map={emberTexture()}
+          map={coronaTexture()}
           transparent
-          opacity={0.4}
+          opacity={0.85}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </sprite>
-      <sprite ref={coronaInnerRef} scale={[wp.bodyRadius * 2.5, wp.bodyRadius * 2.5, 1]}>
+      <sprite
+        ref={coronaInnerRef}
+        scale={[wp.bodyRadius * AUREOLE_REACH * 2, wp.bodyRadius * AUREOLE_REACH * 2, 1]}
+      >
         <spriteMaterial
-          map={glowTexture()}
+          map={aureoleTexture()}
           transparent
-          opacity={0.5}
+          opacity={0.9}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -2392,17 +2758,29 @@ function Sun({ wp, reduced }: BodyProps) {
 
 /* ==== DISPATCH ==== */
 
-function Body({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current: number } }) {
+function Body({
+  wp,
+  reduced,
+  sunPos,
+  landingRef,
+}: LitBodyProps & { landingRef?: { current: number } }) {
   switch (wp.kind) {
     case 'earth':
-      return <Earth wp={wp} reduced={reduced} {...(landingRef ? { landingRef } : {})} />;
+      return (
+        <Earth
+          wp={wp}
+          reduced={reduced}
+          sunPos={sunPos}
+          {...(landingRef ? { landingRef } : {})}
+        />
+      );
     case 'moon':
     case 'mars':
     case 'jupiter':
     case 'neptune':
-      return <Planet wp={wp} reduced={reduced} kind={wp.kind} />;
+      return <Planet wp={wp} reduced={reduced} sunPos={sunPos} kind={wp.kind} />;
     case 'saturn':
-      return <Saturn wp={wp} reduced={reduced} />;
+      return <Saturn wp={wp} reduced={reduced} sunPos={sunPos} />;
     case 'asteroids':
       return <Asteroids wp={wp} reduced={reduced} />;
     case 'nebula':
@@ -2421,6 +2799,14 @@ function Body({ wp, reduced, landingRef }: BodyProps & { landingRef?: { current:
 }
 
 export function SolarBodies({ waypoints, reduced, landingRef }: SolarBodiesProps) {
+  // The limb shader wants the sun's world position, and the waypoint contract
+  // already carries it — reading it from the roster here keeps SolarBodies'
+  // props unchanged and means the two can never disagree about where the
+  // scene's key light is.
+  const sunPos = useMemo<Vec3>(
+    () => waypoints.find((w) => w.kind === 'sun')?.bodyPos ?? [0, 0, -1000],
+    [waypoints],
+  );
   return (
     <group>
       {waypoints.map((wp) => (
@@ -2428,6 +2814,7 @@ export function SolarBodies({ waypoints, reduced, landingRef }: SolarBodiesProps
           key={wp.index}
           wp={wp}
           reduced={reduced}
+          sunPos={sunPos}
           {...(landingRef ? { landingRef } : {})}
         />
       ))}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { pilot } from '../content/stations.js';
 
@@ -7,6 +7,36 @@ const smoothstep = (x: number) => {
   const k = Math.min(1, Math.max(0, x));
   return k * k * (3 - 2 * k);
 };
+
+/* The boot overlay's root, by the selector src/ui/primitives.tsx documents as
+ * a load-bearing string and Scene3D already reaches for to know whether the
+ * canvas is still covered. Asking the same question the same way is the point:
+ * one convention with two readers cannot drift, where a second mechanism
+ * (a prop threaded through Flight, a shared context, a timer guessed against
+ * the loader) would be a second thing to keep true. */
+const OVERLAY = 'div.fixed.z-30';
+
+/* The overlay's exit class, from the same component. Waiting for the element
+ * to be REMOVED was the obvious cue and it left a hole: the curtain dissolves
+ * over its own fade before it unmounts, so the scene stood fully revealed with
+ * no identity on it for the length of that fade, and only then did the name
+ * start to rise. Watching the exit BEGIN lets the hero arrive through the
+ * dissolve, which is the beat this was always meant to be.
+ * It is a soft dependency on purpose: whichever of the two signals lands first
+ * releases the hold, so if this class is ever renamed the removal still fires
+ * and the entrance degrades to the late-but-correct version rather than to a
+ * hero that never appears. */
+const OVERLAY_LEAVING = 'pf-leaving';
+
+/* The safety valve, and it is the only reason this is safe to do at all.
+ * Holding the entrance means the hero is INVISIBLE until something releases
+ * it, so "the release never comes" is not a degraded experience, it is a
+ * missing name on the front page. Nothing plausible takes the overlay this
+ * long — it fades on its own clock the moment the loader is quiet, and even
+ * this container's software renderer clears it in ~24s — so the ceiling is
+ * far enough out never to fire on a real visit and near enough to be a
+ * rescue rather than an epitaph. */
+const HOLD_CEILING_MS = 30000;
 
 /**
  * The identity moment: name, role, and status floated over the 3D scene at
@@ -24,6 +54,48 @@ const smoothstep = (x: number) => {
  */
 export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean }) {
   const root = useRef<HTMLDivElement>(null);
+  // Held from the first painted frame, so the entrance starts paused on its
+  // opening keyframe rather than playing to an empty room. See the long note
+  // on .hero-hold in polish.css for what this is worth and why it is a pause.
+  const [held, setHeld] = useState(true);
+
+  useEffect(() => {
+    // The overlay is committed in the same React pass as this component, so by
+    // the time a passive effect runs it is either in the DOM or was never
+    // going to be — a machine with no WebGL renders no BootSequence at all,
+    // and on that rung the deck is on screen the instant it mounts.
+    const overlay = document.querySelector(OVERLAY);
+    if (!overlay?.parentNode) {
+      setHeld(false);
+      return;
+    }
+    let done = false;
+    const release = () => {
+      if (done) return;
+      done = true;
+      obs.disconnect();
+      window.clearTimeout(ceiling);
+      setHeld(false);
+    };
+    // Observers, not polling: the window this waits through is precisely the
+    // one the main thread spends parsing the WebGL chunk and compiling a
+    // hundred-odd shader programs, and that budget has been fought for twice.
+    // An observer costs nothing until the mutations that matter; a
+    // requestAnimationFrame poll would bill a querySelector to every frame of
+    // a stall this repo exists to avoid.
+    const obs = new MutationObserver(() => {
+      const el = document.querySelector(OVERLAY);
+      if (!el || el.classList.contains(OVERLAY_LEAVING)) release();
+    });
+    obs.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+    obs.observe(overlay.parentNode, { childList: true });
+    const ceiling = window.setTimeout(release, HOLD_CEILING_MS);
+    return () => {
+      done = true;
+      obs.disconnect();
+      window.clearTimeout(ceiling);
+    };
+  }, []);
 
   useEffect(() => {
     const apply = (v: number) => {
@@ -40,7 +112,7 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
   }, [t]);
 
   return (
-    <div ref={root} aria-hidden="true" className="hero">
+    <div ref={root} aria-hidden="true" className={held ? 'hero hero-hold' : 'hero'}>
       {/* identity column — three children, staggered in by .hero-in. Mobile
           centers it under the top bar; desktop anchors it LEFT, floated over
           Earth's face, clear of the station panel docked centre-right (the
@@ -114,7 +186,7 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
           exactly the band this occupies (see the mobile block in polish.css),
           so the two are separated by construction rather than by luck. */}
       <div
-        className={`absolute inset-x-0 flex items-center justify-center ${
+        className={`hero-cue absolute inset-x-0 flex items-center justify-center ${
           mobile ? 'bottom-[4.5rem] gap-3' : 'bottom-24 gap-4'
         }`}
       >

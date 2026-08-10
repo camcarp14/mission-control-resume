@@ -546,11 +546,16 @@ const tmpLabelView = new THREE.Vector3();
  * parallel to the image plane, so the box IS the centre ± half a width and
  * half a height at one view depth, and the whole test is two subtractions.
  *
- * Mobile only, and it is the half of the fix that placement cannot do: a
+ * The half of the fix that placement cannot do: a
  * plate is composed for its OWN dock, and from the dock next door it can sit
  * anywhere at all — including straddling the right edge, which is the second
  * screenshot the owner sent. Placement guarantees the plate you are docked at;
  * this guarantees every other one in the frame.
+ *
+ * It ran on phones only at first, because the round that added it had frozen
+ * desktop by explicit instruction. That left a real defect standing at 1440,
+ * where a neighbour's plate was clipping to "FLIGHT PLA" against the right
+ * edge — a giant word cut in half is not less wrong on a big screen.
  */
 function edgeFade(cam: THREE.PerspectiveCamera, pos: THREE.Vector3, spec: LabelSpec): number {
   tmpLabelView.copy(pos).applyMatrix4(cam.matrixWorldInverse);
@@ -580,6 +585,17 @@ function FloatingLabel({
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
 
   useFrame((state) => {
+    // The float is motion — sacred-off under reduced — and off on the phone
+    // too, for a reason that has nothing to do with motion preference: 0.4
+    // world units is ±6px at label depth, and on top of the ±6px the rig's own
+    // breathing already spends, a 36px plate in a 50px strip would ride out of
+    // it and slide behind the card. Desktop has nine hundred pixels of frame to
+    // float in and keeps it. Hoisted here because the edge fade below has to
+    // measure the box where it ACTUALLY is, not where it was authored.
+    const floatY =
+      reduced || mobile
+        ? 0
+        : Math.sin(state.clock.elapsedTime * FLOAT_FREQ + spec.index) * FLOAT_AMP;
     // Distance fade is STATE (where the camera is), not motion — it runs on
     // every rung, including reduced's demand-rendered snap frames.
     const m = matRef.current;
@@ -589,24 +605,16 @@ function FloatingLabel({
       );
       const k = Math.min(1, Math.max(0, (d - FADE_NEAR) / (FADE_FAR - FADE_NEAR)));
       m.opacity = LABEL_OPACITY * (1 - k * k * (3 - 2 * k));
-      // The plate does not float on mobile, so its static position IS where
-      // the box is — no need to read the group back.
-      if (mobile) {
-        m.opacity *= edgeFade(state.camera as THREE.PerspectiveCamera, tmpLabelPos, spec);
-      }
+      // The float displaces the plate from its authored position, so the box
+      // the fade measures has to include it or the two disagree by ±6px at
+      // exactly the moment the plate is closest to leaving the frame.
+      tmpLabelPos.y += floatY;
+      m.opacity *= edgeFade(state.camera as THREE.PerspectiveCamera, tmpLabelPos, spec);
     }
-    // The float is motion — sacred-off under reduced — and it is off on the
-    // phone too, for a reason that has nothing to do with motion preference:
-    // 0.4 world units is ±6px at label depth, and on top of the ±6px the rig's
-    // own breathing already spends, a 36px plate in a 50px strip would ride
-    // out of it and slide behind the card. Desktop has nine hundred pixels of
-    // frame to float in and keeps it.
     if (reduced || mobile) return;
     const g = groupRef.current;
     if (!g) return;
-    g.position.y =
-      spec.position[1] +
-      Math.sin(state.clock.elapsedTime * FLOAT_FREQ + spec.index) * FLOAT_AMP;
+    g.position.y = spec.position[1] + floatY;
   });
 
   return (

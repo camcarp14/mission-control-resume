@@ -20,6 +20,16 @@ export function HUD({
   const station = stations[current];
   return (
     <header className="hud">
+      {/* ---- ONE baseline for the whole masthead ---------------------------
+          The station readout used to be a sibling of this group rather than a
+          member of it, and that one level of nesting was worth 3.5 measured
+          pixels: .hud centres its children, so the tall identity group (a
+          20px display mark) and the short readout (a 14px mono line) were
+          each centred independently and their baselines landed 3.5px apart —
+          two mono eyebrows of the SAME size, in the same bar, sitting on two
+          different lines. Nobody can name that and everybody sees it.
+          Inside one items-baseline group the three runs sit on one line, and
+          the group then centres as a single object. */}
       <span className="flex shrink-0 items-baseline gap-2.5 whitespace-nowrap">
         <span className="font-display text-xl font-bold leading-none text-ink">
           cc<span className="text-cyan">.</span>
@@ -33,15 +43,30 @@ export function HUD({
         <span className="hidden font-mono text-2xs uppercase tracking-widest text-faint sm:inline">
           Mission Control
         </span>
+        {mode === 'flight' && station && (
+          <>
+            {/* The hairline is the grammar the two runs were missing: one
+                says what this console IS, the other says where in it you
+                are, and a bare 10px gap made them read as one ragged
+                sentence.
+                self-baseline, so the tick's foot sits ON the shared baseline
+                and its head lands within a pixel of the eyebrows' cap
+                height — a rule that floats off the type it separates is the
+                thing that makes a separator look bolted on. 0.5rem rather
+                than 8px so it steps with the type on a large display. */}
+            <span
+              aria-hidden="true"
+              className="hidden h-2 w-px shrink-0 self-baseline bg-rule-strong sm:inline-block"
+            />
+            <span className="num hidden whitespace-nowrap font-mono text-2xs uppercase tracking-widest text-dim sm:inline">
+              {station.code}{' '}
+              <span className="text-hud/70">
+                · {current + 1} / {stations.length}
+              </span>
+            </span>
+          </>
+        )}
       </span>
-      {mode === 'flight' && station && (
-        <span className="num hidden whitespace-nowrap font-mono text-2xs uppercase tracking-widest text-dim sm:inline">
-          {station.code}{' '}
-          <span className="text-hud/70">
-            · {current + 1} / {stations.length}
-          </span>
-        </span>
-      )}
       <span className="flex-1" />
       {/* shrink-0 + nowrap on both actions: without them flex-shrink hands
           the overflow back to the type and the labels wrap again the moment
