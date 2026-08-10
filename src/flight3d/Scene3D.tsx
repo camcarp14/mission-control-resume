@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree, invalidate } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
+import { Environment, PerformanceMonitor } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
 import { fovAt, legInto, makePath3, sunApproach, voyage, MOBILE_BREAKPOINT, STEP } from '../engine';
@@ -835,17 +835,72 @@ export function Scene3D({
   const sunLightBase = useMemo(() => sunLightIntensity(sunRadius), [sunRadius]);
   const sunLightRef = useRef<THREE.PointLight>(null);
 
+  /* ---- ADAPTIVE RESOLUTION ------------------------------------------------
+   * `dpr={[1, 2]}` is a CLAMP, not a strategy: it pins the buffer to the
+   * device's own pixel ratio capped at 2 and then never reconsiders. That is
+   * the right answer for a machine that can hold 60fps at that size and the
+   * wrong one for every machine that cannot — and the machines that cannot are
+   * exactly the mid-range phones this is most likely to be opened on, from a
+   * LinkedIn message, on a train. A phone at devicePixelRatio 3 was rendering
+   * 2.25x the pixels of a 1.0 buffer, forever, with no way to give any of them
+   * back.
+   *
+   * The ceiling below reproduces the old behaviour EXACTLY — same cap, same
+   * min against the real device ratio — so a capable machine sees no change at
+   * all. Only a machine that measurably fails to keep up ever renders smaller,
+   * and it climbs back the moment it can. Resolution is the right thing to
+   * spend here because it is the one quality axis a visitor does not consciously
+   * notice; dropped frames on a camera move are the one they do.
+   *
+   * Quantised to quarter steps, because dpr is a live drawing-buffer resize:
+   * reacting to every sample would trade a frame-rate problem for a churn one.
+   * Under reduced motion the loop runs on demand, so there is no frame rate to
+   * measure and the monitor is not mounted — a sampler starved of frames would
+   * conclude the device is dying and drop a still scene to its floor. */
+  const dprCeil = useMemo(() => {
+    const cap = mobile ? 1.5 : 2;
+    return Math.min(cap, typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1);
+  }, [mobile]);
+  const dprFloor = Math.min(1, dprCeil);
+  const [dpr, setDpr] = useState(dprCeil);
+  useEffect(() => setDpr(dprCeil), [dprCeil]);
+  const stepDpr = useCallback(
+    (delta: number) =>
+      setDpr((d) => {
+        const next = Math.min(dprCeil, Math.max(dprFloor, Math.round((d + delta) * 4) / 4));
+        return next === d ? d : next;
+      }),
+    [dprCeil, dprFloor],
+  );
+
   return (
     <Canvas
       // The visual layer is decoration; every fact it shows exists in the DOM
       // panels. Screen readers skip it entirely.
       aria-hidden
       frameloop={reduced ? 'demand' : 'always'}
-      dpr={mobile ? [1, 1.5] : [1, 2]}
+      dpr={dpr}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 50, near: 0.5, far: 2600, position: [0, 0, 6] }}
       style={{ position: 'absolute', inset: 0 }}
     >
+      {/* Measured, not assumed. `bounds` says what this scene considers healthy:
+          a refresh rate at or above 55 is fine and below 40 is not, which is
+          deliberately generous at the top — the goal is to catch a device that
+          is genuinely drowning, not to chase the last few frames on one that is
+          merely busy. `flipflops` is the give-up count: a device that keeps
+          crossing the line in both directions is not one step from healthy, it
+          is oscillating, and pinning it to the floor is kinder than resizing
+          its drawing buffer every second forever. */}
+      {!reduced && (
+        <PerformanceMonitor
+          bounds={() => [40, 55]}
+          flipflops={3}
+          onDecline={() => stepDpr(-0.25)}
+          onIncline={() => stepDpr(0.25)}
+          onFallback={() => setDpr(dprFloor)}
+        />
+      )}
       <Suspense fallback={null}>
         {/* Image-based lighting from a CC0 night HDRI — this is most of the
             difference between "material" and "grey plastic" on the hull and
