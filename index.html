@@ -14,25 +14,20 @@
       name="description"
       content="An interactive flight through Cameron Carpenter's search &amp; ad-tech career — piloted, not scrolled."
     />
-    <!-- ORIGIN — read before changing any URL below.
-         The link gets pasted into Slack and LinkedIn DMs, so the unfurl is part
-         of the first impression, and a scraper follows og:url rather than the
-         URL that was actually pasted. camcarp.com is still the intended home,
-         but its apex currently resolves to 13.248.243.5 / 76.223.105.230 (AWS
-         Global Accelerator) and not to Netlify's apex 75.2.60.5 — it is serving
-         something else entirely, so advertising it today hands every preview to
-         a page that is not this one. Everything below therefore names the
-         origin that verifiably serves this build.
-
-         THE DAY camcarp.com IS CUT OVER TO NETLIFY: confirm with
-         `dig +short camcarp.com` → 75.2.60.5, then swap the host in exactly the
-         five places that carry one — lines 32, 35, 47, 61 and 88 below
-         (canonical, og:url, og:image, twitter:image, and the JSON-LD Person
-         url). Nothing else in this file hard-codes an origin. -->
-    <link rel="canonical" href="https://mission-control-resume.netlify.app/" />
+    <!-- ORIGIN — the cutover happened, and here is the evidence trail so
+         nobody un-flips this on a stale memory: camcarp.com moved onto Netlify
+         DNS (dns1-4.p06.nsone.net), resolves to the same pair of addresses as
+         the netlify.app host, Netlify reports it as the site's primary URL,
+         and the certificate provisioned. Netlify now 301s the netlify.app
+         mirror to camcarp.com, which makes this five-line flip mandatory
+         rather than cosmetic — an og:url that answers with a redirect is a
+         coin flip in some scrapers. The five origin-bearing lines are
+         canonical, og:url, og:image, twitter:image, and the JSON-LD Person
+         url; nothing else in this file hard-codes a host. -->
+    <link rel="canonical" href="https://camcarp.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Mission Control" />
-    <meta property="og:url" content="https://mission-control-resume.netlify.app/" />
+    <meta property="og:url" content="https://camcarp.com/" />
     <meta property="og:title" content="Cameron Carpenter — a résumé you pilot" />
     <meta
       property="og:description"
@@ -44,7 +39,7 @@
          are not optional here: LinkedIn and Slack resolve og:image against
          nothing, and a root-relative path silently yields a text-only card on
          the site whose entire pitch is that it looks spectacular. -->
-    <meta property="og:image" content="https://mission-control-resume.netlify.app/og.jpg?v=2" />
+    <meta property="og:image" content="https://camcarp.com/og.jpg?v=2" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -58,7 +53,7 @@
       name="twitter:description"
       content="An interactive flight through Cameron Carpenter's search &amp; ad-tech career — piloted, not scrolled."
     />
-    <meta name="twitter:image" content="https://mission-control-resume.netlify.app/og.jpg?v=2" />
+    <meta name="twitter:image" content="https://camcarp.com/og.jpg?v=2" />
     <meta
       name="twitter:image:alt"
       content="Cameron Carpenter — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
@@ -89,7 +84,7 @@
         "jobTitle": "Senior Analyst, Search Engine Marketing",
         "worksFor": { "@type": "Organization", "name": "Ovative Group" },
         "sameAs": ["https://www.linkedin.com/in/CameronCarpenter1"],
-        "url": "https://mission-control-resume.netlify.app/"
+        "url": "https://camcarp.com/"
       }
     </script>
     <!--
