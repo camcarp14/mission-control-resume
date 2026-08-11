@@ -141,8 +141,8 @@ function SplashSkeleton() {
           A résumé you pilot.
         </h1>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          One rocket, a flight path of real career artifacts: the work behind an adtech
-          Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+          One rocket, a flight path of real career artifacts: three years of search,
+          measurement, and the systems behind them — flown deliberately, never scrolled. Enter your access
           code to lift off — about four minutes end to end. In a hurry? The PDF is right
           below, no code needed.
         </p>

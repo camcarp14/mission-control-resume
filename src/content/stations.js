@@ -82,7 +82,7 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff \u2014 The Positioning',
     proves:
-      'Performance marketing and revenue operations as one job \u2014 I manage the media spend, and I build the reporting layer that decides where it goes.',
+      'Two jobs that usually sit apart: managing the media investment, and building the reporting layer those investment decisions run on.',
     bullets: [
       'Managed $75M+ in media spend since 2023 across healthcare, retail, and logistics \u2014 six healthcare business units under a Fortune 5 payer, a national retail brand, and a global logistics provider',
       'Day-to-day ownership of budget forecasting, pacing models, and weekly performance analysis, alongside the quarterly business reviews presented to senior stakeholders',
@@ -100,7 +100,7 @@ export const stations = [
     code: 'STN 02',
     title: 'Flight Plan \u2014 The Timeline',
     proves:
-      'Three seats in four years, each with a bigger blast radius: a $63B enterprise integration, then a multi-account search portfolio, then a company of my own on the side.',
+      'Three roles in four years: a $63B enterprise integration, then a multi-account search portfolio, then a company of my own on the side.',
     bullets: [
       'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013now): managed $75M+ in client media spend; drove a 175% YoY increase in enrollments for a national Medicare insurance marketplace during AEP',
       'Zero To Secure \u2014 Founder (2025\u2013now): bootstrapped a DTC e-commerce brand end to end \u2014 full-funnel ownership from positioning and Shopify build to lifecycle, CRM, and conversion rate optimization',
@@ -118,7 +118,7 @@ export const stations = [
     code: 'STN 03',
     title: 'The Stack \u2014 Where I Operate',
     proves:
-      'I work the full chain from auction to warehouse, and I live at the seam where activation meets measurement \u2014 the place where most accounts quietly break.',
+      'I work the full chain from the auction to the warehouse, and spend most of my time where activation meets measurement \u2014 the handoff where reporting problems usually start.',
     bullets: [
       'Hands-on daily across Google Ads, Microsoft Ads, SA360, GA4, Adobe, and Invoca \u2014 plus the SQL, Python, and Apps Script that stitch them together',
       'Ran a full SA360 offboarding end to end: unlinked both engines, stripped tracking templates at five levels, preserved UTM continuity, and pinned down billing so no post-migration fees landed',
@@ -139,7 +139,7 @@ export const stations = [
     code: 'STN 04',
     title: 'Integration \u2014 Signals Into Bidding',
     proves:
-      'When calls, pixels, and platforms disagree, I design the architecture that makes them one system the bidding algorithm can trust.',
+      'When calls, pixels, and platforms disagree, the fix is architectural \u2014 conversion signals structured so the bidding algorithm optimizes toward the outcome that actually matters.',
     bullets: [
       'Structured conversion tracking and bidding signals so campaigns optimized toward lead quality rather than raw volume \u2014 call-quality conversion data, value-based bidding frameworks, and KPI hierarchies tied to downstream pipeline and revenue',
       'Executed a full pixel cutover on two business days\u2019 notice: migrated conversion actions to call-signal sources across both engines ahead of the client\u2019s site transition, flagging the value-based bidding risk in writing',
@@ -156,7 +156,7 @@ export const stations = [
     code: 'STN 05',
     title: 'Pipeline \u2014 The Reporting Backbone',
     proves:
-      'I built the automated reporting, pacing, and forecasting systems multiple client teams now run on \u2014 saving 300+ hours per quarter.',
+      'I built the reporting, pacing, and forecasting systems several client teams now run on, reducing quarterly reporting time by 300+ hours.',
     bullets: [
       'Built \u201cBackbone\u201d: a configurable Google Ads script and Sheets system generating account reporting from declarative config \u2014 binding guards that halt on the wrong account, healthcare modes, and automated failure alerting',
       'Wrote a tie-out assertion suite that gates publishing \u2014 it caught a brand-classification defect routing 100% of a client\u2019s spend to non-brand while every additivity check still passed',
@@ -177,7 +177,7 @@ export const stations = [
     code: 'STN 06',
     title: 'The Dashboard \u2014 Built for a Decision',
     proves:
-      'The dashboard mattered because of what it changed: brand savings were reinvested into Shopping the week the numbers made the case.',
+      'A dashboard is worth what it changes \u2014 this one made the case for reinvesting brand savings into Shopping, and the shift happened that week.',
     bullets: [
       'Designed a multi-client dashboard stack driven by per-client config \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
       'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
@@ -199,24 +199,24 @@ export const stations = [
     code: 'STN 07',
     title: 'The Turnaround \u2014 Flagship Win',
     proves:
-      'A national retail brand\u2019s paid program was bleeding efficiency \u2014 I rebuilt it so spend went down while revenue went up.',
+      'A national retail brand\u2019s paid program was losing efficiency; restructuring it brought spend down 13% while revenue grew 5%.',
     bullets: [
       'Cut spend 13% year over year while growing revenue 5% and improving ROAS 20% \u2014 walked brand CPCs down progressively through bid portfolios rather than cutting reach',
-      'Consistently traced performance discrepancies to root causes \u2014 broken conversion tracking, misconfigured signals, understated platform spend \u2014 resolving each before it reached clients or bidding algorithms',
+      'Traced performance discrepancies to their root causes \u2014 broken conversion tracking, misconfigured signals, understated platform spend \u2014 and resolved them before they reached clients or bidding algorithms',
       'Then redirected the savings into more incremental tactics across the portfolio \u2014 and restructured non-brand post-launch for +86% week-over-week ROAS as CPCs fell 33%',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 08 \u00b7 FIREFIGHT --------------------------------------------------
-  // The incident. SC credibility lives here: the person who finds the silent
-  // failure before the postmortem is scheduled.
+  // The incident. Credibility lives here: the silent failure found and
+  // traced, and the bidding models protected from the window it corrupted.
   {
     id: 'firefight',
     code: 'STN 08',
     title: 'Firefight \u2014 The Incident',
     proves:
-      'When a Medicare account\u2019s conversions went to zero mid-migration, I found the root cause before the postmortem was even scheduled.',
+      'A Medicare account\u2019s conversions went to zero mid-migration \u2014 I traced it to call signals that never carried into the new instance, and kept the bad window out of the bidding models.',
     bullets: [
       'Symptom: campaign conversions flat zero after a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
       'Fix: recreated the conversion actions and applied a data exclusion so the corrupted window could not poison the bidding algorithm',
@@ -233,11 +233,11 @@ export const stations = [
     code: 'STN 09',
     title: 'Force Multiplier \u2014 Enablement',
     proves:
-      'I make the people around me faster \u2014 operating models, curricula, and tooling that outlive every account they were built for.',
+      'Most of what I build is meant for other people to use \u2014 operating models, training, and tooling that stay useful after the account that prompted them.',
     bullets: [
       'Authored the portfolio RACI and growth plan: named first-pass owners per account, escalation paths, QA gates, and growth expectations by level for a five-person team',
       'Managed a summer intern end to end \u2014 wrote a 13-week curriculum mapped to the firm\u2019s leadership competencies, built to grow judgment rather than task completion',
-      'Became the go-to resource on lead generation within the team \u2014 authored the trainings, best practices, and enablement materials used by the broader group',
+      'Authored the lead-generation trainings, best practices, and enablement materials the broader group now works from',
     ],
     artifact: { kind: 'none' },
   },
@@ -250,7 +250,7 @@ export const stations = [
     code: 'STN 10',
     title: 'Instruments \u2014 Education & Stack',
     proves:
-      'The toolkit under the flight deck: a business degree, an operator\u2019s platform stack, and the code to automate both.',
+      'The toolkit behind the work: a business degree, the platform stack I am in daily, and the code that automates the rest.',
     bullets: [
       'University of Wisconsin\u2013Madison \u2014 BBA, double major in Marketing and Risk Management & Insurance (2023)',
       'Platforms: Google Ads \u00b7 Microsoft Ads \u00b7 Tableau \u00b7 Excel',
@@ -268,9 +268,9 @@ export const stations = [
     code: 'STN 11',
     title: 'Docking \u2014 Why Me, Why Now',
     proves:
-      'You need someone who can own a brand\u2019s plan and its numbers on day one \u2014 I have been running that job across a portfolio, and I want the seat.',
+      'I have been doing this job across a portfolio \u2014 owning the plan and the numbers behind it \u2014 and I would like to do it for one brand.',
     bullets: [
-      'Manager-level scope already: $75M+ in media spend managed, the strategic roadmaps behind each account, and junior analysts I developed into named ownership',
+      'Scope to date: $75M+ in media spend managed, the strategic roadmaps behind each account, and junior analysts developed into named account ownership',
       'Week one: map every live campaign to its measurement, sit with the compliance reviewers, and ship one improvement to the brand playbook',
       'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the PDF above has the rest',
     ],
