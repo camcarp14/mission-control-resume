@@ -49,7 +49,7 @@ export function Experience() {
           <a
             className="btn mt-4 inline-block border border-rule bg-panel px-3.5 py-2 text-xs text-ink"
             href="/resume.pdf"
-            download
+            download="Cameron-Carpenter-Resume.pdf"
           >
             Download résumé PDF
           </a>

@@ -436,7 +436,7 @@ function NoCode() {
               <a
                 className="text-ink underline decoration-rule-strong underline-offset-4"
                 href="/resume.pdf"
-                download
+                download="Cameron-Carpenter-Resume.pdf"
               >
                 résumé PDF
               </a>{' '}
@@ -480,8 +480,8 @@ function Splash({ children }: { children: React.ReactNode }) {
         {/* Count-free on purpose: stations.js owns how many stations exist,
             and this copy must match index.html's pre-render byte for byte. */}
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          One rocket, a flight path of real career artifacts: the work behind an adtech
-          Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+          One rocket, a flight path of real career artifacts: three years of search,
+          measurement, and the systems behind them — flown deliberately, never scrolled. Enter your access
           code to lift off — about four minutes end to end. In a hurry? The PDF is right
           below, no code needed.
         </p>
@@ -497,7 +497,7 @@ function PaperRow() {
       <a
         className="btn border border-rule bg-panel px-3.5 py-2 text-xs text-ink"
         href="/resume.pdf"
-        download
+        download="Cameron-Carpenter-Resume.pdf"
       >
         Download résumé PDF
       </a>

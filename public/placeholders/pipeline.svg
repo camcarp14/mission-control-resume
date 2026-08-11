@@ -9,26 +9,30 @@
   <rect width="1200" height="750" fill="url(#dots)"/>
 
   <!-- Header -->
-  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">MEASUREMENT PIPELINE — EVENT FLOW</text>
-  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">RAW LOGS → GOVERNED METRICS</text>
+  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">BACKBONE — GOVERNED REPORTING PIPELINE</text>
+  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">DECLARATIVE CONFIG IN → PUBLISHED NUMBERS OUT · NOTHING SHIPS UNTIL TIE-OUTS PASS</text>
 
   <!-- Sources -->
   <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
-    <rect x="48" y="250" width="180" height="64" rx="3"/>
-    <rect x="48" y="420" width="180" height="64" rx="3"/>
+    <rect x="48" y="230" width="180" height="58" rx="3"/>
+    <rect x="48" y="338" width="180" height="58" rx="3"/>
+    <rect x="48" y="446" width="180" height="58" rx="3"/>
   </g>
   <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
-    <text x="138" y="278">PIXEL / SDK</text>
-    <text x="138" y="448">S2S EVENTS</text>
+    <text x="138" y="255">GOOGLE ADS</text>
+    <text x="138" y="363">MICROSOFT ADS</text>
+    <text x="138" y="471">INTERNAL</text>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
-    <text x="138" y="298">impressions · clicks</text>
-    <text x="138" y="468">conversions · CRM</text>
+    <text x="138" y="273">cost · conv · calls</text>
+    <text x="138" y="381">parity metrics</text>
+    <text x="138" y="489">client feeds · SoT</text>
   </g>
 
-  <!-- Source merge into ingest -->
-  <polyline points="228,282 264,282 264,355 300,355" fill="none" stroke="rgba(255,255,255,0.14)"/>
-  <polyline points="228,452 264,452 264,379 300,379" fill="none" stroke="rgba(255,255,255,0.14)"/>
+  <!-- Source merge into config -->
+  <polyline points="228,259 264,259 264,355 300,355" fill="none" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="228" y1="367" x2="300" y2="367" stroke="rgba(255,255,255,0.14)"/>
+  <polyline points="228,475 264,475 264,379 300,379" fill="none" stroke="rgba(255,255,255,0.14)"/>
 
   <!-- Stages -->
   <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
@@ -38,45 +42,52 @@
     <rect x="960" y="331" width="160" height="72" rx="3"/>
   </g>
   <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
-    <text x="380" y="363">INGEST</text>
-    <text x="600" y="363">VALIDATE</text>
-    <text x="820" y="363">ENRICH</text>
-    <text x="1040" y="363">WAREHOUSE</text>
+    <text x="380" y="363">CONFIG</text>
+    <text x="600" y="363">SCRIPT RUN</text>
+    <text x="820" y="363">TIE-OUT GATES</text>
+    <text x="1040" y="363">PUBLISH</text>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
-    <text x="380" y="383">stream · [Kafka]</text>
-    <text x="600" y="383">schema · dedupe</text>
-    <text x="820" y="383">identity join</text>
-    <text x="1040" y="383">marts · BI</text>
+    <text x="380" y="383">declarative · per client</text>
+    <text x="600" y="383">Ads script + Sheets</text>
+    <text x="820" y="383">assertion suite</text>
+    <text x="1040" y="383">dashboards · pacing</text>
   </g>
 
-  <!-- Critical-path edge — the single accent -->
-  <line x1="460" y1="367" x2="520" y2="367" stroke="#ff5c37" stroke-width="1.5"/>
-  <text x="490" y="352" fill="#ff5c37" font-size="10" letter-spacing="1" text-anchor="middle">[X]B / DAY</text>
+  <line x1="460" y1="367" x2="520" y2="367" stroke="rgba(255,255,255,0.14)"/>
+  <text x="490" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">15+ KPIS</text>
 
   <line x1="680" y1="367" x2="740" y2="367" stroke="rgba(255,255,255,0.14)"/>
-  <text x="710" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">−[X]% DUPES</text>
+  <text x="710" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">DRAFTS</text>
 
-  <line x1="900" y1="367" x2="960" y2="367" stroke="rgba(255,255,255,0.14)"/>
-  <text x="930" y="352" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">MATCH [Y]%</text>
+  <!-- Gate edge — the single accent path -->
+  <line x1="900" y1="367" x2="960" y2="367" stroke="#ff5c37" stroke-width="1.5"/>
+  <text x="930" y="352" fill="#ff5c37" font-size="10" letter-spacing="1" text-anchor="middle">PASS ONLY</text>
 
-  <!-- Side effects below the path -->
-  <line x1="600" y1="403" x2="600" y2="520" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
-  <line x1="1040" y1="403" x2="1040" y2="520" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
+  <!-- Guard + assertion detail below the path -->
+  <line x1="600" y1="403" x2="600" y2="488" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
+  <line x1="820" y1="403" x2="820" y2="488" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
 
   <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
-    <rect x="520" y="520" width="160" height="56" rx="3"/>
-    <rect x="960" y="520" width="160" height="56" rx="3"/>
+    <rect x="440" y="488" width="300" height="124" rx="3"/>
+    <rect x="760" y="488" width="360" height="124" rx="3"/>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.75" font-size="11" letter-spacing="2" text-anchor="middle">
-    <text x="600" y="546">DLQ · ALERTS</text>
-    <text x="1040" y="546">DASHBOARDS</text>
+    <text x="590" y="514">RUN GUARDS</text>
+    <text x="940" y="514">TIE-OUT ASSERTIONS</text>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
-    <text x="600" y="564">lag &gt; [Y] min pages</text>
-    <text x="1040" y="564">SLA ≤ [X] min</text>
+    <text x="590" y="542">binding guard — halts on wrong account</text>
+    <text x="590" y="562">healthcare mode · provisional-day windows</text>
+    <text x="590" y="582">automated failure alerting</text>
+    <text x="940" y="540">brand-share drift bounds · additivity</text>
+    <text x="940" y="558">no feed is not zero — missing ≠ stub ≠ true 0</text>
+  </g>
+  <g fill="#ff5c37" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="940" y="580">caught — brand spend routed 100% to non-brand</text>
+    <text x="940" y="598" fill-opacity="0.75">while every additivity check stayed green</text>
   </g>
 
   <!-- Footer -->
-  <text x="48" y="676" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">FRESHNESS SLA — DASHBOARD ≤ [X] MIN FROM EVENT TIME</text>
+  <text x="48" y="676" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">300+ HOURS RETURNED PER QUARTER · PUBLISHING IS GATED UNTIL EVERY TIE-OUT PASSES</text>
 </svg>

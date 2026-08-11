@@ -6,13 +6,13 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#08090b" />
     <!-- The name leads. A bookmark, a browser-history entry, and a Google
-         search for "Cam Carp" are all keyed off this string, and "Mission
+         search for "Cameron Carpenter" are all keyed off this string, and "Mission
          Control" alone attributes the page to nobody. Role last, so the tab
          still reads when the title is truncated to ~30 characters. -->
-    <title>Cam Carp — Mission Control | Adtech Solutions Consultant</title>
+    <title>Cameron Carpenter — Mission Control | Search & Ad Tech</title>
     <meta
       name="description"
-      content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
+      content="An interactive flight through Cameron Carpenter's search &amp; ad-tech career — piloted, not scrolled."
     />
     <!-- ORIGIN — read before changing any URL below.
          The link gets pasted into Slack and LinkedIn DMs, so the unfurl is part
@@ -33,10 +33,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Mission Control" />
     <meta property="og:url" content="https://mission-control-resume.netlify.app/" />
-    <meta property="og:title" content="Cam Carp — a résumé you pilot" />
+    <meta property="og:title" content="Cameron Carpenter — a résumé you pilot" />
     <meta
       property="og:description"
-      content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
+      content="An interactive flight through Cameron Carpenter's search &amp; ad-tech career — piloted, not scrolled."
     />
     <!-- og.jpg is a real frame of the flight — the Navy Pier finale, posed and
          captured from the running app — with the wordmark composited over the
@@ -44,24 +44,24 @@
          are not optional here: LinkedIn and Slack resolve og:image against
          nothing, and a root-relative path silently yields a text-only card on
          the site whose entire pitch is that it looks spectacular. -->
-    <meta property="og:image" content="https://mission-control-resume.netlify.app/og.jpg" />
+    <meta property="og:image" content="https://mission-control-resume.netlify.app/og.jpg?v=2" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Cam Carp, Adtech Solutions Consultant — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
+      content="Cameron Carpenter — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Cam Carp — a résumé you pilot" />
+    <meta name="twitter:title" content="Cameron Carpenter — a résumé you pilot" />
     <meta
       name="twitter:description"
-      content="An interactive flight through a Solutions Consultant's career — piloted, not scrolled."
+      content="An interactive flight through Cameron Carpenter's search &amp; ad-tech career — piloted, not scrolled."
     />
-    <meta name="twitter:image" content="https://mission-control-resume.netlify.app/og.jpg" />
+    <meta name="twitter:image" content="https://mission-control-resume.netlify.app/og.jpg?v=2" />
     <meta
       name="twitter:image:alt"
-      content="Cam Carp, Adtech Solutions Consultant — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
+      content="Cameron Carpenter — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
     />
     <!-- Icons. Netlify's SPA catch-all (netlify.toml) rewrites every unmatched
          path to index.html, so before these files existed /favicon.ico came
@@ -75,16 +75,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Person schema, so a search for the name can resolve to this page as a
-         person rather than as an untitled web app. Deliberately minimal: there
-         is no sameAs, no email and no address, because inventing a LinkedIn URL
-         or a city would be inventing structured data ABOUT A REAL PERSON — add
-         them here only once Cameron supplies the actual values. -->
+         person rather than as an untitled web app. sameAs and worksFor were
+         withheld until Cameron supplied the real values (inventing structured
+         data about a real person was the line); they came off his own résumé,
+         so they are here now. Still no email or phone — those live behind the
+         gate and on the PDF, not in a machine-readable block every scraper
+         reads. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Person",
-        "name": "Cam Carp",
-        "jobTitle": "Adtech Solutions Consultant",
+        "name": "Cameron Carpenter",
+        "jobTitle": "Senior Analyst, Search Engine Marketing",
+        "worksFor": { "@type": "Organization", "name": "Ovative Group" },
+        "sameAs": ["https://www.linkedin.com/in/CameronCarpenter1"],
         "url": "https://mission-control-resume.netlify.app/"
       }
     </script>
@@ -145,8 +149,8 @@
           <p class="mc-eyebrow">Mission Control</p>
           <h1 class="mc-h1">A résumé you pilot.</h1>
           <p class="mc-intro">
-            One rocket, a flight path of real career artifacts: the work behind an adtech
-            Solutions Consultant, flown deliberately rather than scrolled. Enter your access
+            One rocket, a flight path of real career artifacts: three years of search,
+            measurement, and the systems behind them — flown deliberately, never scrolled. Enter your access
             code to lift off — about four minutes end to end. In a hurry? The PDF is right
             below, no code needed.
           </p>

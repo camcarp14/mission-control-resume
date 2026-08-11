@@ -2,9 +2,9 @@
   <rect width="1200" height="750" fill="#0d0f13"/>
 
   <!-- Header band -->
-  <text x="48" y="72" fill="#e8e6e1" font-size="15" letter-spacing="3">DELIVERY OVERVIEW — [CLIENT]</text>
+  <text x="48" y="72" fill="#e8e6e1" font-size="15" letter-spacing="3">DELIVERY OVERVIEW — GNC · PAID SEARCH</text>
   <rect x="1000" y="48" width="152" height="30" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
-  <text x="1076" y="67" fill="#e8e6e1" fill-opacity="0.6" font-size="11" text-anchor="middle" letter-spacing="1">[LAST 7 DAYS] ▾</text>
+  <text x="1076" y="67" fill="#e8e6e1" fill-opacity="0.6" font-size="11" text-anchor="middle" letter-spacing="1">FIVE-WEEK VIEW ▾</text>
   <line x1="48" y1="100" x2="1152" y2="100" stroke="rgba(255,255,255,0.14)"/>
 
   <!-- KPI tiles -->
@@ -15,111 +15,104 @@
     <rect x="912" y="124" width="258" height="104" rx="3"/>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.5" font-size="10" letter-spacing="2">
-    <text x="68" y="152">SPEND</text>
-    <text x="356" y="152">eCPA</text>
-    <text x="644" y="152">PACING</text>
-    <text x="932" y="152">VIEWABILITY</text>
+    <text x="68" y="152">BRAND ROAS</text>
+    <text x="356" y="152">SPEND — YOY</text>
+    <text x="644" y="152">REVENUE — YOY</text>
+    <text x="932" y="152">NON-BRAND ROAS — WOW</text>
   </g>
   <g fill="#e8e6e1" font-size="27">
-    <text x="68" y="190">$[XXX]K</text>
-    <text x="356" y="190">$[X.XX]</text>
-    <text x="644" y="190">[XX]%</text>
-    <text x="932" y="190">[XX]%</text>
+    <text x="68" y="190">$8.80</text>
+    <text x="356" y="190">−13%</text>
+    <text x="644" y="190">$1.32M</text>
+    <text x="932" y="190">+86%</text>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1">
-    <text x="68" y="212">▲ [X]% VS PLAN</text>
-    <text x="356" y="212">▼ $[X.XX] VS TARGET</text>
-    <text x="644" y="212">ON PACE · DAY [N]/[M]</text>
-    <text x="932" y="212">MRC VIEWABLE</text>
+    <text x="68" y="212">▲ FROM $7.30 · FIVE WEEKS</text>
+    <text x="356" y="212">WALKED DOWN VIA BID PORTFOLIOS</text>
+    <text x="644" y="212">▲ +5% VS $1.26M LY</text>
+    <text x="932" y="212">CPC −33% · CONV RATE +17%</text>
   </g>
 
-  <!-- Delivery trend -->
-  <rect x="48" y="256" width="736" height="316" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
-  <text x="68" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">DELIVERED IMPRESSIONS — DAILY</text>
+  <!-- ROAS vs spend trend -->
+  <rect x="48" y="256" width="736" height="300" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <text x="68" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">BRAND SEARCH — ROAS VS SPEND · WEEKLY</text>
 
   <g stroke="rgba(255,255,255,0.08)">
     <line x1="68" y1="316" x2="764" y2="316"/>
-    <line x1="68" y1="370" x2="764" y2="370"/>
-    <line x1="68" y1="424" x2="764" y2="424"/>
-    <line x1="68" y1="478" x2="764" y2="478"/>
-    <line x1="68" y1="532" x2="764" y2="532"/>
-  </g>
-  <g fill="#e8e6e1" fill-opacity="0.3" font-size="9" letter-spacing="1">
-    <text x="740" y="312">[X]M</text>
-    <text x="740" y="420">[Y]M</text>
+    <line x1="68" y1="376" x2="764" y2="376"/>
+    <line x1="68" y1="436" x2="764" y2="436"/>
+    <line x1="68" y1="496" x2="764" y2="496"/>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.35" font-size="9" letter-spacing="1" text-anchor="middle">
-    <text x="68" y="552">D1</text>
-    <text x="184" y="552">D2</text>
-    <text x="300" y="552">D3</text>
-    <text x="416" y="552">D4</text>
-    <text x="532" y="552">D5</text>
-    <text x="648" y="552">D6</text>
-    <text x="764" y="552">D7</text>
+    <text x="100" y="540">WK 1</text>
+    <text x="258" y="540">WK 2</text>
+    <text x="416" y="540">WK 3</text>
+    <text x="574" y="540">WK 4</text>
+    <text x="732" y="540">WK 5</text>
   </g>
 
-  <!-- Forecast series -->
-  <polyline points="68,470 184,452 300,430 416,408 532,392 648,372 764,352" fill="none" stroke="#e8e6e1" stroke-opacity="0.35" stroke-dasharray="4 4"/>
-  <text x="756" y="366" fill="#e8e6e1" fill-opacity="0.45" font-size="9" letter-spacing="1" text-anchor="end">FORECAST</text>
+  <!-- Spend series — walked down -->
+  <polyline points="100,368 258,388 416,412 574,440 732,462" fill="none" stroke="#e8e6e1" stroke-opacity="0.35" stroke-dasharray="4 4"/>
+  <text x="756" y="484" fill="#e8e6e1" fill-opacity="0.45" font-size="9" letter-spacing="1" text-anchor="end">SPEND −13% YOY</text>
 
-  <!-- Delivered series — the single accent -->
-  <polyline points="68,480 184,440 300,452 416,398 532,406 648,352 764,330" fill="none" stroke="#ff5c37" stroke-width="1.5"/>
-  <circle cx="764" cy="330" r="2.5" fill="#ff5c37"/>
-  <text x="756" y="326" fill="#ff5c37" font-size="9" letter-spacing="1" text-anchor="end">DELIVERED</text>
+  <!-- ROAS series — the single accent -->
+  <polyline points="100,490 258,462 416,424 574,376 732,330" fill="none" stroke="#ff5c37" stroke-width="1.5"/>
+  <circle cx="732" cy="330" r="2.5" fill="#ff5c37"/>
+  <text x="100" y="512" fill="#e8e6e1" fill-opacity="0.45" font-size="9" letter-spacing="1" text-anchor="middle">$7.30</text>
+  <text x="756" y="322" fill="#ff5c37" font-size="9" letter-spacing="1" text-anchor="end">ROAS $8.80</text>
 
-  <!-- Spend by channel -->
-  <rect x="816" y="256" width="336" height="316" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
-  <text x="836" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">SPEND BY CHANNEL</text>
+  <!-- The reinvestment decision -->
+  <rect x="816" y="256" width="336" height="300" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <text x="836" y="286" fill="#e8e6e1" fill-opacity="0.6" font-size="11" letter-spacing="2">THE REINVESTMENT CALL</text>
 
-  <g fill="#e8e6e1" fill-opacity="0.55" font-size="10" letter-spacing="1">
-    <text x="836" y="322">CTV</text>
-    <text x="836" y="368">DISPLAY</text>
-    <text x="836" y="414">VIDEO</text>
-    <text x="836" y="460">AUDIO</text>
-    <text x="836" y="506">NATIVE</text>
+  <rect x="836" y="302" width="296" height="54" rx="3" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.14)"/>
+  <text x="984" y="324" fill="#e8e6e1" fill-opacity="0.75" font-size="11" letter-spacing="2" text-anchor="middle">BRAND CPC WALK-DOWN</text>
+  <text x="984" y="344" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">spend −13% · ROAS $7.30 → $8.80</text>
+
+  <line x1="984" y1="356" x2="984" y2="370" stroke="rgba(255,255,255,0.14)"/>
+
+  <rect x="836" y="370" width="296" height="54" rx="3" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.14)"/>
+  <text x="984" y="392" fill="#e8e6e1" fill-opacity="0.75" font-size="11" letter-spacing="2" text-anchor="middle">SAVINGS REFRAMED</text>
+  <text x="984" y="412" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">portfolio strategy — not a line item</text>
+
+  <line x1="984" y1="424" x2="984" y2="438" stroke="rgba(255,255,255,0.14)"/>
+
+  <rect x="836" y="438" width="296" height="54" rx="3" fill="none" stroke="#ff5c37"/>
+  <text x="984" y="460" fill="#ff5c37" font-size="11" letter-spacing="2" text-anchor="middle">REINVEST → SHOPPING</text>
+  <text x="984" y="480" fill="#e8e6e1" fill-opacity="0.55" font-size="10" letter-spacing="1" text-anchor="middle">the more incremental tactic</text>
+
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="9" letter-spacing="1" text-anchor="middle">
+    <text x="984" y="520">organic absorbed the displaced</text>
+    <text x="984" y="536">brand traffic at no cost</text>
   </g>
-  <g fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.14)">
-    <rect x="916" y="311" width="176" height="14"/>
-    <rect x="916" y="357" width="138" height="14"/>
-    <rect x="916" y="403" width="102" height="14"/>
-    <rect x="916" y="449" width="64" height="14"/>
-    <rect x="916" y="495" width="38" height="14"/>
-  </g>
-  <g fill="#e8e6e1" fill-opacity="0.4" font-size="9" letter-spacing="1">
-    <text x="1100" y="322">[X]%</text>
-    <text x="1062" y="368">[X]%</text>
-    <text x="1026" y="414">[X]%</text>
-    <text x="988" y="460">[X]%</text>
-    <text x="962" y="506">[X]%</text>
-  </g>
 
-  <!-- Line item table -->
-  <rect x="48" y="596" width="1104" height="106" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
+  <!-- Channel table — week over week -->
+  <rect x="48" y="580" width="1104" height="126" fill="none" stroke="rgba(255,255,255,0.14)" rx="3"/>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">
-    <text x="68" y="624">LINE ITEM</text>
-    <text x="560" y="624">IMPS</text>
-    <text x="700" y="624">CLICKS</text>
-    <text x="840" y="624">CTR</text>
-    <text x="960" y="624">eCPA</text>
-    <text x="1080" y="624">PACING</text>
+    <text x="68" y="606">CHANNEL</text>
+    <text x="460" y="606">REVENUE WOW</text>
+    <text x="680" y="606">SPEND WOW</text>
+    <text x="880" y="606">THE READ</text>
   </g>
-  <line x1="48" y1="636" x2="1152" y2="636" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="48" y1="618" x2="1152" y2="618" stroke="rgba(255,255,255,0.14)"/>
   <g fill="#e8e6e1" fill-opacity="0.75" font-size="11">
-    <text x="68" y="660">[PMP — CTV — DEAL-0001]</text>
-    <text x="560" y="660">[XX.X]M</text>
-    <text x="700" y="660">[XX]K</text>
-    <text x="840" y="660">[X.XX]%</text>
-    <text x="960" y="660">$[X.XX]</text>
-    <text x="1080" y="660">[XX]%</text>
+    <text x="68" y="642">BRAND TEXT</text>
+    <text x="460" y="642">+17%</text>
+    <text x="680" y="642">+1%</text>
   </g>
-  <line x1="48" y1="672" x2="1152" y2="672" stroke="rgba(255,255,255,0.08)"/>
+  <text x="880" y="642" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1">efficiency, not volume</text>
+  <line x1="48" y1="652" x2="1152" y2="652" stroke="rgba(255,255,255,0.08)"/>
   <g fill="#e8e6e1" fill-opacity="0.75" font-size="11">
-    <text x="68" y="694">[OPEN — DISPLAY — RON]</text>
-    <text x="560" y="694">[XX.X]M</text>
-    <text x="700" y="694">[XX]K</text>
-    <text x="840" y="694">[X.XX]%</text>
-    <text x="960" y="694">$[X.XX]</text>
-    <text x="1080" y="694">[XX]%</text>
+    <text x="68" y="672">SHOPPING</text>
+    <text x="460" y="672">+2%</text>
+    <text x="680" y="672">−8%</text>
   </g>
-
+  <text x="880" y="672" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1">reinvestment target</text>
+  <line x1="48" y1="682" x2="1152" y2="682" stroke="rgba(255,255,255,0.08)"/>
+  <g fill="#e8e6e1" fill-opacity="0.75" font-size="11">
+    <text x="68" y="700">NON-BRAND</text>
+    <text x="460" y="700">+20%</text>
+    <text x="680" y="700">▲ SCALING</text>
+  </g>
+  <text x="880" y="700" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1">post-restructure scale-up</text>
 </svg>

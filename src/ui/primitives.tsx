@@ -422,7 +422,7 @@ export function PreflightConsole({
           <a
             className="text-dim underline decoration-rule-strong underline-offset-2"
             href="/resume.pdf"
-            download
+            download="Cameron-Carpenter-Resume.pdf"
           >
             PDF
           </a>{' '}

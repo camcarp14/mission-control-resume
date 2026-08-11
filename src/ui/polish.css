@@ -715,7 +715,13 @@ kbd {
    ground. A constraint that comes from the scene has to be measured against
    the scene, not scaled with the text. */
 .hero-name, .hero-name-glow {
-  font-size: clamp(2.125rem, 7vw, 92px);
+  /* Sized for the LONGEST stacked word ("CARPENTER", 9 glyphs), not the whole
+     name: Hero.tsx breaks the name one word per line, so the measure that has
+     to fit is a word, and 9 bold display glyphs at this clamp land almost
+     exactly where the old 8-character single-line handle did. The cap eased
+     92 -> 84 because two stacked lines carry more visual mass than one — at
+     the old cap the name block outweighed the planet beside it. */
+  font-size: clamp(2rem, 6.4vw, 84px);
   letter-spacing: 0.04em;
   white-space: nowrap;
   text-align: center;

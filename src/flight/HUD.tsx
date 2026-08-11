@@ -83,7 +83,7 @@ export function HUD({
       <a
         className="btn primary hudcta shrink-0 whitespace-nowrap rounded border px-3 py-1.5 text-xs sm:px-4"
         href="/resume.pdf"
-        download
+        download="Cameron-Carpenter-Resume.pdf"
       >
         Résumé PDF
       </a>

@@ -3,11 +3,10 @@
 Ranked by expected payoff for the actual goal — getting an adtech SC/SE hiring
 panel to remember this candidate.
 
-> **First, a 30-second edit:** the hero headline reads whatever
-> `pilot.name` says in `src/content/stations.js` (currently the
-> handle-derived placeholder `CAM CARP`, callsign `CC-01` — the callsign is
-> also painted on the rocket's hull livery in `src/flight3d/Rocket3D.tsx`).
-> Set your real name, role line, and status chip there.
+> ~~First, a 30-second edit: set your real name~~ — done: the site carries
+> Cameron Carpenter end to end (hero, metadata, JSON-LD, the og card, the
+> résumé PDF). The `CC-01` callsign painted on the hull livery survives the
+> rename by luck of the initials.
 
 1. **Session replay on the dashboard.** The logbook shows furthest-station; the
    better signal is *dwell per station*. Log `(visit_id, station, ms)` beacons

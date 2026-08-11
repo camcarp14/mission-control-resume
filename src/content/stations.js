@@ -60,231 +60,223 @@
  *  @property {StationArtifact} artifact
  */
 
-/** The pilot identity shown on the hero. EDIT ME — same single-source rule as the stations. */
+/** The pilot identity shown on the hero — same single-source rule as the stations. */
 export const pilot = {
-  name: 'CAM CARP', // hero headline — huge display type; edit to your full name
-  role: 'SOLUTIONS CONSULTANT · ADTECH',
+  // Two words on purpose: Hero.tsx stacks each word of the name on its own
+  // line, so the full name holds the same width the short handle used to.
+  name: 'CAMERON CARPENTER',
+  role: 'SEM CHANNEL LEAD \u00b7 AD TECH',
   status: 'OPEN TO NEW MISSIONS',
   callsign: 'CC-01',
 };
 
 /** @type {Station[]} */
 export const stations = [
-  // -- STN 01 · LIFTOFF ---------------------------------------------------
-  // Your positioning statement. Replace the brackets with your real numbers
-  // and vendor categories — this is the thesis every later station proves.
+  // -- STN 01 \u00b7 LIFTOFF ---------------------------------------------------
+  // The thesis every later station proves. The $75M figure is the owner's
+  // own calculation across his portfolios, stated the way he asked it to be
+  // stated; the interview-safe unpacking is "channel lead on teams
+  // overseeing $75M."
   {
     id: 'liftoff',
     code: 'STN 01',
-    title: 'Liftoff — The Positioning',
+    title: 'Liftoff \u2014 The Positioning',
     proves:
-      'I am the technical translator between ad platforms and revenue — the person who reads the API spec on Monday and explains it to the buyer who signs on Friday.',
+      'I am the technical translator between ad platforms and revenue \u2014 the person who designs the conversion architecture on Monday and defends the numbers to client leadership on Friday.',
     bullets: [
-      '[N] years in programmatic across [DSP / SSP / measurement] vendors — pre-sales, integrations, and the technical side of retention',
-      'Technical seat on [$X]M in closed ARR: discovery, proof-of-concept builds, and security reviews that kept deals moving',
-      'Equally at home in a request log and a QBR deck — the range the rest of this flight is built to prove',
+      'Search channel lead across eight accounts \u2014 six Optum healthcare business units plus GNC and C.H. Robinson \u2014 with final accountability for strategy, output quality, and the client-facing narrative',
+      'Managed $75M in client spend across healthcare, retail, and B2B logistics portfolios',
+      'Equally at home in a conversion-action matrix and a client deep dive \u2014 the range the rest of this flight is built to prove',
     ],
     artifact: { kind: 'none' },
   },
 
-  // -- STN 02 · FLIGHT PLAN -----------------------------------------------
-  // Career timeline, newest first, exactly one metric per role. Resist the
-  // urge to list duties — a hiring manager scans this in four seconds.
+  // -- STN 02 \u00b7 FLIGHT PLAN -----------------------------------------------
+  // Newest first, one headline number per role. The founder line matters as
+  // much as its metric-less neighbours: it is the "more than my years" claim
+  // made concrete \u2014 a whole company run solo, on the side.
   {
     id: 'flight-plan',
     code: 'STN 02',
-    title: 'Flight Plan — The Timeline',
+    title: 'Flight Plan \u2014 The Timeline',
     proves:
-      'A steady climb from support to trusted technical counterpart, with a measurable win at every altitude.',
+      'Three seats in four years, each with a bigger blast radius: a $63B enterprise integration, then a multi-account search portfolio, then a company of my own on the side.',
     bullets: [
-      '[Company C] — Senior Solutions Consultant ([YYYY]–now): technical lead on [N] enterprise evaluations with a [X]% win rate when attached',
-      '[Company B] — Solutions Engineer ([YYYY]–[YYYY]): cut integration go-live from [X weeks] to [Y days] by [standardizing the onboarding runbook]',
-      '[Company A] — Technical Account Manager ([YYYY]–[YYYY]): owned [N] accounts through [a platform migration] at [X]% retention',
+      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013now): search channel lead on a multi-account healthcare portfolio; drove a 175% YoY increase in Medicare enrollments during AEP',
+      'Zero To Secure \u2014 Founder (2025\u2013now): bootstrapped a DTC brand end to end \u2014 positioning, Shopify build, SEO, and AI-assisted operations as a solo operator',
+      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration, managing a 2,400-user project platform',
     ],
     artifact: { kind: 'none' },
   },
 
-  // -- STN 03 · THE STACK -------------------------------------------------
-  // Your map of the programmatic ecosystem with your operating zone marked.
-  // Replace the placeholder SVG with a real diagram export at 1200x750 —
-  // the point is showing you can draw the supply chain from memory.
+  // -- STN 03 \u00b7 THE STACK -------------------------------------------------
+  // The ecosystem map with his operating zone marked. The diagram is the
+  // real chain he works \u2014 engines, call intelligence, analytics, warehouse \u2014
+  // not a borrowed programmatic poster.
   {
     id: 'the-stack',
     code: 'STN 03',
-    title: 'The Stack — Ecosystem Map',
+    title: 'The Stack \u2014 Where I Operate',
     proves:
-      'I can draw the whole programmatic supply chain from memory — and mark exactly where I add leverage.',
+      'I work the full chain from auction to warehouse, and I live at the seam where activation meets measurement \u2014 the place where most accounts quietly break.',
     bullets: [
-      'Hands-on across the chain: [DSP] campaign architecture, [SSP] deal troubleshooting, [ad server] trafficking, [CDP] audience plumbing',
-      'Clean-room literate: built [a match-rate analysis / conversion lift study] in [ADH / LiveRamp / Habu] for [an enterprise advertiser]',
+      'Hands-on daily across Google Ads, Microsoft Ads, SA360, GA4, Adobe, and Invoca \u2014 plus the SQL, Python, and Apps Script that stitch them together',
+      'Ran a full SA360 offboarding end to end: unlinked both engines, stripped tracking templates at five levels, preserved UTM continuity, and pinned down billing so no post-migration fees landed',
+      'Platform-versus-source-of-truth reconciliation as standard practice \u2014 caught a ~$40K spend understatement in a connector and a GA4 filter gap the platform numbers hid',
     ],
     artifact: {
       kind: 'image',
       src: '/placeholders/stack-map.svg',
-      alt: 'Map of the programmatic ecosystem from advertiser to publisher, with my operating zone marked across CDP, DSP, and clean room',
+      alt: 'Search and measurement stack map: Google Ads and Microsoft Ads feeding call intelligence, analytics, and the reporting warehouse, with the activation\u2013measurement seam marked as the operating zone.',
     },
   },
 
-  // -- STN 04 · INTEGRATION -----------------------------------------------
-  // Your best API integration story — S2S conversion sync, CRM-to-DSP
-  // audience push, a header bidding wrapper debug. Keep the bullets at the
-  // request-response level: endpoints, dedupe keys, retry semantics. Point
-  // href at the real doc (sanitized) — it is the strongest artifact here.
+  // -- STN 04 \u00b7 INTEGRATION ------------------------------------------------
+  // The deepest technical artifact. No public doc exists for client work, so
+  // the copy carries the station alone \u2014 better no link than a fake one.
   {
     id: 'integration',
     code: 'STN 04',
-    title: 'Integration — The S2S Conversion Sync',
+    title: 'Integration \u2014 Signals Into Bidding',
     proves:
-      'When the deal needed a server-to-server conversion sync, I read the spec, wrote the sample requests, and got both engineering teams to yes.',
+      'When calls, pixels, and platforms disagree, I design the architecture that makes them one system the bidding algorithm can trust.',
     bullets: [
-      'Scoped the flow: client backend POSTs events to [/v2/conversions], we dedupe on [transaction_id], forward to the DSP inside [X min] at a [Y]% match rate',
-      'Wrote the integration doc both sides actually used — auth, retry semantics ([exponential backoff on 5xx only]), and a sandbox with canned responses',
-      '[Advertiser] activated [$X]/month in spend within [N weeks] of go-live',
+      'Designed the Invoca spoken-phrase conversion architecture for two Medicare accounts \u2014 phrase buckets and a conversion-action matrix that let bidding optimize toward call quality instead of raw call volume',
+      'Executed a full pixel cutover on two business days\u2019 notice: migrated conversion actions to call-signal sources across both engines ahead of the client\u2019s site transition, flagging the value-based bidding risk in writing',
+      'Caught a silent post-migration defect \u2014 new campaigns had inherited different default conversion actions than their SA360 predecessors, quietly pulling extraneous signals into optimization',
     ],
-    artifact: {
-      kind: 'link',
-      href: 'https://example.com/replace-me',
-      label: 'View the integration doc',
-    },
+    artifact: { kind: 'none' },
   },
 
-  // -- STN 05 · PIPELINE --------------------------------------------------
-  // The measurement or reporting pipeline you built or ran, with scale
-  // numbers. Replace the placeholder SVG with a real architecture export —
-  // event volume and freshness SLA are the two numbers that land.
+  // -- STN 05 \u00b7 PIPELINE --------------------------------------------------
+  // The automation story. "Backbone" is his named, real system; the 300+
+  // hours figure comes straight off the r\u00e9sum\u00e9.
   {
     id: 'pipeline',
     code: 'STN 05',
-    title: 'Pipeline — Events to Answers',
+    title: 'Pipeline \u2014 The Reporting Backbone',
     proves:
-      'I have moved billions of ad events from raw logs to a report a marketer can defend in a budget meeting.',
+      'I moved three client portfolios from hand-built reporting to governed automation \u2014 and gave a quarter of reporting time back to the team, 300+ hours at a stroke.',
     bullets: [
-      '[X]B events/day from [bid logs, impression trackers, conversion pixels] through [Kafka / Kinesis] into [BigQuery / Snowflake]',
-      'Cut the duplicate rate from [X]% to [Y]% by [keying dedupe on impression_id plus a timestamp bucket]',
-      'Freshness SLA: dashboards within [X min] of event time, with alerting when lag exceeds [Y min]',
+      'Built \u201cBackbone\u201d: a configurable Google Ads script and Sheets system generating account reporting from declarative config \u2014 binding guards that halt on the wrong account, healthcare modes, and automated failure alerting',
+      'Wrote a tie-out assertion suite that gates publishing \u2014 it caught a brand-classification defect routing 100% of a client\u2019s spend to non-brand while every additivity check still passed',
+      '\u201cNo feed is not zero\u201d: missing data, placeholders, and true zeroes are distinct states, so a dead feed surfaces as a loud warning instead of rendering as $0 performance',
     ],
     artifact: {
       kind: 'image',
       src: '/placeholders/pipeline.svg',
-      alt: 'Data pipeline diagram from pixel and server-side event sources through ingest, dedupe, and identity join into the warehouse and reporting',
+      alt: 'Backbone reporting pipeline: ad engines flowing through a config-driven script layer and tie-out assertion gates into dashboards and pacing.',
     },
   },
 
-  // -- STN 06 · THE DASHBOARD ---------------------------------------------
-  // A stakeholder dashboard is only as good as the decision it changed —
-  // lead with that decision. Replace the placeholder SVG with a real
-  // (sanitized) screenshot of the dashboard itself.
+  // -- STN 06 \u00b7 THE DASHBOARD ----------------------------------------------
+  // The dashboard matters because of what it changed \u2014 the reinvestment
+  // decision is the story, the artifact is the evidence.
   {
-    id: 'the-dashboard',
+    id: 'dashboard',
     code: 'STN 06',
-    title: 'The Dashboard — Built for a Decision',
+    title: 'The Dashboard \u2014 Built for a Decision',
     proves:
-      'The dashboard mattered because of what it changed — [client] moved [$X] of budget the week it shipped.',
+      'The dashboard mattered because of what it changed: brand savings were reinvested into Shopping the week the numbers made the case.',
     bullets: [
-      'Built for the [VP of Media]: pacing, eCPA, and viewability by [channel and deal ID] on one screen, no export required',
-      'Surfaced that [PMP deals] were underdelivering forecast by [X]% — budget reallocated within [one flight cycle]',
-      'Adopted by [N] account teams, retiring [a weekly spreadsheet ritual] that cost [X hours/week]',
+      'Designed a multi-client dashboard stack driven by per-client config \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
+      'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
+      'Traced brand Shopping cannibalization to its query source and negated it, letting the more efficient Brand Text campaign capture the traffic instead',
     ],
     artifact: {
       kind: 'image',
       src: '/placeholders/dashboard.svg',
-      alt: 'Stakeholder dashboard showing spend, eCPA, pacing, and viewability KPIs with delivery trend and spend-by-channel breakdowns',
+      alt: 'Multi-client paid search dashboard: spend, ROAS, pacing, and channel mix with the brand-efficiency reinvestment decision annotated.',
     },
   },
 
-  // -- STN 07 · THE CLOSE -------------------------------------------------
-  // Your flagship pre-sales win, told as discovery, technical validation,
-  // objection, signature. One deal, told well, beats five listed.
+  // -- STN 07 \u00b7 THE TURNAROUND ---------------------------------------------
+  // The flagship win, told discovery \u2192 intervention \u2192 result. Every number
+  // here is from the client-facing recap: this is the station a hiring
+  // panel quotes back.
   {
     id: 'the-close',
     code: 'STN 07',
-    title: 'The Close — Flagship Win',
+    title: 'The Turnaround \u2014 Flagship Win',
     proves:
-      'On a [$X]M [DSP / measurement] deal the technical evaluation WAS the deal — and I ran it end to end.',
+      'A flagship retail brand program was bleeding efficiency \u2014 I rebuilt it so spend went down while revenue went up.',
     bullets: [
-      'Discovery: mapped the client stack in two calls and found the wedge — [their attribution vendor could not read walled-garden data]',
-      'Validation: ran a [N]-week POC against live campaigns and beat [the agreed success metric] with margin',
-      'Objection: security flagged [data residency]; closed it with [a regional-processing architecture doc] — signature inside [the quarter]',
+      'Launched brand bid portfolios and walked CPCs down progressively: spend \u221213% year over year while revenue rose 5% ($1.32M vs $1.26M) and ROAS improved from $7.30 to $8.80',
+      'Reframed the savings as portfolio strategy, not a line item \u2014 budget reinvested into Shopping as the more incremental tactic while organic absorbed displaced brand traffic at no cost',
+      'Restructured non-brand and right-sized targets post-launch: +86% week-over-week ROAS as CPCs fell 33% and conversion rate rose 17%',
     ],
     artifact: { kind: 'none' },
   },
 
-  // -- STN 08 · FIREFIGHT -------------------------------------------------
-  // A production incident you debugged under pressure. The shape that
-  // lands: symptom with dollars at stake, root cause with the proof method,
-  // fix with the retention outcome. Tracking outages, discrepancy spikes,
-  // and consent-mode breakage all belong here.
+  // -- STN 08 \u00b7 FIREFIGHT --------------------------------------------------
+  // The incident. SC credibility lives here: the person who finds the silent
+  // failure before the postmortem is scheduled.
   {
     id: 'firefight',
     code: 'STN 08',
-    title: 'Firefight — The Incident',
+    title: 'Firefight \u2014 The Incident',
     proves:
-      'When [a top account]\'s conversion tracking went dark mid-flight, I found the root cause before the postmortem was even scheduled.',
+      'When a Medicare account\u2019s conversions went to zero mid-migration, I found the root cause before the postmortem was even scheduled.',
     bullets: [
-      'Symptom: conversions down [X]% overnight with spend unchanged — client threatening to pause [$X]/month',
-      'Root cause: [a browser privacy change] silently truncated [the click ID parameter]; proved it by [diffing request logs across browser versions]',
-      'Shipped [a first-party redirect fallback] in [X hours]; account retained and renewed at [+Y]%',
+      'Symptom: campaign conversions flat zero after a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
+      'Fix: recreated the conversion actions and applied a data exclusion so the corrupted window could not poison the bidding algorithm',
+      'Same reflex across the portfolio: surfaced an account bidding toward lead forms with zero recorded conversions YTD, and a $24 max-CPC cap quietly strangling a brand portfolio',
     ],
     artifact: { kind: 'none' },
   },
 
-  // -- STN 09 · FORCE MULTIPLIER ------------------------------------------
-  // Enablement docs, training, or internal tools — with adoption numbers,
-  // because "wrote docs" is a duty and "[N] SEs use it monthly" is a win.
-  // Point href at the real hub, a Loom, or a sanitized sample doc.
+  // -- STN 09 \u00b7 FORCE MULTIPLIER -------------------------------------------
+  // The manager-without-the-title station \u2014 the one that answers "more than
+  // my years." Operating models, curricula, firm-wide enablement.
   {
     id: 'force-multiplier',
     code: 'STN 09',
-    title: 'Force Multiplier — Enablement',
+    title: 'Force Multiplier \u2014 Enablement',
     proves:
-      'I make the people around me faster — the docs and tools I build outlive every deal they were built for.',
+      'I make the people around me faster \u2014 operating models, curricula, and tooling that outlive every account they were built for.',
     bullets: [
-      'Wrote [the API troubleshooting runbook] now used by [N] SEs — new-hire ramp on [integrations] down from [X weeks] to [Y days]',
-      'Built [a tag-validation tool] run [N times/month]; escalations to engineering down [X]%',
-      'Ran [monthly enablement] on [programmatic fundamentals]; [N] AEs certified on [the technical demo]',
-    ],
-    artifact: {
-      kind: 'link',
-      href: 'https://example.com/replace-me',
-      label: 'Browse the enablement hub',
-    },
-  },
-
-  // -- STN 10 · CERTS & INSTRUMENTS ---------------------------------------
-  // Certifications and tool belt. Keep each bullet a compact
-  // 'CERT — issuer — year' string; the station renders them as a rack, not
-  // prose. Lead with the certs an adtech hiring manager recognizes.
-  {
-    id: 'certs-instruments',
-    code: 'STN 10',
-    title: 'Certs & Instruments',
-    proves:
-      'The paper matches the practice — certified where it counts, current where the industry moves.',
-    bullets: [
-      '[Display & Video 360 Certification] — Google — [YYYY]',
-      '[Edge Academy Executive Certificate] — The Trade Desk — [YYYY]',
-      '[Digital Ad Operations Certification] — IAB — [YYYY]',
+      'Authored the portfolio RACI and growth plan: named first-pass owners per account, escalation paths, QA gates, and growth expectations by level for a five-person team',
+      'Managed a summer intern end to end \u2014 wrote a 13-week curriculum mapped to the firm\u2019s leadership competencies, built to grow judgment rather than task completion',
+      'Built the search sections of a firm-wide Holistic Search 101 training deck used well beyond my own account teams',
     ],
     artifact: { kind: 'none' },
   },
 
-  // -- STN 11 · DOCKING ---------------------------------------------------
-  // The why-me close, written for an adtech SC/SE hiring manager, ending in
-  // a contact CTA. Replace the mailto with your real address — this is the
-  // one link on the site that must never 404.
+  // -- STN 10 \u00b7 INSTRUMENTS ------------------------------------------------
+  // Education and the toolkit. No invented certifications: the r\u00e9sum\u00e9
+  // carries none, so this station carries the degree and the stack instead.
+  {
+    id: 'certs-instruments',
+    code: 'STN 10',
+    title: 'Instruments \u2014 Education & Stack',
+    proves:
+      'The toolkit under the flight deck: a business degree, an operator\u2019s platform stack, and the code to automate both.',
+    bullets: [
+      'University of Wisconsin\u2013Madison \u2014 BBA, double major in Marketing and Risk Management & Insurance (2023)',
+      'Platforms: Google Ads \u00b7 Microsoft Ads \u00b7 SA360 \u00b7 GA4 \u00b7 Adobe \u00b7 Invoca \u00b7 Tableau \u00b7 Supermetrics',
+      'Code & analysis: SQL \u00b7 Python \u00b7 Apps Script \u00b7 reporting automation \u00b7 forecasting \u00b7 AI-assisted workflows',
+    ],
+    artifact: { kind: 'none' },
+  },
+
+  // -- STN 11 \u00b7 DOCKING ----------------------------------------------------
+  // The close. This is the one link on the site that must never fail, and
+  // the contact line is deliberately ALSO plain text \u2014 a dead mail client
+  // must not be the only way to reach him.
   {
     id: 'docking',
     code: 'STN 11',
-    title: 'Docking — Why Me, Why Now',
+    title: 'Docking \u2014 Why Me, Why Now',
     proves:
-      'You need someone who can carry the technical half of the deal on day one — that is the job I have been doing and the job I want.',
+      'You need someone who can carry the technical half of the conversation on day one \u2014 I have been doing that job without the title, and I want the seat.',
     bullets: [
-      'Week one: [shadow every active technical evaluation, audit the demo environment, ship one fix to the POC playbook]',
-      'The pattern across every station behind you: translate, prove, close — [N] years of making ad infrastructure legible to buyers',
+      'Manager-level scope already: an operating model I authored, an intern I grew into named account ownership, and the escalation layer on every measurement-sensitive change',
+      'Week one: shadow every active technical evaluation, audit the demo environment\u2019s measurement, and ship one fix to the playbook',
+      'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the PDF above has the rest',
     ],
     artifact: {
       kind: 'link',
-      href: 'mailto:you@example.com',
+      href: 'mailto:cam.carp14@gmail.com',
       label: 'Start the conversation',
     },
   },

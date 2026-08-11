@@ -9,67 +9,111 @@
   <rect width="1200" height="750" fill="url(#dots)"/>
 
   <!-- Header -->
-  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">THE STACK — PROGRAMMATIC ECOSYSTEM MAP</text>
-  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">MONEY FLOWS LEFT TO RIGHT · DATA FLOWS BOTH WAYS</text>
+  <text x="48" y="64" fill="#e8e6e1" font-size="15" letter-spacing="4">THE STACK — SEARCH &amp; MEASUREMENT CHAIN</text>
+  <text x="48" y="88" fill="#e8e6e1" fill-opacity="0.5" font-size="11" letter-spacing="2">SPEND FLOWS LEFT TO RIGHT · TRUTH IS RECONCILED AT EVERY SEAM</text>
 
-  <!-- Supply chain spine -->
-  <line x1="225" y1="378" x2="285" y2="378" stroke="rgba(255,255,255,0.14)"/>
-  <line x1="455" y1="378" x2="515" y2="378" stroke="rgba(255,255,255,0.14)"/>
-  <line x1="685" y1="378" x2="745" y2="378" stroke="rgba(255,255,255,0.14)"/>
-  <line x1="915" y1="378" x2="975" y2="378" stroke="rgba(255,255,255,0.14)"/>
+  <!-- Column eyebrows -->
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2" text-anchor="middle">
+    <text x="173" y="150">01 · ENGINES</text>
+    <text x="457" y="150">02 · MGMT &amp; SCRIPTS</text>
+    <text x="741" y="150">03 · MEASUREMENT</text>
+    <text x="1025" y="150">04 · WAREHOUSE / BI</text>
+  </g>
 
+  <!-- Chain spine -->
+  <line x1="298" y1="271" x2="332" y2="271" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="582" y1="271" x2="616" y2="271" stroke="rgba(255,255,255,0.14)"/>
+  <line x1="866" y1="271" x2="900" y2="271" stroke="rgba(255,255,255,0.14)"/>
+
+  <!-- 01 · Engines -->
   <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
-    <rect x="55" y="340" width="170" height="76" rx="3"/>
-    <rect x="285" y="340" width="170" height="76" rx="3"/>
-    <rect x="515" y="340" width="170" height="76" rx="3"/>
-    <rect x="745" y="340" width="170" height="76" rx="3"/>
-    <rect x="975" y="340" width="170" height="76" rx="3"/>
-  </g>
-
-  <g fill="#e8e6e1" font-size="13" letter-spacing="2" text-anchor="middle">
-    <text x="140" y="374">ADVERTISER</text>
-    <text x="370" y="374">DSP</text>
-    <text x="600" y="374">EXCHANGE</text>
-    <text x="830" y="374">SSP</text>
-    <text x="1060" y="374">PUBLISHER</text>
-  </g>
-  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
-    <text x="140" y="396">brand · budget</text>
-    <text x="370" y="396">bids · audiences</text>
-    <text x="600" y="396">auction · openRTB</text>
-    <text x="830" y="396">yield · deals</text>
-    <text x="1060" y="396">ad server · inventory</text>
-  </g>
-
-  <!-- Data layer above the spine -->
-  <line x1="370" y1="214" x2="370" y2="340" stroke="rgba(255,255,255,0.14)"/>
-  <line x1="830" y1="214" x2="830" y2="340" stroke="rgba(255,255,255,0.14)"/>
-
-  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
-    <rect x="275" y="150" width="190" height="64" rx="3"/>
-    <rect x="735" y="150" width="190" height="64" rx="3"/>
+    <rect x="48" y="204" width="250" height="58" rx="3"/>
+    <rect x="48" y="280" width="250" height="58" rx="3"/>
   </g>
   <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
-    <text x="370" y="178">CDP</text>
-    <text x="830" y="178">MEASUREMENT</text>
+    <text x="173" y="230">GOOGLE ADS</text>
+    <text x="173" y="306">MICROSOFT ADS</text>
   </g>
   <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
-    <text x="370" y="198">audiences · consent</text>
-    <text x="830" y="198">verification · attribution</text>
+    <text x="173" y="248">search · shopping · pmax</text>
+    <text x="173" y="324">search · import parity</text>
   </g>
 
-  <!-- Collaboration layer below the spine -->
-  <line x1="445" y1="540" x2="380" y2="416" stroke="rgba(255,255,255,0.14)"/>
-  <line x1="525" y1="540" x2="590" y2="416" stroke="rgba(255,255,255,0.14)"/>
+  <!-- 02 · Management & scripts -->
+  <rect x="332" y="168" width="250" height="58" rx="3" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 4"/>
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="332" y="242" width="250" height="58" rx="3"/>
+    <rect x="332" y="316" width="250" height="58" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="457" y="194" fill-opacity="0.55">SA360</text>
+    <text x="457" y="268">APPS SCRIPT</text>
+    <text x="457" y="342">BACKBONE</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="457" y="212">offboarded — led the full exit</text>
+    <text x="457" y="286">automation · QA tooling</text>
+    <text x="457" y="360">in-house · config-driven reporting</text>
+  </g>
 
-  <rect x="370" y="540" width="230" height="64" rx="3" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)"/>
-  <text x="485" y="568" fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">CLEAN ROOM</text>
-  <text x="485" y="588" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">data collab · lift</text>
+  <!-- 03 · Measurement -->
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="616" y="168" width="250" height="58" rx="3"/>
+    <rect x="616" y="242" width="250" height="58" rx="3"/>
+    <rect x="616" y="316" width="250" height="58" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="741" y="194">INVOCA</text>
+    <text x="741" y="268">GA4</text>
+    <text x="741" y="342">ADOBE</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="741" y="212">spoken-phrase call intel</text>
+    <text x="741" y="286">web analytics · events</text>
+    <text x="741" y="360">client source of truth</text>
+  </g>
+
+  <!-- 04 · Warehouse / BI -->
+  <g fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)">
+    <rect x="900" y="168" width="250" height="58" rx="3"/>
+    <rect x="900" y="242" width="250" height="58" rx="3"/>
+    <rect x="900" y="316" width="250" height="58" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" font-size="12" letter-spacing="2" text-anchor="middle">
+    <text x="1025" y="194">SUPERMETRICS</text>
+    <text x="1025" y="268">TABLEAU</text>
+    <text x="1025" y="342">DASHBOARDS</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="1025" y="212">connectors → warehouse</text>
+    <text x="1025" y="286">exec + team views</text>
+    <text x="1025" y="360">pacing · holistic search</text>
+  </g>
 
   <!-- Operating zone — the single accent -->
   <g stroke="#ff5c37" fill="none">
-    <rect x="250" y="128" width="372" height="502" rx="8" stroke-dasharray="6 6" stroke-opacity="0.9"/>
+    <rect x="318" y="126" width="562" height="268" rx="8" stroke-dasharray="6 6" stroke-opacity="0.9"/>
   </g>
-  <text x="256" y="656" fill="#ff5c37" font-size="11" letter-spacing="2">WHERE I OPERATE — activation · integration · measurement seam</text>
+  <text x="318" y="420" fill="#ff5c37" font-size="11" letter-spacing="2">WHERE I OPERATE — the seam where activation meets measurement</text>
 
+  <!-- Client lanes — the quiet row -->
+  <text x="48" y="518" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">CLIENT LANES</text>
+  <g fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.14)">
+    <rect x="48" y="534" width="356" height="56" rx="3"/>
+    <rect x="422" y="534" width="356" height="56" rx="3"/>
+    <rect x="796" y="534" width="356" height="56" rx="3"/>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.75" font-size="11" letter-spacing="2" text-anchor="middle">
+    <text x="226" y="558">HEALTHCARE</text>
+    <text x="600" y="558">RETAIL</text>
+    <text x="974" y="558">B2B LOGISTICS</text>
+  </g>
+  <g fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="1" text-anchor="middle">
+    <text x="226" y="578">six Optum business units</text>
+    <text x="600" y="578">GNC</text>
+    <text x="974" y="578">C.H. Robinson · Freight Quote</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="48" y="676" fill="#e8e6e1" fill-opacity="0.45" font-size="10" letter-spacing="2">$75M IN CLIENT SPEND MANAGED ACROSS THE THREE LANES</text>
 </svg>

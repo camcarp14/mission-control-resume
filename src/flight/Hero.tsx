@@ -146,13 +146,26 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
           <span className="hero-rule w-10 sm:w-24" />
         </div>
 
-        {/* the name: blurred glow copy behind the crisp gradient-glass layer */}
+        {/* The name: blurred glow copy behind the crisp gradient-glass layer.
+            Each WORD gets its own line, deliberately: the identity moved from
+            an 8-character handle to an 18-character full name, and at the
+            hero's 92px cap a single nowrap line would want ~1,090px — wider
+            than the whole left column, and wider than a phone. Stacked,
+            "CARPENTER" at full size holds almost exactly the width the old
+            handle held, so the composition the owner signed off survives the
+            real name. Splitting on spaces (not a <br> in the data) keeps
+            stations.js pure content and degrades to one line for any
+            single-word name. */}
         <div className="relative">
-          <span className="hero-name-glow absolute inset-0 block font-display font-bold uppercase leading-none">
-            {pilot.name}
+          <span aria-hidden="true" className="hero-name-glow absolute inset-0 block font-display font-bold uppercase leading-[0.95]">
+            {pilot.name.split(' ').map((w) => (
+              <span key={w} className="block">{w}</span>
+            ))}
           </span>
-          <span className="hero-name relative block font-display font-bold uppercase leading-none">
-            {pilot.name}
+          <span className="hero-name relative block font-display font-bold uppercase leading-[0.95]">
+            {pilot.name.split(' ').map((w) => (
+              <span key={w} className="block">{w}</span>
+            ))}
           </span>
         </div>
 

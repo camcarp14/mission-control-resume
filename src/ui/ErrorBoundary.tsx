@@ -120,7 +120,7 @@ function Failed({ what }: { what: string }) {
             <a
               className="btn border border-rule bg-panel px-3 py-1.5 text-xs text-ink"
               href="/resume.pdf"
-              download
+              download="Cameron-Carpenter-Resume.pdf"
             >
               Download résumé PDF
             </a>
