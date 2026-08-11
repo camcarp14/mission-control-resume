@@ -65,7 +65,7 @@ export const pilot = {
   // Two words on purpose: Hero.tsx stacks each word of the name on its own
   // line, so the full name holds the same width the short handle used to.
   name: 'CAMERON CARPENTER',
-  role: 'PERFORMANCE MEDIA LEADER',
+  role: 'PERFORMANCE MARKETING \u00b7 REV OPS',
   status: 'OPEN TO NEW MISSIONS',
   callsign: 'CC-01',
 };
@@ -82,11 +82,11 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff \u2014 The Positioning',
     proves:
-      'I turn media investment into measured customer growth \u2014 strategy and execution as one job, in categories where compliance is not optional.',
+      'Performance marketing and revenue operations as one job \u2014 I manage the media spend, and I build the reporting layer that decides where it goes.',
     bullets: [
-      'Direct paid media strategy, planning, and investment across a portfolio representing $75M+ in client media spend \u2014 six healthcare business units under a Fortune 5 payer, a national retail brand, and a global logistics provider',
-      'Deep in regulated healthcare marketing: Medicare patient acquisition, qualified-outcome measurement, and compliant creative governance',
-      'Equally at home in a brand plan and a conversion-action matrix \u2014 the range the rest of this flight is built to prove',
+      'Managed $75M+ in media spend since 2023 across healthcare, retail, and logistics \u2014 six healthcare business units under a Fortune 5 payer, a national retail brand, and a global logistics provider',
+      'Day-to-day ownership of budget forecasting, pacing models, and weekly performance analysis, alongside the quarterly business reviews presented to senior stakeholders',
+      'Particular depth in the backend reporting layer that connects platform, analytics, and CRM data into dashboards and automated deliverables',
     ],
     artifact: { kind: 'none' },
   },
@@ -102,9 +102,9 @@ export const stations = [
     proves:
       'Three seats in four years, each with a bigger blast radius: a $63B enterprise integration, then a multi-account search portfolio, then a company of my own on the side.',
     bullets: [
-      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013now): direct paid media strategy and investment across a $75M+ portfolio; drove a 175% YoY increase in Medicare enrollments during AEP',
-      'Zero To Secure \u2014 Founder (2025\u2013now): bootstrapped a DTC brand end to end \u2014 positioning, Shopify build, SEO, and AI-assisted operations as a solo operator',
-      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration, managing a 2,400-user project platform',
+      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013now): managed $75M+ in client media spend; drove a 175% YoY increase in enrollments for a national Medicare insurance marketplace during AEP',
+      'Zero To Secure \u2014 Founder (2025\u2013now): bootstrapped a DTC e-commerce brand end to end \u2014 full-funnel ownership from positioning and Shopify build to lifecycle, CRM, and conversion rate optimization',
+      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration within a highly matrixed organization, administering a 2,400-user project platform',
     ],
     artifact: { kind: 'none' },
   },
@@ -141,9 +141,9 @@ export const stations = [
     proves:
       'When calls, pixels, and platforms disagree, I design the architecture that makes them one system the bidding algorithm can trust.',
     bullets: [
-      'Designed the Invoca spoken-phrase conversion architecture for two Medicare accounts \u2014 phrase buckets and a conversion-action matrix that let bidding optimize toward call quality instead of raw call volume',
+      'Structured conversion tracking and bidding signals so campaigns optimized toward lead quality rather than raw volume \u2014 call-quality conversion data, value-based bidding frameworks, and KPI hierarchies tied to downstream pipeline and revenue',
       'Executed a full pixel cutover on two business days\u2019 notice: migrated conversion actions to call-signal sources across both engines ahead of the client\u2019s site transition, flagging the value-based bidding risk in writing',
-      'Ran a disciplined test-and-learn program on platform AI \u2014 quantified emerging AI-driven ad formats head-to-head against incumbent tactics on spend and ROI, and gated automation pilots behind conversion-signal readiness',
+      'Ran a disciplined test-and-learn program: new ad formats and automation quantified head-to-head against incumbent tactics on spend and ROI, with pilots gated behind conversion-signal readiness',
     ],
     artifact: { kind: 'none' },
   },
@@ -156,11 +156,11 @@ export const stations = [
     code: 'STN 05',
     title: 'Pipeline \u2014 The Reporting Backbone',
     proves:
-      'I moved three client portfolios from hand-built reporting to governed automation \u2014 and gave a quarter of reporting time back to the team, 300+ hours at a stroke.',
+      'I built the automated reporting, pacing, and forecasting systems multiple client teams now run on \u2014 saving 300+ hours per quarter.',
     bullets: [
       'Built \u201cBackbone\u201d: a configurable Google Ads script and Sheets system generating account reporting from declarative config \u2014 binding guards that halt on the wrong account, healthcare modes, and automated failure alerting',
       'Wrote a tie-out assertion suite that gates publishing \u2014 it caught a brand-classification defect routing 100% of a client\u2019s spend to non-brand while every additivity check still passed',
-      'Built structured, versioned account briefs designed for an AI to read \u2014 each statement carrying its implication, confidence, and source \u2014 so analysis starts from maintained truth instead of a re-explained account; the guardrails are engineered so an invented number cannot ship',
+      'Data-integrity checks are built into each system \u2014 they cut the reporting errors that had previously reached client deliverables, and they surface a dead feed as a warning instead of a $0',
     ],
     artifact: {
       kind: 'image',
@@ -201,9 +201,9 @@ export const stations = [
     proves:
       'A national retail brand\u2019s paid program was bleeding efficiency \u2014 I rebuilt it so spend went down while revenue went up.',
     bullets: [
-      'Launched brand bid portfolios and walked CPCs down progressively: spend \u221213% year over year while revenue rose 5% ($1.32M vs $1.26M) and ROAS improved from $7.30 to $8.80',
-      'Reframed the savings as portfolio strategy, not a line item \u2014 budget reinvested into Shopping as the more incremental tactic while organic absorbed displaced brand traffic at no cost',
-      'Restructured non-brand and right-sized targets post-launch: +86% week-over-week ROAS as CPCs fell 33% and conversion rate rose 17%',
+      'Cut spend 13% year over year while growing revenue 5% and improving ROAS 20% \u2014 walked brand CPCs down progressively through bid portfolios rather than cutting reach',
+      'Consistently traced performance discrepancies to root causes \u2014 broken conversion tracking, misconfigured signals, understated platform spend \u2014 resolving each before it reached clients or bidding algorithms',
+      'Then redirected the savings into more incremental tactics across the portfolio \u2014 and restructured non-brand post-launch for +86% week-over-week ROAS as CPCs fell 33%',
     ],
     artifact: { kind: 'none' },
   },
@@ -237,7 +237,7 @@ export const stations = [
     bullets: [
       'Authored the portfolio RACI and growth plan: named first-pass owners per account, escalation paths, QA gates, and growth expectations by level for a five-person team',
       'Managed a summer intern end to end \u2014 wrote a 13-week curriculum mapped to the firm\u2019s leadership competencies, built to grow judgment rather than task completion',
-      'Built the search sections of a firm-wide Holistic Search 101 training deck used well beyond my own account teams',
+      'Became the go-to resource on lead generation within the team \u2014 authored the trainings, best practices, and enablement materials used by the broader group',
     ],
     artifact: { kind: 'none' },
   },
@@ -253,8 +253,8 @@ export const stations = [
       'The toolkit under the flight deck: a business degree, an operator\u2019s platform stack, and the code to automate both.',
     bullets: [
       'University of Wisconsin\u2013Madison \u2014 BBA, double major in Marketing and Risk Management & Insurance (2023)',
-      'Platforms: Google Ads \u00b7 Microsoft Ads \u00b7 SA360 \u00b7 GA4 \u00b7 Adobe \u00b7 Invoca \u00b7 Tableau \u00b7 ClickUp',
-      'Media & analytics: media planning & investment \u00b7 budget & pacing \u00b7 test-and-learn design \u00b7 value-based bidding \u00b7 SQL \u00b7 Python \u00b7 AI workflow engineering',
+      'Platforms: Google Ads \u00b7 Microsoft Ads \u00b7 Tableau \u00b7 Excel',
+      'Analytics & ops: SQL \u00b7 Python \u00b7 reporting automation \u00b7 funnel analysis \u00b7 forecasting \u00b7 AI workflows',
     ],
     artifact: { kind: 'none' },
   },
@@ -270,7 +270,7 @@ export const stations = [
     proves:
       'You need someone who can own a brand\u2019s plan and its numbers on day one \u2014 I have been running that job across a portfolio, and I want the seat.',
     bullets: [
-      'Manager-level scope already: strategy and investment across a $75M+ portfolio, an operating model I authored, and talent I developed into named account ownership',
+      'Manager-level scope already: $75M+ in media spend managed, the strategic roadmaps behind each account, and junior analysts I developed into named ownership',
       'Week one: map every live campaign to its measurement, sit with the compliance reviewers, and ship one improvement to the brand playbook',
       'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the PDF above has the rest',
     ],
