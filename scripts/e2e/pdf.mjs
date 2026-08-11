@@ -70,8 +70,17 @@ async function checkLinkVisible(page, cell) {
   );
 }
 
-/** Rail-jump to station n and wait for the dot to become current, then settle. */
+/** Rail-jump to station n and wait for the dot to become current, then settle.
+ *
+ *  The 30s ceilings are a harness guard, not a bar (run-all's own doctrine).
+ *  Both waits poll on the page's rAF, and at 2560x1200 under SwiftShader —
+ *  3.1M pixels rasterised on CPU, in a browser that has already flown a full
+ *  390px pass — the compositor can freeze past 10s wholesale, which read as
+ *  "panel never mounted" when an instrumented probe shows the panel mounted
+ *  and visible at t+0 from the click. The measured wall time is printed so a
+ *  future red can tell a genuine hang from a slow poll at a glance. */
 async function railJump(page, n) {
+  const t0 = Date.now();
   await page.click(`nav[aria-label="Stations"] button:nth-child(${n})`);
   await page.waitForFunction(
     (i) => {
@@ -79,9 +88,10 @@ async function railJump(page, n) {
       return !!dot && dot.getAttribute('aria-current') === 'step';
     },
     n,
-    { timeout: 10000 },
+    { timeout: 30000 },
   );
-  await page.waitForSelector(`section.panel[aria-label^="Station ${n}:"]`, { timeout: 10000 });
+  await page.waitForSelector(`section.panel[aria-label^="Station ${n}:"]`, { timeout: 30000 });
+  console.log(`  railJump(${n}) waits took ${Date.now() - t0}ms`);
   await sleep(SETTLE);
 }
 
