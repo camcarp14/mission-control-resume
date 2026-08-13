@@ -103,7 +103,7 @@ try {
 
   // ---- (1) gate --------------------------------------------------------
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#g-code');
+  await page.waitForSelector('#g-name');
   await scan(page, 'gate');
 
   // ---- unlock into the flight -------------------------------------------

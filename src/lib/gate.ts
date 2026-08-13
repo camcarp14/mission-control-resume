@@ -15,14 +15,11 @@ const KEY = 'mc.visit';
 export type GateFields = {
   name: string;
   company: string;
-  role: string;
-  email: string;
-  code: string;
 };
 
 export type RedeemResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid_code' | 'rate_limited' | 'unreachable' };
+  | { ok: false; reason: 'rate_limited' | 'unreachable' };
 
 export type Restore =
   | { state: 'none' }
@@ -64,7 +61,11 @@ export function prefetchSupabase(): void {
   else setTimeout(warm, 300);
 }
 
-export async function redeem(f: GateFields): Promise<RedeemResult> {
+// beginVisit replaces redeem_access_code: no code, no gate — just a name and
+// company (both may be blank) logged the same way, minting the same bearer
+// token. The only failure the visitor can hit now is rate_limited (bot flood)
+// or unreachable (my Supabase is down); "wrong code" no longer exists.
+export async function beginVisit(f: GateFields): Promise<RedeemResult> {
   if (OFFLINE_DEV) {
     store({ visitId: 'offline-preview', token: 'offline', offline: true });
     validatedThisSession = true;
@@ -72,18 +73,15 @@ export async function redeem(f: GateFields): Promise<RedeemResult> {
   }
   try {
     const sb = await getSupabase();
-    const { data, error } = await sb.rpc('redeem_access_code', {
-      p_code: f.code,
+    const { data, error } = await sb.rpc('begin_visit', {
       p_name: f.name,
       p_company: f.company,
-      p_role: f.role,
-      p_email: f.email || null,
       p_user_agent: navigator.userAgent,
     });
     if (error) return { ok: false, reason: 'unreachable' };
     const d = data as { ok: boolean; reason?: string; visit_id?: string; token?: string };
     if (!d?.ok || !d.visit_id || !d.token) {
-      return { ok: false, reason: d?.reason === 'rate_limited' ? 'rate_limited' : 'invalid_code' };
+      return { ok: false, reason: d?.reason === 'rate_limited' ? 'rate_limited' : 'unreachable' };
     }
     store({ visitId: d.visit_id, token: d.token });
     validatedThisSession = true;

@@ -187,9 +187,9 @@ if (pass < results.length) {
   );
   console.log(
     dim(
-      'Two more things this script cannot see, both one line of SQL in the Supabase editor:\n' +
+      'One more thing this script cannot see, a single line of SQL in the Supabase editor:\n' +
         "  · rotate the dashboard passcode away from the seeded 'liftoff'\n" +
-        '  · deactivate the seeded DEMO-K7M3 access code once real per-company codes exist\n',
+        '    (the sign-in itself is open now — no access codes to manage)\n',
     ),
   );
   process.exit(1);

@@ -1,55 +1,21 @@
 import { useState } from 'react';
 import { ENV_PRESENT, OFFLINE_DEV } from '../lib/supabase';
-import { prefetchSupabase, redeem, type GateFields } from '../lib/gate';
-import { ErrorState, Expand } from '../ui/primitives';
+import { prefetchSupabase, beginVisit, type GateFields } from '../lib/gate';
+import { ErrorState } from '../ui/primitives';
 
 /**
- * The splash. An invitation, not a wall: three short fields, a code, and three
- * permanent exits (the PDF, the promise of a no-email policy, and — for the
- * person who was forwarded this link with no code attached — an honest "no
- * code?" answer that is never a dead end). The Supabase chunk warms in the
- * background while the visitor types; the flight chunk stays untouched until
- * the code clears — that ordering is part of the gate's security story, not an
- * optimization.
+ * The splash — and as of round 23 it is a sign-in, not a gate. Two optional
+ * fields (name, company) and one button that always opens: there is no access
+ * code, nothing is required, and "Begin the flight" works with the form left
+ * blank. The name/company still ride to the logbook so the owner can see who
+ * came, but they are a courtesy the visitor may decline, not a toll. The PDF
+ * remains a first-class second exit. The Supabase chunk warms while the
+ * visitor reads; the flight chunk stays unfetched until they press the
+ * button — the same lazy-load ordering, now an optimization rather than a
+ * lock.
  */
 
-type Status = 'idle' | 'checking' | 'invalid_code' | 'rate_limited' | 'unreachable';
-
-// ============================================================================
-// TEMPORARY DEV BYPASS — kept on purpose, but no longer shown to strangers.
-//
-// It renders in `npm run dev`, and on the deployed site ONLY when the URL
-// carries ?dev (…netlify.app/?dev, camcarp.com/?dev). That second trigger is
-// the whole point: iteration happens on the real deploy, not on localhost, so
-// gating this on import.meta.env.DEV alone would have deleted the affordance
-// from the only place it was actually used. A recruiter arriving at the bare
-// URL never sees it — which matters, because what they were seeing was the
-// author's own un-actioned TODO in a dashed red box on the first screen.
-//
-// Still NOT a security bypass: it calls the real redeem_access_code RPC with
-// the seeded demo code, so RLS, rate-limiting and logging all still apply. The
-// code string is compiled into the JS either way; hiding the button is about
-// what the first screen SAYS, and the server is what keeps the door shut.
-// Delete the flag, the handler and the <button> together when you're done.
-// Search "TEMPORARY DEV BYPASS" to find every piece.
-const DEV_BYPASS_CODE = 'DEMO-K7M3';
-// Read once at module scope, not per render: the query string cannot change
-// without a navigation, and the window guard keeps this import-safe for any
-// non-browser evaluation (tests, a future prerender pass).
-const DEV_QUICK_START =
-  import.meta.env.DEV ||
-  (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('dev'));
-// ============================================================================
-
-/**
- * The one thing this file still needs from a human: a real address to send
- * someone who wants their own code. stations.js is still carrying a
- * `mailto:you@example.com` placeholder, and a fake contact link on the first
- * screen is worse than none — it turns "ask me" into a bounced email. So the
- * affordance is built and wired below, and stays hidden until this constant
- * is a real mailto:/LinkedIn URL. One line to go live.
- */
-const CONTACT_HREF: string | null = null;
+type Status = 'idle' | 'checking' | 'rate_limited' | 'unreachable';
 
 // `focus:outline-none` used to live at the end of this string, leaving keyboard
 // users with a 1px border shift as their only focus feedback on the one form
@@ -220,7 +186,7 @@ function Label({ children, htmlFor }: { children: string; htmlFor: string }) {
 }
 
 export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
-  const [f, setF] = useState<GateFields>({ name: '', company: '', role: '', email: '', code: '' });
+  const [f, setF] = useState<GateFields>({ name: '', company: '' });
   const [status, setStatus] = useState<Status>('idle');
 
   const set = (k: keyof GateFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -230,26 +196,7 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
     e?.preventDefault();
     if (status === 'checking') return;
     setStatus('checking');
-    const res = await redeem({ ...f, code: f.code.trim() });
-    if (res.ok) onUnlocked();
-    else setStatus(res.reason);
-  };
-
-  // TEMPORARY DEV BYPASS — see the block near Status above. Builds the fields
-  // inline (not via setF + submit) so it doesn't race React's async state
-  // batching; still goes through the exact same redeem() call as the form.
-  const devQuickStart = async () => {
-    if (status === 'checking') return;
-    const devFields: GateFields = {
-      name: 'Dev Preview',
-      company: 'Internal',
-      role: 'Builder',
-      email: '',
-      code: DEV_BYPASS_CODE,
-    };
-    setF(devFields);
-    setStatus('checking');
-    const res = await redeem(devFields);
+    const res = await beginVisit(f);
     if (res.ok) onUnlocked();
     else setStatus(res.reason);
   };
@@ -278,92 +225,45 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
         </p>
       )}
 
-      <form className="stagger mt-8" onSubmit={submit} noValidate={OFFLINE_DEV}>
+      <form className="stagger mt-8" onSubmit={submit} noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="g-name">Name</Label>
+            <Label htmlFor="g-name">Name — optional</Label>
             <input
               id="g-name"
               className={field}
               autoComplete="name"
-              required
+              placeholder="So I know who stopped by"
               value={f.name}
               onChange={set('name')}
               onFocus={prefetchSupabase}
             />
           </div>
           <div>
-            <Label htmlFor="g-company">Company</Label>
+            <Label htmlFor="g-company">Company — optional</Label>
             <input
               id="g-company"
               className={field}
               autoComplete="organization"
-              required
+              placeholder="Where you're writing from"
               value={f.company}
               onChange={set('company')}
-            />
-          </div>
-          <div>
-            <Label htmlFor="g-role">Role</Label>
-            <input
-              id="g-role"
-              className={field}
-              // Two examples, not three: "Recruiter · Hiring manager · Panelist"
-              // measured ~234px against ~224px of usable field on the desktop
-              // two-column layout and clipped mid-word on "Panelist". Two
-              // examples set the pattern and clear every width tested (390,
-              // 1440, 2560) with room to spare.
-              placeholder="Recruiter · Hiring manager"
-              value={f.role}
-              onChange={set('role')}
-            />
-          </div>
-          <div>
-            <Label htmlFor="g-email">Email — optional</Label>
-            <input
-              id="g-email"
-              className={field}
-              type="email"
-              autoComplete="email"
-              placeholder="Only if you'd like a reply"
-              value={f.email}
-              onChange={set('email')}
+              onFocus={prefetchSupabase}
             />
           </div>
         </div>
 
-        <div className="mt-4">
-          <Label htmlFor="g-code">Access code</Label>
-          <input
-            id="g-code"
-            className={`${field} font-mono uppercase tracking-widest`}
-            required
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="COMPANY-XXXX"
-            value={f.code}
-            onChange={set('code')}
-            aria-describedby={status === 'invalid_code' || status === 'rate_limited' ? 'g-code-err' : undefined}
-          />
-          {status === 'invalid_code' && (
-            <p id="g-code-err" className="mt-2 text-xs leading-relaxed text-accent">
-              That code isn't recognized. Codes are case-insensitive — check for a typo, or ask
-              your contact for a fresh one. The PDF below needs no code at all.
-            </p>
-          )}
-          {status === 'rate_limited' && (
-            <p id="g-code-err" className="mt-2 text-xs leading-relaxed text-accent">
-              Too many attempts from this network in the last minute. Give it sixty seconds and
-              try again — or take the PDF below.
-            </p>
-          )}
-        </div>
+        {status === 'rate_limited' && (
+          <p className="mt-4 text-xs leading-relaxed text-accent">
+            A lot of launches from this network in the last minute. Give it sixty seconds and try
+            again — or take the PDF below.
+          </p>
+        )}
 
         {status === 'unreachable' ? (
           <div className="mt-5">
             <ErrorState
-              message="The gate can't reach its logbook right now — that's this site's problem, not your code. Retry in a moment, or grab the PDF below and carry on."
+              message="Couldn't reach the logbook to sign you in just now — that's this site's problem, not yours. Retry in a moment, or grab the PDF below and carry on."
               onRetry={() => void submit()}
             />
           </div>
@@ -373,92 +273,17 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
             className="btn primary mt-5 w-full border border-rule-strong bg-raised px-4 py-3 text-sm font-medium text-ink disabled:opacity-60"
             disabled={status === 'checking'}
           >
-            {status === 'checking' ? 'Verifying code…' : 'Begin the flight →'}
+            {status === 'checking' ? 'Starting the flight…' : 'Begin the flight →'}
           </button>
         )}
 
-        {/* TEMPORARY DEV BYPASS — dev server, or ?dev on the deploy. Dashed
-            border + accent colour on purpose: it should look unmistakably
-            temporary to the only person who can now see it. */}
-        {DEV_QUICK_START && (
-          <button
-            type="button"
-            onClick={devQuickStart}
-            disabled={status === 'checking'}
-            className="btn mt-3 w-full border border-dashed border-accent/50 bg-accent-dim px-4 py-2.5 text-xs text-accent disabled:opacity-60"
-          >
-            ⚡ Dev quick start — skip typing (?dev only)
-          </button>
-        )}
+        <p className="mt-3 text-center text-2xs text-faint">
+          No code, no account — the fields are optional and the flight is free.
+        </p>
       </form>
 
-      <NoCode />
       <PaperRow />
     </Splash>
-  );
-}
-
-/**
- * The third exit, and the finding it answers: someone forwarded this link, or
- * found it on LinkedIn, and has no code. Until now the gate's only replies
- * were "ask your contact" (buried inside an error that only appears after a
- * wrong code) and the PDF — so the most valuable visitor in the funnel hit a
- * door with no handle.
- *
- * Collapsed by default because it must not compete with the form for the
- * people who DO have a code; a real disclosure (aria-expanded/aria-controls,
- * children unmounted while closed so nothing focusable hides inside) rather
- * than a hover-reveal, because this is the one control on the screen a
- * confused visitor is most likely to reach for with a keyboard.
- */
-function NoCode() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-5">
-      <button
-        type="button"
-        className="btn rounded border border-rule bg-panel px-3 py-2 text-xs text-dim"
-        aria-expanded={open}
-        aria-controls="g-nocode"
-        onClick={() => setOpen((v) => !v)}
-      >
-        Don&rsquo;t have a code? {open ? '↑' : '↓'}
-      </button>
-      <div id="g-nocode">
-        <Expand open={open}>
-          <div className="mt-3 border-l border-rule pl-4">
-            <p className="max-w-prose text-xs leading-relaxed text-dim">
-              Codes are issued per company, not per person — if a colleague forwarded you this
-              link, the code they were sent opens it for you too. Ask them for it.
-            </p>
-            <p className="mt-2 max-w-prose text-xs leading-relaxed text-dim">
-              Or skip the door entirely: the{' '}
-              <a
-                className="text-ink underline decoration-rule-strong underline-offset-4"
-                href="/resume.pdf"
-                download="Cameron-Carpenter-Resume.pdf"
-              >
-                résumé PDF
-              </a>{' '}
-              is the same career on paper, it has never needed a code, and it is the whole thing —
-              not a teaser for the flight.
-            </p>
-            {CONTACT_HREF && (
-              <p className="mt-2 max-w-prose text-xs leading-relaxed text-dim">
-                Found this on your own?{' '}
-                <a
-                  className="text-ink underline decoration-rule-strong underline-offset-4"
-                  href={CONTACT_HREF}
-                >
-                  Ask me for a code
-                </a>{' '}
-                — one line is plenty, and you&rsquo;ll have it the same day.
-              </p>
-            )}
-          </div>
-        </Expand>
-      </div>
-    </div>
   );
 }
 
@@ -474,16 +299,16 @@ function Splash({ children }: { children: React.ReactNode }) {
       <GateSky />
       <div className="relative z-10 w-full max-w-lg">
         <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
+        {/* Name-led on purpose: this screen is Cameron Carpenter's, and the
+            headline says so before it says what the thing is. Must match
+            index.html's pre-render byte for byte so first paint is stable. */}
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-          A résumé you pilot.
+          Cameron Carpenter.
         </h1>
-        {/* Count-free on purpose: stations.js owns how many stations exist,
-            and this copy must match index.html's pre-render byte for byte. */}
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          One rocket, a flight path of real career artifacts: three years of search,
-          measurement, and the systems behind them — flown deliberately, never scrolled. Enter your access
-          code to lift off — about four minutes end to end. In a hurry? The PDF is right
-          below, no code needed.
+          Revenue operations and performance marketing — as a résumé you pilot, not scroll. One
+          rocket, a flight path of real career artifacts, flown deliberately in about four
+          minutes. Add your name if you like, or just launch. In a hurry? The PDF is right below.
         </p>
         {children}
       </div>

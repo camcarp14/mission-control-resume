@@ -129,7 +129,7 @@ try {
     // gate (pre-unlock)
     let cell = `${w}x${h} gate`;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code');
+    await page.waitForSelector('#g-name');
     await sleep(SETTLE); // entrance choreography
     await checkLinkVisible(page, cell);
 

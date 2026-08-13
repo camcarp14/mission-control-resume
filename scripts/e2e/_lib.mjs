@@ -25,7 +25,8 @@ export const pw = await import('/opt/node22/lib/node_modules/playwright/index.mj
 
 /** The stub project baked into dist-e2e — never resolves; always intercepted. */
 export const STUB_HOST = 'https://stub-gate.supabase.co';
-export const E2E_CODE = 'DEMO-K7M3';
+// No E2E_CODE any more: round 23 opened the sign-in (begin_visit, no code).
+// The dashboard passcode is the one secret the mock still checks.
 export const E2E_PASSCODE = 'liftoff';
 
 /** Build the stub-env production bundle once; reuse across scripts. */
@@ -114,11 +115,11 @@ export async function installGateMock(target, { validToken = 'tok-e2e', validVis
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
 
     switch (fn) {
-      case 'redeem_access_code':
-        if (String(body.p_code ?? '').trim().toUpperCase() === E2E_CODE) {
-          return json({ ok: true, visit_id: validVisit, token: validToken });
-        }
-        return json({ ok: false, reason: 'invalid_code' });
+      // The open door (round 23): begin_visit always succeeds, mirroring the
+      // real RPC — no code, name/company optional. redeem_access_code is kept
+      // for the gate-breach live probe that asserts it is NO LONGER anon-callable.
+      case 'begin_visit':
+        return json({ ok: true, visit_id: validVisit, token: validToken });
       case 'validate_visit':
         return json(
           body.p_visit_id === validVisit && body.p_token === validToken
@@ -138,12 +139,13 @@ export async function installGateMock(target, { validToken = 'tok-e2e', validVis
   });
 }
 
-/** Fill the gate and fly: the standard way every script gets past the door. */
-export async function unlock(page, base, { code = E2E_CODE } = {}) {
+/** Sign in and fly: the standard way every script gets into the flight. The
+ *  gate is open now (round 23) — name/company are optional — but the scripts
+ *  fill them anyway so a real begin_visit row is exercised. */
+export async function unlock(page, base) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.fill('#g-name', 'E2E Pilot');
   await page.fill('#g-company', 'Bar Check Co');
-  await page.fill('#g-code', code);
   await page.click('button[type="submit"]');
   await page.waitForSelector('.panel', { timeout: 10000 });
 }

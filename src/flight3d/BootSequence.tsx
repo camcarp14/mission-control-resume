@@ -148,7 +148,7 @@ export function BootSequence() {
      shows this same list with row two still in flight, so the only thing that
      changes across the chunk boundary is that row completing. */
   const rows: PreflightRow[] = [
-    { label: 'Access verified', state: 'done', value: 'OK' },
+    { label: 'Cleared for launch', state: 'done', value: 'OK' },
     { label: 'Flight deck online', state: 'done', value: 'OK' },
     {
       // Keyed on the CONFIRMED state, not on `active`: the loader's mid-flight

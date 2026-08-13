@@ -184,7 +184,7 @@ try {
     // ---- cell: gate -------------------------------------------------------
     let cell = `${w}x${h} gate`;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code');
+    await page.waitForSelector('#g-name');
     await sleep(600); // entrance choreography
     await checkNoHorizontalOverflow(page, cell);
     const hasHud = await page.$('header.hud');

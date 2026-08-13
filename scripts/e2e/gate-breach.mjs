@@ -1,24 +1,34 @@
-// BAR 6 — gate-breach: the gate is not bypassable by URL or devtools state.
+// BAR 6 — gate-breach: the sign-in is open, but the invariants that protect
+// the LOGBOOK and the session model still hold.
+//
+// Round 23 changed what this door means. It is no longer access control — the
+// flight is free and the fields are optional (begin_visit, no code). So the
+// old "wrong code stays gated" assertions are gone; what remains are the
+// invariants that never depended on the code:
 //
 // MOCKED-WIRE (always runs, against dist-e2e + Playwright route interception):
 //   1. Fresh load of '/'  → no station panel in the DOM, and the Flight
-//      content chunk (/assets/Flight*) is never even fetched pre-redemption.
+//      content chunk (/assets/Flight*) is never even fetched pre sign-in.
+//      (The chunk is still lazy and still only imported once a visit begins —
+//      an optimization now rather than a lock, but the ordering is asserted.)
 //   2. Forged sessionStorage 'mc.visit' seeded pre-load → the server-side
-//      validate_visit says no → gate form, no panel, forged entry CLEARED.
+//      validate_visit says no → sign-in shown, forged entry CLEARED. This is
+//      the token model, unchanged: a fabricated session never resumes.
 //   3. URL games: /dashboard direct shows the passcode form with zero fixture
-//      strings; /#unlocked and /?unlocked=1 still land on the gate.
-//   4. Wrong access code → #g-code-err, still gated. Wrong dashboard passcode
-//      → "Passcode not recognized.", still zero fixtures.
-//   5. Valid redeem → panel appears AND the Flight chunk request happened only
-//      AFTER the redeem RPC (request-order proof that the content chunk is
-//      gated). Then a corrupted token + reload → re-gated.
+//      strings; /#unlocked and /?unlocked=1 still land on the sign-in.
+//   4. Wrong dashboard passcode → "Passcode not recognized.", still zero
+//      fixtures. The owner's logbook stays protected.
+//   5. Valid begin_visit → panel appears AND the Flight chunk request happened
+//      only AFTER the begin_visit RPC. Then a corrupted token + reload →
+//      re-gated (validate_visit rejects it).
 //
 // REAL-DB (only when VITE_SUPABASE_URL points at a live project, not the
 // stub): raw REST probes proving deny-all RLS + grant hygiene — anon SELECT on
 // visits is denied (an empty-200 is the classic silent RLS leak and FAILS),
-// gate_rate_limit is not executable by anon, and redeem with a garbage code
-// returns {ok:false}. When the env is absent this half is SKIPPED, which is
-// NOT a pass.
+// gate_rate_limit is not executable by anon, redeem_access_code is NO LONGER
+// executable by anon (the door it fronted is closed), and begin_visit answers
+// {ok:true} with a token. When the env is absent this half is SKIPPED, which
+// is NOT a pass.
 //
 // Run: node scripts/e2e/gate-breach.mjs
 
@@ -28,7 +38,6 @@ import {
   serve,
   installGateMock,
   makeReporter,
-  E2E_CODE,
   STUB_HOST,
 } from './_lib.mjs';
 
@@ -67,7 +76,7 @@ try {
   browser = await pw.chromium.launch();
   const base = server.url;
 
-  // ---- (1) fresh load: gated, Flight chunk never fetched -----------------
+  // ---- (1) fresh load: no panel, Flight chunk never fetched --------------
   {
     const context = await freshContext(browser);
     const page = await context.newPage();
@@ -75,14 +84,14 @@ try {
     page.on('request', (req) => requests.push(req.url()));
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code', { timeout: 10000 });
+    await page.waitForSelector('#g-name', { timeout: 10000 });
     await sleep(1500); // let any idle-time prefetching happen, then look again
 
     r.ok((await countPanels(page)) === 0, 'fresh load: no section.panel in the DOM');
     const flightReqs = requests.filter((u) => FLIGHT_RE.test(u));
     r.ok(
       flightReqs.length === 0,
-      `fresh load: no request matches /assets\\/Flight/ before redemption (saw ${flightReqs.length}: ${flightReqs.join(', ') || 'none'})`,
+      `fresh load: no request matches /assets\\/Flight/ before sign-in (saw ${flightReqs.length}: ${flightReqs.join(', ') || 'none'})`,
     );
     await context.close();
   }
@@ -95,17 +104,17 @@ try {
     });
     const page = await context.newPage();
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    // The forged token forces a validate_visit round-trip → valid:false → gate.
-    await page.waitForSelector('#g-code', { timeout: 10000 });
+    // The forged token forces a validate_visit round-trip → valid:false → sign-in.
+    await page.waitForSelector('#g-name', { timeout: 10000 });
 
-    r.ok(true, 'forged mc.visit: gate form is shown (validate_visit rejected the forgery)');
+    r.ok(true, 'forged mc.visit: sign-in shown (validate_visit rejected the forgery)');
     r.ok((await countPanels(page)) === 0, 'forged mc.visit: no section.panel rendered');
     const left = await readVisit(page);
     r.ok(left === null, `forged mc.visit: entry CLEARED from sessionStorage (got ${JSON.stringify(left)})`);
     await context.close();
   }
 
-  // ---- (3) URL games + (4) wrong credentials -----------------------------
+  // ---- (3) URL games + (4) wrong dashboard passcode ----------------------
   {
     const context = await freshContext(browser);
     const page = await context.newPage();
@@ -119,24 +128,12 @@ try {
       '/dashboard direct: passcode form only, no fixture strings in page content',
     );
 
-    // /#unlocked and /?unlocked=1 → still the gate, no panel.
+    // /#unlocked and /?unlocked=1 → still the sign-in, no panel.
     for (const path of ['/#unlocked', '/?unlocked=1']) {
       await page.goto(`${base}${path}`, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('#g-code', { timeout: 10000 });
-      r.ok((await countPanels(page)) === 0, `${path}: still the gate, no section.panel`);
+      await page.waitForSelector('#g-name', { timeout: 10000 });
+      r.ok((await countPanels(page)) === 0, `${path}: still the sign-in, no section.panel`);
     }
-
-    // Wrong access code → inline error, still gated.
-    await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code', { timeout: 10000 });
-    await page.fill('#g-name', 'Breach Probe');
-    await page.fill('#g-company', 'Bar Check Co');
-    await page.fill('#g-code', 'NOPE-0000');
-    await page.click('button[type="submit"]');
-    await page.waitForSelector('#g-code-err', { state: 'visible', timeout: 10000 });
-    r.ok(await page.isVisible('#g-code-err'), 'wrong code NOPE-0000: #g-code-err is visible');
-    r.ok((await countPanels(page)) === 0, 'wrong code NOPE-0000: still gated, no section.panel');
-    r.ok((await readVisit(page)) === null, 'wrong code NOPE-0000: nothing stored in sessionStorage');
 
     // Wrong dashboard passcode → rejection message, still zero fixtures.
     await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -156,7 +153,7 @@ try {
     await context.close();
   }
 
-  // ---- (5) valid redeem: request ordering + corrupted-token re-gate ------
+  // ---- (5) valid sign-in: request ordering + corrupted-token re-gate -----
   {
     const context = await freshContext(browser);
     const page = await context.newPage();
@@ -164,23 +161,22 @@ try {
     page.on('request', (req) => requests.push(req.url()));
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code', { timeout: 10000 });
+    await page.waitForSelector('#g-name', { timeout: 10000 });
     await page.fill('#g-name', 'E2E Pilot');
     await page.fill('#g-company', 'Bar Check Co');
-    await page.fill('#g-code', E2E_CODE);
     await page.click('button[type="submit"]');
     await page.waitForSelector('section.panel', { timeout: 10000 });
     await sleep(SETTLE);
 
-    r.ok((await countPanels(page)) > 0, 'valid redeem: station panel appears');
+    r.ok((await countPanels(page)) > 0, 'valid sign-in: station panel appears');
 
-    const redeemIdx = requests.findIndex((u) => u.includes('/rest/v1/rpc/redeem_access_code'));
+    const beginIdx = requests.findIndex((u) => u.includes('/rest/v1/rpc/begin_visit'));
     const flightIdx = requests.findIndex((u) => FLIGHT_RE.test(u));
-    r.ok(redeemIdx !== -1, 'valid redeem: redeem_access_code RPC was requested');
-    r.ok(flightIdx !== -1, 'valid redeem: Flight content chunk was requested');
+    r.ok(beginIdx !== -1, 'valid sign-in: begin_visit RPC was requested');
+    r.ok(flightIdx !== -1, 'valid sign-in: Flight content chunk was requested');
     r.ok(
-      redeemIdx !== -1 && flightIdx !== -1 && flightIdx > redeemIdx,
-      `valid redeem: Flight chunk fetched only AFTER the redeem POST (redeem @${redeemIdx}, flight @${flightIdx})`,
+      beginIdx !== -1 && flightIdx !== -1 && flightIdx > beginIdx,
+      `valid sign-in: Flight chunk fetched only AFTER the begin_visit POST (begin @${beginIdx}, flight @${flightIdx})`,
     );
 
     // Corrupt the token in devtools style, reload → server says no → re-gated.
@@ -190,7 +186,7 @@ try {
       sessionStorage.setItem('mc.visit', JSON.stringify(v));
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-code', { timeout: 10000 });
+    await page.waitForSelector('#g-name', { timeout: 10000 });
     r.ok((await countPanels(page)) === 0, 'corrupted token + reload: re-gated, no section.panel');
     r.ok(
       (await readVisit(page)) === null,
@@ -251,7 +247,7 @@ try {
         const { status, body } = await probe(`${liveUrl}/rest/v1/rpc/gate_rate_limit`, {
           method: 'POST',
           headers: anonHeaders,
-          body: JSON.stringify({ p_scope: 'redeem' }),
+          body: JSON.stringify({ p_scope: 'begin' }),
         });
         const denied =
           status === 401 || status === 403 || status === 404 || /permission denied/i.test(body);
@@ -261,7 +257,8 @@ try {
         );
       }
 
-      // (c) redeem with a garbage code answers {ok:false} — never a token.
+      // (c) redeem_access_code is retired from the UI and REVOKED from anon in
+      // 0002 — the door it fronted is closed. Anon calling it must be denied.
       {
         const { status, body } = await probe(`${liveUrl}/rest/v1/rpc/redeem_access_code`, {
           method: 'POST',
@@ -275,15 +272,34 @@ try {
             p_user_agent: 'gate-breach probe',
           }),
         });
-        let ok;
+        const denied =
+          status === 401 || status === 403 || status === 404 || /permission denied/i.test(body);
+        r.ok(
+          denied && status !== 200,
+          `live: redeem_access_code denied for anon after 0002 revoke (HTTP ${status}, body: ${body.slice(0, 120)})`,
+        );
+      }
+
+      // (d) begin_visit is the open door: anon calls it and gets a token back.
+      {
+        const { status, body } = await probe(`${liveUrl}/rest/v1/rpc/begin_visit`, {
+          method: 'POST',
+          headers: anonHeaders,
+          body: JSON.stringify({
+            p_name: 'gate-breach probe',
+            p_company: 'gate-breach probe',
+            p_user_agent: 'gate-breach probe',
+          }),
+        });
+        let d;
         try {
-          ok = JSON.parse(body)?.ok;
+          d = JSON.parse(body);
         } catch {
-          ok = undefined;
+          d = undefined;
         }
         r.ok(
-          status === 200 && ok === false,
-          `live: redeem_access_code with garbage code returns {ok:false} (HTTP ${status}, body: ${body.slice(0, 120)})`,
+          status === 200 && d?.ok === true && typeof d?.token === 'string' && d.token.length >= 32,
+          `live: begin_visit returns a token for anon (HTTP ${status}, ok=${d?.ok}, token len=${d?.token?.length ?? 0})`,
         );
       }
     }

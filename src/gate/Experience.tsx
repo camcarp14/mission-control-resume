@@ -108,7 +108,7 @@ export function Experience() {
 // Module scope so the array identity is stable across renders; the console
 // keys its rows by label and there is nothing here that varies per render.
 const PREFLIGHT_START_ROWS: PreflightRow[] = [
-  { label: 'Access verified', state: 'done', value: 'OK' },
+  { label: 'Cleared for launch', state: 'done', value: 'OK' },
   { label: 'Flight deck online', state: 'active' },
   { label: 'Celestial bodies', state: 'pending' },
   { label: 'Ignition', state: 'pending' },
@@ -138,13 +138,12 @@ function SplashSkeleton() {
       <div className="relative z-10 w-full max-w-lg">
         <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-          A résumé you pilot.
+          Cameron Carpenter.
         </h1>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          One rocket, a flight path of real career artifacts: three years of search,
-          measurement, and the systems behind them — flown deliberately, never scrolled. Enter your access
-          code to lift off — about four minutes end to end. In a hurry? The PDF is right
-          below, no code needed.
+          Revenue operations and performance marketing — as a résumé you pilot, not scroll. One
+          rocket, a flight path of real career artifacts, flown deliberately in about four
+          minutes. Add your name if you like, or just launch. In a hurry? The PDF is right below.
         </p>
         <div className="mt-6">
           <SkLine w="w80" />
