@@ -66,7 +66,7 @@ export const pilot = {
   // line, so the full name holds the same width the short handle used to.
   name: 'CAMERON CARPENTER',
   role: 'REVENUE OPERATIONS \u00b7 PERFORMANCE MARKETING',
-  status: 'OPEN TO NEW MISSIONS',
+  status: 'ALL SYSTEMS GO',
   callsign: 'CC-01',
 };
 
@@ -110,9 +110,9 @@ export const stations = [
   },
 
   // -- STN 03 \u00b7 THE STACK -------------------------------------------------
-  // The ecosystem map with his operating zone marked. The diagram is the
-  // real chain he works \u2014 engines, call intelligence, analytics, warehouse \u2014
-  // not a borrowed programmatic poster.
+  // Where he operates, told as the two halves of the seam \u2014 the
+  // revenue-operations list and the media list, straight off the r\u00e9sum\u00e9\u2019s
+  // skills taxonomy. No diagram: the copy is the map.
   {
     id: 'the-stack',
     code: 'STN 03',
@@ -121,14 +121,10 @@ export const stations = [
       'I work across the full chain \u2014 ad platforms, call intelligence, analytics, and the reporting warehouse \u2014 with most of my time at the handoff between activation and measurement.',
     bullets: [
       'Hands-on daily across Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, and Invoca \u2014 plus the Apps Script automation that stitches them together',
-      'Ran a full SA360 offboarding end to end: unlinked both engines, stripped tracking templates at five levels, preserved UTM continuity, and pinned down billing so no post-migration fees landed',
-      'Platform-versus-source-of-truth reconciliation as standard practice \u2014 caught a ~$40K spend understatement in a connector and a GA4 filter gap the platform numbers hid',
+      'The revenue-operations half: conversion tracking and attribution, reporting and workflow automation, forecasting and pacing, funnel and cohort analysis, and data integrity and QA',
+      'The media half: media planning and investment, budget management, audience segmentation and targeting, experiment design, value-based bidding, and cross-channel strategy',
     ],
-    artifact: {
-      kind: 'image',
-      src: '/placeholders/stack-map.svg',
-      alt: 'Search and measurement stack map: Google Ads and Microsoft Ads feeding call intelligence, analytics, and the reporting warehouse, with the activation\u2013measurement seam marked as the operating zone.',
-    },
+    artifact: { kind: 'none' },
   },
 
   // -- STN 04 \u00b7 INTEGRATION ------------------------------------------------
@@ -149,24 +145,21 @@ export const stations = [
   },
 
   // -- STN 05 \u00b7 PIPELINE --------------------------------------------------
-  // The automation story. "Backbone" is his named, real system; the 300+
-  // hours figure comes straight off the r\u00e9sum\u00e9.
+  // The automation story, told without naming any one system: reporting,
+  // pacing, forecasting, and the data-integrity posture. The 300+ hours
+  // figure comes straight off the r\u00e9sum\u00e9.
   {
     id: 'pipeline',
     code: 'STN 05',
-    title: 'Pipeline \u2014 The Reporting Backbone',
+    title: 'Pipeline \u2014 Reporting & Automation',
     proves:
       'Reporting, pacing, and forecasting systems built solo with AI tools, adopted by multiple client teams \u2014 saving 300+ hours per quarter.',
     bullets: [
-      'Built \u201cBackbone\u201d: a configurable Google Ads script and Sheets system generating account reporting from declarative config \u2014 binding guards that halt on the wrong account, healthcare modes, and automated failure alerting',
-      'Wrote a tie-out assertion suite that gates publishing \u2014 it caught a brand-classification defect routing 100% of a client\u2019s spend to non-brand while every additivity check still passed',
-      'Built-in data-integrity checks caught broken conversion tracking and understated platform spend before either reached client deliverables or bidding algorithms \u2014 and a dead feed surfaces as a warning, not a $0',
+      'Automated multi-source reporting across Google Ads, Microsoft Advertising, and internal sources \u2014 15+ KPIs consolidated into client-ready deliverables, with the assembly time returned to actual analysis',
+      'Built the pacing and forecasting models client teams work from daily \u2014 spend tracked against plan with early risk flags, so budget conversations happen before month-end rather than after',
+      'Data-integrity checks built into every system \u2014 broken conversion tracking and understated platform spend caught before either reached client deliverables or bidding algorithms',
     ],
-    artifact: {
-      kind: 'image',
-      src: '/placeholders/pipeline.svg',
-      alt: 'Backbone reporting pipeline: ad engines flowing through a config-driven script layer and tie-out assertion gates into dashboards and pacing.',
-    },
+    artifact: { kind: 'none' },
   },
 
   // -- STN 06 \u00b7 THE DASHBOARD ----------------------------------------------
@@ -179,7 +172,7 @@ export const stations = [
     proves:
       'One dashboard\u2019s numbers made the case for reinvesting brand savings into Shopping \u2014 the budget moved the same week.',
     bullets: [
-      'Designed a multi-client dashboard stack driven by per-client config \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
+      'Designed a multi-client dashboard stack \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
       'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
       'Traced brand Shopping cannibalization to its query source and negated it, letting the more efficient Brand Text campaign capture the traffic instead',
     ],
@@ -220,7 +213,7 @@ export const stations = [
     bullets: [
       'Symptom: campaign conversions flat zero after a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
       'Fix: recreated the conversion actions and applied a data exclusion so the corrupted window could not poison the bidding algorithm',
-      'Caught a different class of risk in creative: flagged AI-generated human imagery in live ads as an emerging regulatory exposure, audited the healthcare portfolio, and drove full replacement with sourced assets',
+      'Same instinct on the reporting side: caught a misclassification quietly routing 100% of a client\u2019s spend to non-brand while every cross-check still passed \u2014 fixed before a wrong number shipped',
     ],
     artifact: { kind: 'none' },
   },
@@ -260,18 +253,18 @@ export const stations = [
   },
 
   // -- STN 11 \u00b7 DOCKING ----------------------------------------------------
-  // The close. This is the one link on the site that must never fail, and
-  // the contact line is deliberately ALSO plain text \u2014 a dead mail client
-  // must not be the only way to reach him.
+  // The close \u2014 deliberately NOT a pitch. The owner is employed and this
+  // site is not an outreach tool; the ask is a conversation, nothing more.
+  // The contact line is ALSO plain text \u2014 a dead mail client must not be
+  // the only way to reach him.
   {
     id: 'docking',
     code: 'STN 11',
     title: 'Docking \u2014 Let\u2019s Talk',
     proves:
-      'I have been running the plan and the numbers across a portfolio \u2014 I would like to do the same for your team.',
+      'That\u2019s the full flight \u2014 the media investment, the systems behind it, and the numbers it produced \u2014 and if it sparked a question or an idea, let\u2019s chat.',
     bullets: [
       'Scope to date: $75M+ in media investment managed, the strategic roadmaps behind each account, and junior analysts coached into named account ownership',
-      'Week one: map the live campaigns to their measurement, learn the guardrails, and take something small off the team\u2019s plate',
       'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the PDF above has the rest',
     ],
     artifact: {
