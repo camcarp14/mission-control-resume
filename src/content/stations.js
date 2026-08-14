@@ -104,9 +104,9 @@ export const stations = [
     code: 'STN 02',
     title: 'Flight Plan',
     proves:
-      'Responsibility that has compounded rather than reset \u2014 a widening remit at Ovative since 2023, a company founded and run on the side, and an enterprise-integration role before it.',
+      'One role since 2023 with steadily more to own \u2014 alongside a company I founded on the side and an enterprise-integration role before it.',
     bullets: [
-      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): grew from managing accounts to leading a $75M+ media-investment portfolio and the reporting behind it, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
+      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): own budget, pacing, and reporting across a $75M+ media-investment portfolio, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
       'Zero To Secure \u2014 Founder (2025\u2013present): built and run a bootstrapped DTC e-commerce brand end to end on the side \u2014 positioning, custom Shopify build, SEO content, and go-to-market',
       'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration inside a highly matrixed organization, administering a 2,400-user project platform',
     ],
@@ -182,8 +182,8 @@ export const stations = [
       'Dashboards that turn scattered platform data into the single view a team actually makes decisions from \u2014 the analysis layer on top of the reporting.',
     bullets: [
       'Build dashboards that consolidate performance into one clear view, so client and internal teams spend their time interpreting results rather than assembling them',
-      'Unified paid and organic search into a single full-funnel view and templatized it for reuse across accounts \u2014 a read teams did not have before',
-      'The point is the decision, not the chart: one view surfaced an efficiency opportunity and moved brand savings into higher-return channels that week',
+      'Unified paid and organic search into a single full-funnel view and templatized it for reuse across accounts',
+      'Focus each dashboard on the decisions it needs to support \u2014 where budget is working, where it isn\u2019t, and what to do next \u2014 so teams can act on it directly',
     ],
     artifact: { kind: 'none' },
   },
@@ -220,8 +220,8 @@ export const stations = [
       'A habit of finding what\u2019s quietly broken \u2014 anomalies, tracking gaps, and inconsistencies caught in routine account checks before they reach a client or skew a bidding model.',
     bullets: [
       'Routinely audit accounts for the failures that don\u2019t announce themselves \u2014 misfiring conversion tags, understated spend, feeds that break without erroring \u2014 and resolve them before they surface downstream',
-      'Caught a misclassification routing 100% of a client\u2019s spend to non-brand while every standard cross-check still passed, corrected before it reached reporting',
-      'Reconcile platform numbers against source-of-truth as standard practice \u2014 the discipline that surfaced a ~$40K spend understatement hidden in a data connector',
+      'Treat measurement as something to verify rather than assume \u2014 cross-checking conversion tracking, spend, and data feeds so the numbers a client sees are ones I trust',
+      'Find issues in a routine pass instead of a fire drill \u2014 the kind that would otherwise surface as a bad report or a mis-steered bidding model, caught upstream',
     ],
     artifact: { kind: 'none' },
   },
@@ -235,11 +235,11 @@ export const stations = [
     code: 'STN 09',
     title: 'Ground Crew',
     proves:
-      'More coach than my title suggests \u2014 I develop junior analysts into account owners, mentor new talent, and set the lead-generation and AI standards the wider team works from.',
+      'I put real time into the people around me \u2014 coaching junior analysts toward account ownership, mentoring new talent, and helping shape how the team approaches lead generation and AI.',
     bullets: [
-      'Coached junior analysts across multiple accounts and developed several into named account ownership',
+      'Coached junior analysts across multiple accounts, several of whom have grown into named account ownership',
       'Mentored a summer intern end to end through a self-authored 13-week curriculum mapped to the firm\u2019s leadership competencies',
-      'The team\u2019s go-to resource on lead generation and AI workflows \u2014 authored the trainings, best practices, and playbooks the broader group now works from',
+      'A go-to resource on lead generation and AI workflows within the team \u2014 authored the trainings, best practices, and playbooks the broader group uses',
     ],
     artifact: { kind: 'none' },
   },
@@ -273,7 +273,7 @@ export const stations = [
     title: 'Docking',
     overview: 'Contact',
     proves:
-      'That\u2019s the whole flight \u2014 thanks for coming along; if any of it is worth a conversation, let\u2019s have one.',
+      'Thanks for coming along on the whole flight \u2014 if anything here sparked a thought, I\u2019d genuinely love to hear from you.',
     bullets: [
       'Email \u2014 cam.carp14@gmail.com',
       'LinkedIn \u2014 linkedin.com/in/CameronCarpenter1',
