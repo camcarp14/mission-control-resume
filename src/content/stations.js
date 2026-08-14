@@ -105,7 +105,7 @@ export const stations = [
     code: 'STN 02',
     title: 'Flight Plan',
     proves:
-      'Scope that\u2019s outpaced the title since 2023 \u2014 consistently taking on more than the role asked, plus a company of my own on the side and enterprise-scale roots before it.',
+      'Scope that\u2019s outpaced the title since 2023 \u2014 consistently taking on more than the role asked, while running a company I founded and drawing on an enterprise-scale background.',
     bullets: [
       'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): own budget, pacing, and reporting across a $75M+ media-investment portfolio, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
       'Zero To Secure \u2014 Founder (2025\u2013present): built and run a bootstrapped DTC e-commerce brand end to end on the side \u2014 positioning, custom Shopify build, SEO content, and go-to-market',
