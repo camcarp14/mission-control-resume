@@ -95,16 +95,17 @@ export const stations = [
   },
 
   // -- STN 02 \u00b7 FLIGHT PLAN -----------------------------------------------
-  // Progression, not a job-hop reel (owner's note): the proves leads with
-  // compounding responsibility and does NOT open on the $63B deal size. The
-  // Medicare figure is reframed as one campaign RESULT of the Ovative role,
-  // not a standalone headline that reads like it was the whole job.
+  // Progression, not a job-hop reel (owner's note): the proves reads as
+  // outperformance \u2014 scope outpacing the title \u2014 rather than a list of the
+  // three roles (the bullets already do that), and does NOT open on the $63B
+  // deal size. The Medicare figure is one campaign RESULT of the Ovative
+  // role, not a standalone headline that reads like it was the whole job.
   {
     id: 'flight-plan',
     code: 'STN 02',
     title: 'Flight Plan',
     proves:
-      'One role since 2023 with steadily more to own \u2014 alongside a company I founded on the side and an enterprise-integration role before it.',
+      'Scope that\u2019s outpaced the title since 2023 \u2014 consistently taking on more than the role asked, plus a company of my own on the side and enterprise-scale roots before it.',
     bullets: [
       'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): own budget, pacing, and reporting across a $75M+ media-investment portfolio, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
       'Zero To Secure \u2014 Founder (2025\u2013present): built and run a bootstrapped DTC e-commerce brand end to end on the side \u2014 positioning, custom Shopify build, SEO content, and go-to-market',
