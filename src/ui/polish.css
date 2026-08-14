@@ -573,9 +573,20 @@ kbd {
      Reserve the hero identity column ONLY at the station that has one.
      Stations 2-11 carry no identity block above them, and paying its 164px
      there cost the panel a quarter of a short phone screen for nothing;
-     4.25rem is the top bar plus air. */
-  .panelwrap { padding-top: 4.25rem; padding-bottom: calc(7rem + env(safe-area-inset-bottom)); }
-  .panelwrap.hero { padding-top: 10.25rem; }
+     4.25rem is the top bar plus air.
+
+     align-items: start pulls the box up into the top third instead of
+     centring it (the base .panelwrap is place-items: center). Centred, a
+     short collapsed panel sat over the planet and hid it; top-aligned, the
+     planet and the space below stay in view — the whole reason to fly this
+     on a phone. The box still grows downward and scrolls at its cap. */
+  .panelwrap { padding-top: 4.25rem; padding-bottom: calc(7rem + env(safe-area-inset-bottom)); align-items: start; }
+  /* Top-aligning pulled the panel up UNDER the hero identity — the role line
+     printed through the STN 01 eyebrow (measured: identity bottom 207px,
+     panel top 165px). 14.25rem clears the whole identity block with air.
+     padding-top + padding-bottom is the panel's max-height reservation
+     (see below), so the cap moves in lockstep to 21.25rem. */
+  .panelwrap.hero { padding-top: 14.25rem; }
 
   /* The panel's height, and why it has to be restated here rather than
      inherited from `max-height: 100%` up in .panel. That percentage resolves
@@ -596,7 +607,7 @@ kbd {
      silently inert here, because nothing ever overflowed a box with no
      limit. One declaration lights all of it. */
   .panel { max-height: calc(100dvh - 11.25rem - env(safe-area-inset-bottom)); }
-  .panelwrap.hero .panel { max-height: calc(100dvh - 17.25rem - env(safe-area-inset-bottom)); }
+  .panelwrap.hero .panel { max-height: calc(100dvh - 21.25rem - env(safe-area-inset-bottom)); }
 
 }
 

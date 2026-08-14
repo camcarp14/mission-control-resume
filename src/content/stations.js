@@ -85,7 +85,7 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'Revenue operations and performance marketing in one seat \u2014 $75M+ in media investment managed since 2023, and the forecasting, pacing, and reporting systems that tie it to pipeline and revenue.',
+      'Revenue operations and performance marketing \u2014 managing $75M+ in media investment since 2023, and building the forecasting, pacing, and reporting systems that connect it to pipeline and revenue.',
     bullets: [
       'Managed $75M+ in media investment since 2023 across clients in healthcare, retail, and logistics \u2014 including a Fortune 5 healthcare payer',
       'Owned budget forecasting, pacing models, and weekly performance analysis; presented quarterly business reviews and strategic roadmaps built in partnership with SEO, paid social, video, programmatic, and measurement teams',
@@ -208,7 +208,7 @@ export const stations = [
     artifact: { kind: 'none' },
   },
 
-  // -- STN 08 \u00b7 FIREFIGHT --------------------------------------------------
+  // -- STN 08 \u00b7 DIAGNOSTICS -----------------------------------------------
   // Reframed (owner's note) from a single Medicare incident to the ROUTINE:
   // he is the person who finds what's quietly broken in an account before it
   // does damage. Two concrete, self-driven catches carry it (non-brand
@@ -216,7 +216,7 @@ export const stations = [
   {
     id: 'firefight',
     code: 'STN 08',
-    title: 'Firefight',
+    title: 'Diagnostics',
     proves:
       'A habit of finding what\u2019s quietly broken \u2014 anomalies, tracking gaps, and inconsistencies caught in routine account checks before they reach a client or skew a bidding model.',
     bullets: [
@@ -227,14 +227,14 @@ export const stations = [
     artifact: { kind: 'none' },
   },
 
-  // -- STN 09 \u00b7 GROUND CREW --------------------------------------------------
+  // -- STN 09 \u00b7 ENABLEMENT ------------------------------------------------
   // The leader/coach station. Owner's note: the RACI callout is gone (not
   // impressive), and this reads as more of a leader than before \u2014 developing
   // analysts into owners, mentoring, and owning the team's standards.
   {
     id: 'force-multiplier',
     code: 'STN 09',
-    title: 'Ground Crew',
+    title: 'Enablement',
     proves:
       'I put real time into the people around me \u2014 coaching junior analysts toward account ownership, mentoring new talent, and helping shape how the team approaches lead generation and AI.',
     bullets: [
@@ -245,13 +245,13 @@ export const stations = [
     artifact: { kind: 'none' },
   },
 
-  // -- STN 10 \u00b7 INSTRUMENTS ------------------------------------------------
+  // -- STN 10 \u00b7 FOUNDATIONS ------------------------------------------------
   // Education and the toolkit. No invented certifications: the r\u00e9sum\u00e9
   // carries none, so this station carries the degree and the stack instead.
   {
     id: 'certs-instruments',
     code: 'STN 10',
-    title: 'Instruments',
+    title: 'Foundations',
     proves:
       'The toolkit behind the work: a business degree, a platform stack used daily, and the AI tooling that extends what one analyst can cover.',
     bullets: [

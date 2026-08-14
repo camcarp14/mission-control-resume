@@ -78,6 +78,16 @@ export function StationPanel({
       tabIndex={-1}
       aria-label={`Station ${index + 1}: ${station.title}`}
       className={flat ? 'panel' : 'panel pagefade'}
+      // The panel is a child of `.stage`, which reads touchstart/touchend as
+      // the flight's swipe gesture — and a scroll-up-to-read-more inside the
+      // panel is a finger travelling UP, i.e. exactly the "advance" swipe. So
+      // reading the overview flipped you to the next station mid-sentence.
+      // Stopping the touch here (bubble phase) keeps it off `.stage`: the
+      // panel scrolls natively, and swipe-to-advance still lives on all the
+      // open sky around it. stopPropagation only — never preventDefault, or
+      // the native scroll it exists to protect would die with it.
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
     >
       <StationContent station={station} />
     </section>
