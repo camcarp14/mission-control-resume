@@ -129,7 +129,7 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
       <div
         className={
           mobile
-            ? 'hero-in absolute inset-x-0 flex flex-col items-center gap-3 px-4'
+            ? 'hero-in absolute inset-x-0 flex flex-col items-center gap-2.5 px-4'
             : 'hero-in absolute flex flex-col items-start gap-6'
         }
         style={mobile ? { top: '62px' } : { top: '15vh', left: '6vw' }}
@@ -185,7 +185,12 @@ export function Hero({ t, mobile }: { t: MotionValue<number>; mobile: boolean })
           <span className="h-1.5 w-1.5 shrink-0 rotate-45 border border-cyan/80 bg-cyan/20" />
           {/* hud-cyan, not --dim: the left-anchored line crosses Earth's lit
               limb, where grey-on-bright disappeared (screenshot finding) */}
-          <span className="min-w-0 text-center font-mono text-xs uppercase tracking-[0.16em] text-hud/90 sm:whitespace-nowrap sm:tracking-[0.3em]">
+          {/* On a phone this dropped from text-xs/0.16em (which wrapped to two
+              heavy lines pressed against the panel) to a lighter 10px eyebrow
+              that sits on ONE line at any real phone width — the single
+              biggest declutter of the first mobile frame. sm+ restores the
+              full-size tracked line. */}
+          <span className="min-w-0 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-hud/90 sm:whitespace-nowrap sm:text-xs sm:tracking-[0.3em]">
             {pilot.role}
           </span>
           <span className="h-1.5 w-1.5 shrink-0 rotate-45 border border-cyan/80 bg-cyan/20" />
