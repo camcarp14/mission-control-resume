@@ -164,7 +164,9 @@ export const stations = [
 
   // -- STN 06 \u00b7 THE DASHBOARD ----------------------------------------------
   // The dashboard matters because of what it changed \u2014 the reinvestment
-  // decision is the story, the artifact is the evidence.
+  // decision is the story. The diagram was pulled (kind: 'none') because the
+  // mock did not accurately represent the real deliverable; the copy carries
+  // the station until a truthful export exists.
   {
     id: 'dashboard',
     code: 'STN 06',
@@ -176,11 +178,7 @@ export const stations = [
       'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
       'Traced brand Shopping cannibalization to its query source and negated it, letting the more efficient Brand Text campaign capture the traffic instead',
     ],
-    artifact: {
-      kind: 'image',
-      src: '/placeholders/dashboard.svg',
-      alt: 'Multi-client paid search dashboard: spend, ROAS, pacing, and channel mix with the brand-efficiency reinvestment decision annotated.',
-    },
+    artifact: { kind: 'none' },
   },
 
   // -- STN 07 \u00b7 THE TURNAROUND ---------------------------------------------

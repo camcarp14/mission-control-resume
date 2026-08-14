@@ -276,10 +276,6 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
             {status === 'checking' ? 'Preparing the flight…' : 'Begin the flight →'}
           </button>
         )}
-
-        <p className="mt-3 text-center text-2xs text-faint">
-          No access code or account is required; both fields are optional.
-        </p>
       </form>
 
       <PaperRow />
@@ -327,7 +323,6 @@ function PaperRow() {
       >
         Download résumé PDF
       </a>
-      <span className="text-2xs text-faint">No email address required.</span>
     </div>
   );
 }
