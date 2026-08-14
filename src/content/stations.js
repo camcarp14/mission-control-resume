@@ -54,10 +54,12 @@
 /** @typedef {Object} Station
  *  @property {string} id       stable key — never reuse or reorder-depend
  *  @property {string} code     eyebrow label, e.g. 'STN 04'
- *  @property {string} title    role / project / artifact name
+ *  @property {string} title    single station name (one word or short phrase)
  *  @property {string} proves   ONE sentence: the takeaway, not the description
  *  @property {string[]} bullets 2–3 outcome bullets, metric-led
  *  @property {StationArtifact} artifact
+ *  @property {string} [overview] disclosure-section label; defaults to
+ *                                'Overview' (Docking overrides it to 'Contact')
  */
 
 /** The pilot identity shown on the hero — same single-source rule as the stations. */
@@ -76,11 +78,12 @@ export const stations = [
   // The thesis every later station proves. The $75M figure is the owner's
   // own calculation across his portfolios, stated the way he asked it to be
   // stated; the interview-safe unpacking is "channel lead on teams
-  // overseeing $75M."
+  // overseeing $75M." Titles are single names now (owner's call): the panel
+  // header and the 3D signage both show this one word/phrase.
   {
     id: 'liftoff',
     code: 'STN 01',
-    title: 'Liftoff \u2014 The Positioning',
+    title: 'Liftoff',
     proves:
       'Revenue operations and performance marketing: $75M+ in media investment managed since 2023, and the forecasting, pacing, and reporting systems that connect it to pipeline and revenue.',
     bullets: [
@@ -92,19 +95,20 @@ export const stations = [
   },
 
   // -- STN 02 \u00b7 FLIGHT PLAN -----------------------------------------------
-  // Newest first, one headline number per role. The founder line matters as
-  // much as its metric-less neighbours: it is the "more than my years" claim
-  // made concrete \u2014 a whole company run solo, on the side.
+  // Progression, not a job-hop reel (owner's note): the proves leads with
+  // compounding responsibility and does NOT open on the $63B deal size. The
+  // Medicare figure is reframed as one campaign RESULT of the Ovative role,
+  // not a standalone headline that reads like it was the whole job.
   {
     id: 'flight-plan',
     code: 'STN 02',
-    title: 'Flight Plan \u2014 The Timeline',
+    title: 'Flight Plan',
     proves:
-      'Three roles in four years: a $63B enterprise integration, then a multi-account search portfolio, then a company of my own on the side.',
+      'Responsibility that has compounded rather than reset \u2014 a widening remit at Ovative since 2023, a company founded and run on the side, and an enterprise-integration role before it.',
     bullets: [
-      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013now): managed $75M+ in client media investment; drove a 175% YoY increase in enrollments for a national Medicare insurance marketplace during AEP',
-      'Zero To Secure \u2014 Founder (2025\u2013now): built a bootstrapped DTC e-commerce brand end to end as a solo operator \u2014 product positioning, custom Shopify development, SEO content, and go-to-market execution',
-      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration within a highly matrixed organization, administering a 2,400-user project platform',
+      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): grew from managing accounts to leading a $75M+ media-investment portfolio and the reporting behind it, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
+      'Zero To Secure \u2014 Founder (2025\u2013present): built and run a bootstrapped DTC e-commerce brand end to end on the side \u2014 positioning, custom Shopify build, SEO content, and go-to-market',
+      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration inside a highly matrixed organization, administering a 2,400-user project platform',
     ],
     artifact: { kind: 'none' },
   },
@@ -116,7 +120,7 @@ export const stations = [
   {
     id: 'the-stack',
     code: 'STN 03',
-    title: 'The Stack \u2014 Where I Operate',
+    title: 'The Stack',
     proves:
       'I work across the full chain \u2014 ad platforms, call intelligence, analytics, and the reporting warehouse \u2014 with most of my time at the handoff between activation and measurement.',
     bullets: [
@@ -128,107 +132,114 @@ export const stations = [
   },
 
   // -- STN 04 \u00b7 INTEGRATION ------------------------------------------------
-  // The deepest technical artifact. No public doc exists for client work, so
-  // the copy carries the station alone \u2014 better no link than a fake one.
+  // The technical-depth station. b2 was a too-niche pixel-cutover war story
+  // (owner's note); it now reads as fast, clean execution under change. b3 is
+  // reframed around owning experimentation end to end rather than a specific
+  // test-gating mechanism.
   {
     id: 'integration',
     code: 'STN 04',
-    title: 'Integration \u2014 Signals Into Bidding',
+    title: 'Integration',
     proves:
       'Conversion tracking and bidding architectures designed to optimize toward lead quality rather than raw volume \u2014 then translated into business terms for client leadership.',
     bullets: [
       'Structured the signal architecture \u2014 call-quality conversion data, value-based bidding frameworks, and KPI hierarchies \u2014 tied to downstream pipeline and revenue rather than platform-reported volume',
-      'Executed a full pixel cutover on two business days\u2019 notice: migrated conversion actions to call-signal sources across both engines ahead of the client\u2019s site transition, flagging the value-based bidding risk in writing',
-      'Ran the test-and-learn program: new ad formats and automation quantified head-to-head against incumbent tactics on spend and ROI, with pilots gated behind conversion-signal readiness',
+      'Strong execution when conditions change fast \u2014 when a client\u2019s priorities or platforms shift on short notice, I re-plan quickly and deliver cleanly without losing measurement continuity',
+      'Drive experimentation end to end \u2014 hypothesis, test design, and the measurement that decides whether a new format or automation scales or gets cut',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 05 \u00b7 PIPELINE --------------------------------------------------
-  // The automation story, told without naming any one system: reporting,
-  // pacing, forecasting, and the data-integrity posture. The 300+ hours
-  // figure comes straight off the r\u00e9sum\u00e9.
+  // The automation/reporting story. The 300+ hours is the OWNER'S TEAM only
+  // (his note) \u2014 scoped that way here \u2014 with the spread to other teams framed
+  // as adoption, not "the whole business runs on it". STN 06 builds ON this;
+  // keep 05 about the machinery and 06 about the analysis layer.
   {
     id: 'pipeline',
     code: 'STN 05',
-    title: 'Pipeline \u2014 Reporting & Automation',
+    title: 'Pipeline',
     proves:
-      'Reporting, pacing, and forecasting systems built independently with AI tooling and adopted by multiple client teams, reducing quarterly reporting time by 300+ hours.',
+      'Reporting, pacing, and forecasting systems built independently with AI tooling \u2014 cutting my team\u2019s quarterly reporting time by 300+ hours, with several models since adopted by other client teams.',
     bullets: [
       'Automated multi-source reporting across Google Ads, Microsoft Advertising, and internal sources \u2014 15+ KPIs consolidated into client-ready deliverables, with the time once spent assembling them redirected to analysis',
-      'Built the pacing and forecasting models client teams rely on daily \u2014 spend tracked against plan with early risk flags, so budget conversations occur before month-end rather than after',
-      'Data-integrity checks built into every system \u2014 broken conversion tracking and understated platform spend caught before either reached client deliverables or bidding algorithms',
+      'Pacing and forecasting models that started on my accounts and were picked up by other teams \u2014 spend tracked against plan with early risk flags that catch budget issues before month-end',
+      'Data-integrity checks built into the systems themselves \u2014 a broken tag or an understated spend is stopped before it reaches a deliverable or a bidding model',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 06 \u00b7 THE DASHBOARD ----------------------------------------------
-  // The dashboard matters because of what it changed \u2014 the reinvestment
-  // decision is the story. The diagram was pulled (kind: 'none') because the
-  // mock did not accurately represent the real deliverable; the copy carries
-  // the station until a truthful export exists.
+  // Builds ON STN 05 (owner's note): 05 is the reporting/automation machinery,
+  // 06 is the ANALYSIS layer on top \u2014 dashboards that help teams read
+  // performance and decide. Kept general, not over-specific; the reinvestment
+  // is evidence, not the whole story. Diagram stays pulled (kind: 'none').
   {
     id: 'dashboard',
     code: 'STN 06',
-    title: 'The Dashboard \u2014 Built for a Decision',
+    title: 'The Dashboard',
     proves:
-      'One dashboard\u2019s figures made the case for reinvesting brand savings into Shopping, and the budget was reallocated that same week.',
+      'Dashboards that turn scattered platform data into the single view a team actually makes decisions from \u2014 the analysis layer on top of the reporting.',
     bullets: [
-      'Designed a multi-client dashboard stack \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
-      'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
-      'Traced brand Shopping cannibalization to its query source and negated it, letting the more efficient Brand Text campaign capture the traffic instead',
+      'Build dashboards that consolidate performance into one clear view, so client and internal teams spend their time interpreting results rather than assembling them',
+      'Unified paid and organic search into a single full-funnel view and templatized it for reuse across accounts \u2014 a read teams did not have before',
+      'The point is the decision, not the chart: one view surfaced an efficiency opportunity and moved brand savings into higher-return channels that week',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 07 \u00b7 THE TURNAROUND ---------------------------------------------
-  // The retail story, told discovery \u2192 intervention \u2192 result. Every number
-  // here is from the client-facing recap, and the proves line is the
-  // r\u00e9sum\u00e9 bullet nearly verbatim.
+  // The retail story. Owner's note: LEAD with the efficiency and revenue
+  // gains, then the spend cut (stronger order), and drop phrasing that leans
+  // on context the reader doesn't have (no "week-over-week" against an unseen
+  // baseline). Every figure is real; the framing is self-contained.
   {
     id: 'the-close',
     code: 'STN 07',
-    title: 'The Turnaround \u2014 Retail Search',
+    title: 'The Turnaround',
     proves:
-      'Reversed declining efficiency on a national retail brand \u2014 spend down 13% year over year, revenue up 5%, ROAS up 20% \u2014 then redirected the savings into more incremental tactics.',
+      'Grew a national retail brand\u2019s revenue 5% and its return on ad spend 20% while reducing spend 13% year over year \u2014 more revenue and better efficiency on less budget.',
     bullets: [
-      'Reduced brand CPCs progressively through bid portfolios rather than cutting reach, recovering efficiency while maintaining coverage',
-      'Traced performance discrepancies to their root causes \u2014 broken conversion tracking, misconfigured signals, understated platform spend \u2014 and resolved them before they reached clients or bidding algorithms',
-      'Restructured non-brand post-launch: +86% week-over-week ROAS as CPCs fell 33%, with the recovered budget spread across more incremental tactics in the portfolio',
+      'Reduced brand cost-per-click progressively through bid-portfolio management rather than cutting reach \u2014 efficiency recovered while volume held',
+      'Rebuilt the non-brand program in parallel, nearly doubling its return on ad spend as cost-per-click fell 33%',
+      'Redirected the freed budget into higher-incrementality tactics, turning an efficiency fix into portfolio-level growth',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 08 \u00b7 FIREFIGHT --------------------------------------------------
-  // The incident. Credibility lives here: the silent failure found and
-  // traced, and the bidding models protected from the window it corrupted.
+  // Reframed (owner's note) from a single Medicare incident to the ROUTINE:
+  // he is the person who finds what's quietly broken in an account before it
+  // does damage. Two concrete, self-driven catches carry it (non-brand
+  // misclassification, ~$40K connector understatement) \u2014 no borrowed story.
   {
     id: 'firefight',
     code: 'STN 08',
-    title: 'Firefight \u2014 The Incident',
+    title: 'Firefight',
     proves:
-      'A Medicare account\u2019s conversions dropped to zero mid-migration \u2014 call signals had silently failed to carry over, and the correction was in place before the gap could distort the bidding models.',
+      'A habit of finding what\u2019s quietly broken \u2014 anomalies, tracking gaps, and inconsistencies caught in routine account checks before they reach a client or skew a bidding model.',
     bullets: [
-      'Symptom: campaign conversions at zero following a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
-      'Resolution: recreated the conversion actions and applied a data exclusion so the corrupted window could not distort the bidding algorithm',
-      'The same diligence on the reporting side: identified a misclassification routing 100% of a client\u2019s spend to non-brand while every cross-check still passed, corrected before an inaccurate figure reached the client',
+      'Routinely audit accounts for the failures that don\u2019t announce themselves \u2014 misfiring conversion tags, understated spend, feeds that break without erroring \u2014 and resolve them before they surface downstream',
+      'Caught a misclassification routing 100% of a client\u2019s spend to non-brand while every standard cross-check still passed, corrected before it reached reporting',
+      'Reconcile platform numbers against source-of-truth as standard practice \u2014 the discipline that surfaced a ~$40K spend understatement hidden in a data connector',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 09 \u00b7 GROUND CREW --------------------------------------------------
-  // The manager-without-the-title station \u2014 the one that answers "more than
-  // my years." Operating models, curricula, firm-wide enablement.
+  // The leader/coach station. Owner's note: the RACI callout is gone (not
+  // impressive), and this reads as more of a leader than before \u2014 developing
+  // analysts into owners, mentoring, and owning the team's standards.
   {
     id: 'force-multiplier',
     code: 'STN 09',
-    title: 'Ground Crew \u2014 Enablement',
+    title: 'Ground Crew',
     proves:
-      'A go-to resource on lead generation and AI workflows within the SEM team \u2014 trainings, enablement materials, and coaching for junior analysts across several accounts.',
+      'More coach than my title suggests \u2014 I develop junior analysts into account owners, mentor new talent, and set the lead-generation and AI standards the wider team works from.',
     bullets: [
-      'Authored the portfolio RACI and growth plan: named first-pass owners per account, escalation paths, QA gates, and growth expectations by level for a five-person team',
-      'Guided a summer intern through a self-authored 13-week curriculum mapped to the firm\u2019s leadership competencies',
-      'Authored the lead-generation and AI-workflow trainings, best practices, and enablement materials the broader group works from',
+      'Coached junior analysts across multiple accounts and developed several into named account ownership',
+      'Mentored a summer intern end to end through a self-authored 13-week curriculum mapped to the firm\u2019s leadership competencies',
+      'The team\u2019s go-to resource on lead generation and AI workflows \u2014 authored the trainings, best practices, and playbooks the broader group now works from',
     ],
     artifact: { kind: 'none' },
   },
@@ -239,7 +250,7 @@ export const stations = [
   {
     id: 'certs-instruments',
     code: 'STN 10',
-    title: 'Instruments \u2014 Education & Stack',
+    title: 'Instruments',
     proves:
       'The toolkit behind the work: a business degree, a platform stack used daily, and the AI tooling that extends what one analyst can cover.',
     bullets: [
@@ -251,19 +262,22 @@ export const stations = [
   },
 
   // -- STN 11 \u00b7 DOCKING ----------------------------------------------------
-  // The close \u2014 deliberately NOT a pitch. The owner is employed and this
-  // site is not an outreach tool; the ask is a conversation, nothing more.
-  // The contact line is ALSO plain text \u2014 a dead mail client must not be
-  // the only way to reach him.
+  // The close \u2014 a landing, not a pitch. The disclosure section is a CONTACT
+  // block here (overview: 'Contact'), and its "bullets" are the ways to reach
+  // him rather than achievements. The mailto stays as the primary button; the
+  // plain-text address is there too, so a dead mail client is never the only
+  // route.
   {
     id: 'docking',
     code: 'STN 11',
-    title: 'Docking \u2014 Let\u2019s Talk',
+    title: 'Docking',
+    overview: 'Contact',
     proves:
-      'That is the full flight \u2014 the media investment, the systems behind it, and the results they produced \u2014 and if it raised a question or an idea, let\u2019s chat.',
+      'That\u2019s the whole flight \u2014 thanks for coming along; if any of it is worth a conversation, let\u2019s have one.',
     bullets: [
-      'Scope to date: $75M+ in media investment managed, the strategic roadmaps behind each account, and junior analysts coached into named account ownership',
-      'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the r\u00e9sum\u00e9 above carries the remainder',
+      'Email \u2014 cam.carp14@gmail.com',
+      'LinkedIn \u2014 linkedin.com/in/CameronCarpenter1',
+      'Based in Chicago \u00b7 the full r\u00e9sum\u00e9 is one click away in the top bar',
     ],
     artifact: {
       kind: 'link',

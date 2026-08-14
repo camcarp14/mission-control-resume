@@ -235,13 +235,13 @@ function Evidence({ station, children }: { station: Station; children: ReactNode
   const open = choice ?? !touch;
   const regionId = `${station.id}-evidence`;
 
-  /* A count and the artifact's nature, so opening it is an informed choice
-     rather than a "More". This IS the accessible name — there is no aria-label
-     over the top of it, which keeps the name and the visible text the same
-     string (the uppercase is CSS, so a speech-input user says what they see).
-     The plural is safe: the schema test pins every station at 2-3 bullets. */
+  /* The disclosure's label, and the accessible name (no aria-label over the
+     top, so the spoken name and the visible text stay one string; the
+     uppercase is CSS). It is a plain section header — "Overview" by default,
+     plus the artifact's nature when there is one to open. A station can name
+     its own section (Docking calls it "Contact"), which then stands alone. */
   const noun = ARTIFACT_NOUN[station.artifact.kind];
-  const summary = `${station.bullets.length} proof points${noun ? ` and ${noun}` : ''}`;
+  const summary = station.overview ?? `Overview${noun ? ` and ${noun}` : ''}`;
 
   return (
     <>
