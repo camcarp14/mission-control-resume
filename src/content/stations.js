@@ -85,9 +85,9 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'Revenue operations and performance marketing: $75M+ in media investment managed since 2023, and the forecasting, pacing, and reporting systems that connect it to pipeline and revenue.',
+      'Revenue operations and performance marketing in one seat \u2014 $75M+ in media investment managed since 2023, and the forecasting, pacing, and reporting systems that tie it to pipeline and revenue.',
     bullets: [
-      'Managed $75M+ in media investment since 2023 across healthcare, retail, and logistics \u2014 six healthcare business units under a Fortune 5 payer, a national retail brand, and a global logistics provider',
+      'Managed $75M+ in media investment since 2023 across clients in healthcare, retail, and logistics \u2014 including a Fortune 5 healthcare payer',
       'Owned budget forecasting, pacing models, and weekly performance analysis; presented quarterly business reviews and strategic roadmaps built in partnership with SEO, paid social, video, programmatic, and measurement teams',
       'Built the forecasting, pacing, attribution, and reporting systems that connect advertising, analytics, and CRM data to pipeline and revenue \u2014 with AI tooling applied throughout to expand the scope a single analyst can own',
     ],
@@ -274,7 +274,7 @@ export const stations = [
     title: 'Docking',
     overview: 'Contact',
     proves:
-      'Thanks for coming along on the whole flight \u2014 if anything here sparked a thought, I\u2019d genuinely love to hear from you.',
+      'Thanks for coming along on the whole flight \u2014 if anything here sparked a thought, I\u2019d love to hear from you!',
     bullets: [
       'Email \u2014 cam.carp14@gmail.com',
       'LinkedIn \u2014 linkedin.com/in/CameronCarpenter1',
