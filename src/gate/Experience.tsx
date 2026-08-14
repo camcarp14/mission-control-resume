@@ -42,7 +42,7 @@ export function Experience() {
           <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
           <div className="mt-6">
             <ErrorState
-              message="Your pass is on file, but the logbook is unreachable right now. Retry in a moment — or take the PDF and keep moving."
+              message="Your session is on file, but the sign-in service is temporarily unreachable. Please retry in a moment, or view the résumé PDF below."
               onRetry={attemptRestore}
             />
           </div>
@@ -141,9 +141,10 @@ function SplashSkeleton() {
           Cameron Carpenter.
         </h1>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          Revenue operations and performance marketing — as a résumé you pilot, not scroll. One
-          rocket, a flight path of real career artifacts, flown deliberately in about four
-          minutes. Add your name if you like, or just launch. In a hurry? The PDF is right below.
+          Revenue operations and performance marketing, presented as a résumé you pilot rather than
+          scroll — one rocket and a flight path of real career artifacts, covered deliberately in
+          about four minutes. The fields below are optional, and the résumé PDF is available if you
+          are short on time.
         </p>
         <div className="mt-6">
           <SkLine w="w80" />

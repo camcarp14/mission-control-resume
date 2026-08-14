@@ -120,7 +120,7 @@ export const stations = [
     proves:
       'I work across the full chain \u2014 ad platforms, call intelligence, analytics, and the reporting warehouse \u2014 with most of my time at the handoff between activation and measurement.',
     bullets: [
-      'Hands-on daily across Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, and Invoca \u2014 plus the Apps Script automation that stitches them together',
+      'Hands-on daily across Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, and Invoca, together with the Apps Script automation that connects them',
       'The revenue-operations half: conversion tracking and attribution, reporting and workflow automation, forecasting and pacing, funnel and cohort analysis, and data integrity and QA',
       'The media half: media planning and investment, budget management, audience segmentation and targeting, experiment design, value-based bidding, and cross-channel strategy',
     ],
@@ -153,10 +153,10 @@ export const stations = [
     code: 'STN 05',
     title: 'Pipeline \u2014 Reporting & Automation',
     proves:
-      'Reporting, pacing, and forecasting systems built solo with AI tools, adopted by multiple client teams \u2014 saving 300+ hours per quarter.',
+      'Reporting, pacing, and forecasting systems built independently with AI tooling and adopted by multiple client teams, reducing quarterly reporting time by 300+ hours.',
     bullets: [
-      'Automated multi-source reporting across Google Ads, Microsoft Advertising, and internal sources \u2014 15+ KPIs consolidated into client-ready deliverables, with the assembly time returned to actual analysis',
-      'Built the pacing and forecasting models client teams work from daily \u2014 spend tracked against plan with early risk flags, so budget conversations happen before month-end rather than after',
+      'Automated multi-source reporting across Google Ads, Microsoft Advertising, and internal sources \u2014 15+ KPIs consolidated into client-ready deliverables, with the time once spent assembling them redirected to analysis',
+      'Built the pacing and forecasting models client teams rely on daily \u2014 spend tracked against plan with early risk flags, so budget conversations occur before month-end rather than after',
       'Data-integrity checks built into every system \u2014 broken conversion tracking and understated platform spend caught before either reached client deliverables or bidding algorithms',
     ],
     artifact: { kind: 'none' },
@@ -170,7 +170,7 @@ export const stations = [
     code: 'STN 06',
     title: 'The Dashboard \u2014 Built for a Decision',
     proves:
-      'One dashboard\u2019s numbers made the case for reinvesting brand savings into Shopping \u2014 the budget moved the same week.',
+      'One dashboard\u2019s figures made the case for reinvesting brand savings into Shopping, and the budget was reallocated that same week.',
     bullets: [
       'Designed a multi-client dashboard stack \u2014 one template serving accounts with fundamentally different structures, including accounts with no brand/non-brand split at all',
       'Unified paid and organic search into a single Holistic Search view, then templatized it for rollout to any client with two variables to change',
@@ -194,7 +194,7 @@ export const stations = [
     proves:
       'Reversed declining efficiency on a national retail brand \u2014 spend down 13% year over year, revenue up 5%, ROAS up 20% \u2014 then redirected the savings into more incremental tactics.',
     bullets: [
-      'Walked brand CPCs down progressively through bid portfolios rather than cutting reach \u2014 efficiency recovered while coverage held',
+      'Reduced brand CPCs progressively through bid portfolios rather than cutting reach, recovering efficiency while maintaining coverage',
       'Traced performance discrepancies to their root causes \u2014 broken conversion tracking, misconfigured signals, understated platform spend \u2014 and resolved them before they reached clients or bidding algorithms',
       'Restructured non-brand post-launch: +86% week-over-week ROAS as CPCs fell 33%, with the recovered budget spread across more incremental tactics in the portfolio',
     ],
@@ -209,11 +209,11 @@ export const stations = [
     code: 'STN 08',
     title: 'Firefight \u2014 The Incident',
     proves:
-      'A Medicare account\u2019s conversions went to zero mid-migration \u2014 call signals had silently failed to carry over, and the fix landed before the gap poisoned the bidding models.',
+      'A Medicare account\u2019s conversions dropped to zero mid-migration \u2014 call signals had silently failed to carry over, and the correction was in place before the gap could distort the bidding models.',
     bullets: [
-      'Symptom: campaign conversions flat zero after a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
-      'Fix: recreated the conversion actions and applied a data exclusion so the corrupted window could not poison the bidding algorithm',
-      'Same instinct on the reporting side: caught a misclassification quietly routing 100% of a client\u2019s spend to non-brand while every cross-check still passed \u2014 fixed before a wrong number shipped',
+      'Symptom: campaign conversions at zero following a call-intelligence migration \u2014 doctor-visit call signals silently failing to carry into the new instance',
+      'Resolution: recreated the conversion actions and applied a data exclusion so the corrupted window could not distort the bidding algorithm',
+      'The same diligence on the reporting side: identified a misclassification routing 100% of a client\u2019s spend to non-brand while every cross-check still passed, corrected before an inaccurate figure reached the client',
     ],
     artifact: { kind: 'none' },
   },
@@ -262,10 +262,10 @@ export const stations = [
     code: 'STN 11',
     title: 'Docking \u2014 Let\u2019s Talk',
     proves:
-      'That\u2019s the full flight \u2014 the media investment, the systems behind it, and the numbers it produced \u2014 and if it sparked a question or an idea, let\u2019s chat.',
+      'That is the full flight \u2014 the media investment, the systems behind it, and the results they produced \u2014 and if it raised a question or an idea, let\u2019s chat.',
     bullets: [
       'Scope to date: $75M+ in media investment managed, the strategic roadmaps behind each account, and junior analysts coached into named account ownership',
-      'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the PDF above has the rest',
+      'Chicago \u00b7 cam.carp14@gmail.com \u00b7 linkedin.com/in/CameronCarpenter1 \u2014 the r\u00e9sum\u00e9 above carries the remainder',
     ],
     artifact: {
       kind: 'link',

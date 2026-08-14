@@ -47,9 +47,9 @@ export function StaticMode() {
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-dim">
         Every station from the flight, in order. The{' '}
         <a className="text-ink underline decoration-rule-strong underline-offset-4" href="/resume.pdf" download="Cameron-Carpenter-Resume.pdf">
-          PDF résumé
+          résumé PDF
         </a>{' '}
-        carries the same material for your files.
+        contains the same material for your records.
       </p>
 
       {stations.map((s, i) => (

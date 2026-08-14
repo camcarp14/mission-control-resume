@@ -106,9 +106,9 @@ function Failed({ what }: { what: string }) {
         <div className="mt-6 border border-accent/30 bg-accent-dim p-5">
           <div className="text-2xs uppercase tracking-widest text-accent">Error</div>
           <p className="mt-2 text-sm leading-relaxed text-ink">
-            {what} didn&rsquo;t load — that&rsquo;s this site&rsquo;s problem, not yours. Usually
-            it&rsquo;s a half-downloaded file or a deploy that landed while this tab was open, and
-            one reload clears it.
+            {what} didn&rsquo;t load — an issue on this site, not on your end. This is usually a
+            partial download, or a deploy that completed while this tab was open, and a single
+            reload typically resolves it.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -127,7 +127,7 @@ function Failed({ what }: { what: string }) {
           </div>
         </div>
         <p className="mt-4 text-2xs text-faint">
-          The PDF carries the same career and needs none of this to work.
+          The résumé PDF contains the same material and requires none of this to open.
         </p>
       </div>
     </main>

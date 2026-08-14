@@ -233,7 +233,7 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
               id="g-name"
               className={field}
               autoComplete="name"
-              placeholder="So I know who stopped by"
+              placeholder="Your name"
               value={f.name}
               onChange={set('name')}
               onFocus={prefetchSupabase}
@@ -245,7 +245,7 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
               id="g-company"
               className={field}
               autoComplete="organization"
-              placeholder="Where you're writing from"
+              placeholder="Your organization"
               value={f.company}
               onChange={set('company')}
               onFocus={prefetchSupabase}
@@ -255,15 +255,15 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
 
         {status === 'rate_limited' && (
           <p className="mt-4 text-xs leading-relaxed text-accent">
-            A lot of launches from this network in the last minute. Give it sixty seconds and try
-            again — or take the PDF below.
+            Too many launches from this network in the last minute. Please wait about a minute and
+            try again, or view the résumé PDF below.
           </p>
         )}
 
         {status === 'unreachable' ? (
           <div className="mt-5">
             <ErrorState
-              message="Couldn't reach the logbook to sign you in just now — that's this site's problem, not yours. Retry in a moment, or grab the PDF below and carry on."
+              message="The sign-in service is temporarily unreachable — an issue on this site, not on your end. Please retry in a moment, or view the résumé PDF below."
               onRetry={() => void submit()}
             />
           </div>
@@ -273,12 +273,12 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
             className="btn primary mt-5 w-full border border-rule-strong bg-raised px-4 py-3 text-sm font-medium text-ink disabled:opacity-60"
             disabled={status === 'checking'}
           >
-            {status === 'checking' ? 'Starting the flight…' : 'Begin the flight →'}
+            {status === 'checking' ? 'Preparing the flight…' : 'Begin the flight →'}
           </button>
         )}
 
         <p className="mt-3 text-center text-2xs text-faint">
-          No code, no account — the fields are optional and the flight is free.
+          No access code or account is required; both fields are optional.
         </p>
       </form>
 
@@ -306,9 +306,10 @@ function Splash({ children }: { children: React.ReactNode }) {
           Cameron Carpenter.
         </h1>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          Revenue operations and performance marketing — as a résumé you pilot, not scroll. One
-          rocket, a flight path of real career artifacts, flown deliberately in about four
-          minutes. Add your name if you like, or just launch. In a hurry? The PDF is right below.
+          Revenue operations and performance marketing, presented as a résumé you pilot rather than
+          scroll — one rocket and a flight path of real career artifacts, covered deliberately in
+          about four minutes. The fields below are optional, and the résumé PDF is available if you
+          are short on time.
         </p>
         {children}
       </div>
@@ -326,7 +327,7 @@ function PaperRow() {
       >
         Download résumé PDF
       </a>
-      <span className="text-2xs text-faint">No email required. Ever.</span>
+      <span className="text-2xs text-faint">No email address required.</span>
     </div>
   );
 }
