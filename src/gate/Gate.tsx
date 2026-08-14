@@ -302,10 +302,8 @@ function Splash({ children }: { children: React.ReactNode }) {
           Cameron Carpenter.
         </h1>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          Revenue operations and performance marketing, presented as a résumé you pilot rather than
-          scroll — one rocket and a flight path of real career artifacts, covered deliberately in
-          about four minutes. The fields below are optional, and the résumé PDF is available if you
-          are short on time.
+          A résumé in revenue operations and performance marketing — piloted, not scrolled, in
+          about four minutes. The two fields are optional; the résumé PDF is below for a quicker read.
         </p>
         {children}
       </div>
