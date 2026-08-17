@@ -170,9 +170,75 @@ a.card:hover, .task:hover { border-color: var(--rule-strong); transform: transla
 .expand > div { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility var(--dur-3) var(--ease-out); }
 .expand.open > div { visibility: visible; }
 /* The station disclosure's handle. Rotates rather than swapping glyphs, so
-   the control reads as one object in two states rather than two controls. */
-.evidence-chev { transition: transform var(--dur-2) var(--ease-out); }
+   the control reads as one object in two states rather than two controls.
+   The spring, not the ease-out, and that is the whole difference between a
+   chevron that turns and a chevron that is redrawn upside down: --ease-out is
+   a deceleration curve, so the glyph arrives at 180° and stops dead, which
+   at 12px reads as a swap. --ease-spring overshoots a few degrees and comes
+   back — the handle has a small amount of mass, like every other control on
+   this deck, and the region it opens takes --dur-3 to get there anyway. */
+.evidence-chev { transition: transform var(--dur-2) var(--ease-spring), color var(--dur-1) ease; }
 .evidence-chev.open { transform: rotate(180deg); }
+
+/* ---- what comes OUT of the disclosure ------------------------------------
+   The grid-rows trick above animates the region's HEIGHT, and on its own that
+   is a shutter: the contents slide up behind a moving edge, fully formed,
+   with no relationship to the control that was just pressed. The bullets now
+   land one after another inside that same envelope — the region opens, and
+   the evidence arrives in it.
+
+   Reusing @keyframes rise rather than writing a second 8px lift: it is the
+   entrance this system already owns (.stagger), and a disclosure that opens
+   with the site's own entrance is one less dialect. Scoped to `.expand.open`
+   so the class arriving IS the trigger — no JS, and the static document
+   (which renders these exact nodes with no .expand around them, see
+   StationContent) is untouched by construction.
+
+   Timings: 40ms of lead so the height has visibly started before anything
+   appears inside it, then 60ms apart — three bullets home at 400ms, the
+   artifact at 420ms, inside the --dur-3 the region itself takes. Nothing
+   here outlasts the shutter it rides in. */
+.expand.open li { animation: rise var(--dur-2) var(--ease-out) both; animation-delay: calc(var(--bi, 0) * 60ms + 40ms); }
+.expand.open li:nth-child(1) { --bi: 0; }
+.expand.open li:nth-child(2) { --bi: 1; }
+.expand.open li:nth-child(3) { --bi: 2; }
+.expand.open li:nth-child(4) { --bi: 3; }
+.expand.open li:nth-child(5) { --bi: 4; }
+.expand.open li:nth-child(6) { --bi: 5; }
+/* The artifact is the last thing in the region and lands last, whatever it
+   is: a link, a diagram figure or a video figure. */
+.expand.open > div > a, .expand.open > div > figure { animation: rise var(--dur-2) var(--ease-out) both; animation-delay: 180ms; }
+
+/* ---- the disclosure's own press physics ----------------------------------
+   .btn gives every control on the deck the same transition and a 0.97 press.
+   0.97 is right for a hand-sized button and wrong for this one: it is the
+   full width of the panel, so three percent is sixteen pixels of travel and
+   the whole résumé appears to flinch. It presses on the same clock, a third
+   as far.
+
+   The two states also want opposite hovers, which is why the open one has to
+   say so explicitly — .btn's generic hover paints a raised fill and a
+   hairline, and the open control is deliberately NOT a filled bar (see the
+   note in StationContent): letting the generic rule win would have grown a
+   button across the middle of the résumé on mouse-over. Open, the label and
+   the hairline light instead — the section header acknowledges the pointer
+   without becoming a slab. Closed, it stays a pressable bar and warms toward
+   the cyan the chevron is already wearing. */
+.evidence-toggle:active:not(:disabled) { transform: scale(0.99); }
+.evidence-toggle .toggle-rule { transition: background var(--dur-2) var(--ease-out); }
+.evidence-toggle:not(.is-open):hover:not(:disabled) {
+  border-color: rgba(76, 201, 240, 0.42);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 18px rgba(76, 201, 240, 0.08);
+}
+/* the invitation leans toward what it opens */
+.evidence-toggle:not(.is-open):hover .evidence-chev { transform: translateY(1px); }
+.evidence-toggle.is-open:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--dim); }
+.evidence-toggle.is-open:hover .toggle-rule { background: linear-gradient(90deg, rgba(154, 220, 255, 0.34), rgba(154, 220, 255, 0.08)); }
+/* The one glyph in the panel that points OUT of it. It travels the way it is
+   pointing on hover, which is the cheapest possible statement that the link
+   leaves the site. */
+.btn-arrow { display: inline-block; transition: transform var(--dur-1) var(--ease-out); }
+.btn:hover:not(:disabled) .btn-arrow { transform: translate(1px, -1px); }
 
 /* toasts: spring in, fade out, never shift layout */
 .toasts {
@@ -250,11 +316,80 @@ kbd {
   will-change: transform;
 }
 .panelwrap.anchored .panel { max-height: calc(100vh - 13.125rem); }
-/* the callout tether: panel -> planet limb. Attribute-driven (no animation);
-   sits between the canvas and the panels. */
+/* ---- the callout tether: panel -> planet limb -----------------------------
+   The rig writes the endpoints and the opacity as ATTRIBUTES every frame
+   (Scene3D's Rig): x1/y1 track the panel, x2/y2 the limb, stroke-opacity
+   ramps with the approach. Everything below adds the one thing the rig should
+   not be asked to do per frame — the tether DRAWS itself instead of simply
+   being there — and it does it without a single extra write, because the rig
+   already publishes "how docked is this station" and the selectors read that
+   back.
+
+   WHY THE THRESHOLD IS 0.60 AND NOT "VISIBLE AT ALL". The rig's ramp is
+   0.8 at dock, zero by 0.45 of a leg out, and it spends most of a leg down in
+   the noise: released the moment it leaves zero, the line would finish
+   drawing at about 5% opacity against a lit planet, i.e. not draw at all as
+   far as the visitor is concerned. Held to 0.60 it is released about a second
+   before the dock, in the settle, where it can be seen. The prefix selectors
+   are how a 2-decimal attribute is read as a range — the rig writes
+   toFixed(2), so `^='0.4'` is the whole 0.40–0.49 decade — and the bare '0'
+   is the rig's own "no limb to point at" state.
+
+   WHY A DASH AND WHY LINEAR. SVG cannot normalise a <line> whose endpoints
+   move every frame (pathLength is an attribute, on an element this file does
+   not own), so the pattern is a fixed length. Pairing that with a LINEAR
+   timing function is what keeps it honest: the dash grows at a constant
+   ~2.9px/ms, so the PEN SPEED is the constant and a long tether takes longer
+   to draw than a short one — which is what drawing is. Under the house
+   ease-out, any length would have been half-covered in the first 40ms and
+   read as a pop. 1200 clears the longest tether the anchor clamps can
+   produce at 2560px and the 4000 gap clears all of them, so the pattern never
+   repeats; a zero-length dash under the default butt cap paints nothing, so
+   the retracted state costs no opacity rule of its own.
+
+   WHAT THIS ACTUALLY BUYS, measured rather than hoped for. The rig seats the
+   panel 42px off the limb and lines the two up vertically, so a typical
+   tether is a STUB: 37px at STN 01 and 42px at STN 02, 18px at STN 05, all at
+   1600x900. At 2.9px/ms a 37px stub is drawn in about thirteen milliseconds —
+   i.e. the draw below is correct at every length and legible only at the long
+   ones, which is what the vertical clamp produces when a body sits high or
+   low in frame. At stub length the arrival is carried by the TERMINAL, which
+   springs onto the limb over --dur-2 and is plainly visible. Both are here
+   because the geometry is the rig's to choose and this file has to be right
+   either way. */
 .tether { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
-.tether line { stroke: var(--cyan); stroke-width: 1; }
-.tether circle { fill: var(--cyan-bright); }
+.tether line {
+  stroke: var(--cyan); stroke-width: 1;
+  stroke-dasharray: 1200 4000;
+  transition: stroke-dasharray var(--dur-3) linear;
+}
+.tether line[stroke-opacity='0'],
+.tether line[stroke-opacity^='0.0'],
+.tether line[stroke-opacity^='0.1'],
+.tether line[stroke-opacity^='0.2'],
+.tether line[stroke-opacity^='0.3'],
+.tether line[stroke-opacity^='0.4'],
+.tether line[stroke-opacity^='0.5'] { stroke-dasharray: 0 4000; }
+/* The terminal lands ON the limb after the line reaches it — hence the delay,
+   which is about the time the pen takes on a typical tether. fill-opacity is
+   deliberately NOT transitioned: the rig rewrites it every frame, and a
+   transition re-targeted 60 times a second is a low-pass filter, not a fade —
+   it would leave the dot permanently behind its own value while under way.
+   transform is the rig's blind spot, so the spring rides there.
+   fill-box, so the origin is the dot's own centre wherever the rig has
+   just put it. */
+.tether circle {
+  fill: var(--cyan-bright);
+  transform-box: fill-box; transform-origin: center;
+  transition: transform var(--dur-2) var(--ease-spring) 120ms;
+}
+.tether circle[fill-opacity='0'],
+.tether circle[fill-opacity^='0.0'],
+.tether circle[fill-opacity^='0.1'],
+.tether circle[fill-opacity^='0.2'],
+.tether circle[fill-opacity^='0.3'],
+.tether circle[fill-opacity^='0.4'],
+.tether circle[fill-opacity^='0.5'] { transform: scale(0.3); }
 /* ---- the panel's SURFACE lives on its wrapper, not on the panel ----------
    The panel has to be masked (see .panel below) and a mask takes the whole
    element's rendering with it — background, border and shadow included — so
@@ -278,6 +413,45 @@ kbd {
   border-top-color: rgba(76, 201, 240, 0.32);
   border-radius: var(--r-3);
   box-shadow: 0 -1px 18px rgba(76, 201, 240, 0.05), 0 14px 44px rgba(0, 0, 0, 0.5);
+}
+/* ---- and the same surface with the light actually ON it ------------------
+   The card above is correct and flat: one fill, one hairline, one shadow. It
+   reads as a card ON space rather than as a pane of instrument glass IN it,
+   and the difference is entirely in how the edges are lit. Three additions,
+   each answering a different half of that:
+
+     - the two gradients are a single cold source above the panel. The
+       radial is the light itself, the linear is the falloff down the face.
+       Both are gated to the top third, which is where they can be seen: the
+       panel's own scroll-fade bands and its mask both live at the extremes,
+       and its MIDDLE has no background at all (see .panel), so a wrapper
+       gradient is the only thing that can put a gradient behind the copy.
+     - the inset hairline is the lit top EDGE. It sits just inside the border
+       so the two read as one bevel — a lit rim over a cyan hairline — rather
+       than as two parallel lines.
+     - the shadow is deepened and given a second, tighter layer. One 44px
+       shadow is an even grey halo; a tight contact shadow under a wide soft
+       one is what separates a panel from a bright planet directly behind it,
+       which is exactly the case at STN 05 and STN 09.
+
+   WHY IT IS A SEPARATE, CLASS-GATED RULE. Everything here is per-pixel paint
+   on a 560px card — three gradients and four shadow layers, re-rasterised
+   whenever the panel's box changes (which the disclosure does on purpose).
+   That is affordable on the machines the quality module calls mid and up and
+   is exactly the sort of thing to stop building on a device that is already
+   struggling, so StationPanel asks detectTier() once and only adds `lit`
+   above the floor. A low-tier visitor keeps the surface above, unchanged —
+   the tier system's rule is that low is at-or-below today, never worse. */
+.panelwrap :has(> .panel.lit) {
+  background:
+    radial-gradient(140% 84% at 50% -6%, rgba(154, 220, 255, 0.05), rgba(154, 220, 255, 0) 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 34%),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(154, 220, 255, 0.11),
+    0 -1px 22px rgba(76, 201, 240, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 22px 60px rgba(0, 0, 0, 0.62);
 }
 .panel {
   /* 35rem, not 560px, and the padding with it: the measure and the type ramp
@@ -326,12 +500,19 @@ kbd {
      Flight's key handler claims Space/PageUp/PageDown but never the arrows.
      Verified in Playwright (138px of STN 06 recovered in 8 presses), not
      assumed. Splitting the scroller out into a child would have cost that:
-     focus would have landed on a frame that no longer scrolls. */
+     focus would have landed on a frame that no longer scrolls.
+
+     The two CUE gradients carry three stops rather than two for the same
+     reason the mask below does: a straight linear ramp of a saturated colour
+     shows its own top edge as a line, and a cue band that reads as a rule is
+     a cue that reads as a border. The extra stop pushes most of the fall into
+     the first third, so the band has a bright root at the panel edge and
+     nothing the eye can find a boundary in. */
   background:
     linear-gradient(var(--panel) 62%, rgba(13, 15, 19, 0)) top / 100% 1.25rem no-repeat local,
     linear-gradient(rgba(13, 15, 19, 0), var(--panel) 38%) bottom / 100% 1.625rem no-repeat local,
-    linear-gradient(rgba(76, 201, 240, 0.34), rgba(76, 201, 240, 0)) top / 100% 0.75rem no-repeat,
-    linear-gradient(rgba(76, 201, 240, 0), rgba(76, 201, 240, 0.34)) bottom / 100% 0.875rem no-repeat;
+    linear-gradient(rgba(76, 201, 240, 0.34), rgba(76, 201, 240, 0.12) 42%, rgba(76, 201, 240, 0)) top / 100% 0.875rem no-repeat,
+    linear-gradient(rgba(76, 201, 240, 0), rgba(76, 201, 240, 0.12) 58%, rgba(76, 201, 240, 0.34)) bottom / 100% 1rem no-repeat;
   /* the thumb is the third part of the signal, so it is not the
      near-invisible global one — inside a panel it is a readout of how much
      is left to read */
@@ -344,22 +525,81 @@ kbd {
 /* The content fade itself — all of it, gated together. Both halves of the
    pair have to land or neither should: see the note above about what a mask
    without no-clip does to the panel's shadow. */
+/* The ramp itself is an EASE, not a line, and the endpoints are exactly the
+   ones it always had (0 → 1.375rem at the top, 1.5rem → 100% at the foot), so
+   nothing about the geometry note above changes — only the shape between
+   them. A linear alpha ramp dissolves text through its own straight middle:
+   the eye reads the constant-rate section as an edge and the glyphs appear to
+   be cut by something. The five stops approximate a smoothstep — slow, fast,
+   slow — which has no constant-rate section anywhere, so type entering the
+   band just loses its ground. Same two declarations, same @supports gate,
+   same no-clip requirement (see above for why both halves have to land
+   together). */
 @supports (mask-clip: no-clip) or (-webkit-mask-clip: no-clip) {
   .panel {
     -webkit-mask-image: linear-gradient(
       to bottom,
-      transparent 0, #000 1.375rem,
-      #000 calc(100% - 1.5rem), transparent 100%
+      transparent 0, rgba(0, 0, 0, 0.12) 0.34rem, rgba(0, 0, 0, 0.56) 0.72rem,
+      rgba(0, 0, 0, 0.9) 1.06rem, #000 1.375rem,
+      #000 calc(100% - 1.5rem), rgba(0, 0, 0, 0.9) calc(100% - 1.16rem),
+      rgba(0, 0, 0, 0.56) calc(100% - 0.78rem), rgba(0, 0, 0, 0.12) calc(100% - 0.37rem),
+      transparent 100%
     );
     mask-image: linear-gradient(
       to bottom,
-      transparent 0, #000 1.375rem,
-      #000 calc(100% - 1.5rem), transparent 100%
+      transparent 0, rgba(0, 0, 0, 0.12) 0.34rem, rgba(0, 0, 0, 0.56) 0.72rem,
+      rgba(0, 0, 0, 0.9) 1.06rem, #000 1.375rem,
+      #000 calc(100% - 1.5rem), rgba(0, 0, 0, 0.9) calc(100% - 1.16rem),
+      rgba(0, 0, 0, 0.56) calc(100% - 0.78rem), rgba(0, 0, 0, 0.12) calc(100% - 0.37rem),
+      transparent 100%
     );
     -webkit-mask-clip: no-clip;
     mask-clip: no-clip;
   }
 }
+/* ==== THE ARRIVAL: A PANEL THAT ASSEMBLES INSTEAD OF ARRIVING =============
+   The station panel used to fly in as one block — the wrapper's opacity and
+   scale are driven straight off `t`, so the card and everything printed on it
+   faded up together, which is what a picture of a card does rather than what
+   an instrument does. The parts now land in reading order: the STN eyebrow,
+   the title, the takeaway, then the disclosure. Nothing about the block move
+   changes; this is the same arrival with its internals sequenced.
+
+   THE BUDGET IS THE POINT. --dur-2 per part and 45ms between them puts the
+   last part home at 240 + 4x45 = 420ms — exactly --dur-3, the same envelope
+   .pagefade already spends on the panel as a whole. The flight is not one
+   millisecond longer for this.
+
+   `arrive` is written by StationPanel from the flight's own MotionValue when
+   the station is about a second out (see the note there for the threshold and
+   why it is a classList write and not React state). It is a class rather than
+   a mount-time animation because panels MOUNT as neighbours, off to the side
+   and invisible: a mount-triggered entrance is one that plays for nobody and
+   is over before the station is looked at. Removing the class when the panel
+   leaves is what re-arms it, so flying back to a station replays the
+   assembly rather than showing a card that has already happened.
+
+   Two properties only, both composited, on at most five elements of one
+   panel — the stage's perf contract is intact. */
+.panel.arrive > * { animation: panel-part var(--dur-2) var(--ease-out) both; animation-delay: calc(var(--pi, 0) * 45ms); }
+.panel.arrive > *:nth-child(1) { --pi: 0; }
+.panel.arrive > *:nth-child(2) { --pi: 1; }
+.panel.arrive > *:nth-child(3) { --pi: 2; }
+.panel.arrive > *:nth-child(4) { --pi: 3; }
+.panel.arrive > *:nth-child(5) { --pi: 4; }
+@keyframes panel-part { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+/* The eyebrow's hairline draws out from the station code rather than fading
+   in with it — the one part of the panel that is a RULE and not a word, so it
+   is the one part that should be drawn. transform-origin is stated on the
+   element and not only in the keyframes because a paused/filling animation
+   must not be the only thing holding it. */
+.panel.arrive .eyebrow-rule {
+  transform-origin: left center;
+  animation: rule-draw var(--dur-3) var(--ease-out) both;
+  animation-delay: 45ms;
+}
+@keyframes rule-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
 /* The 9vw seat-right has to move off .panel, because the panel's surface now
    sits on the panel's WRAPPER (see .panelwrap :has(> .panel) above) and a
    transform on the panel alone would slide the content out from under its
@@ -648,6 +888,14 @@ kbd {
   /* flight-deck chrome loops: status blink, advance drift, hero entrance
      (identity column and the advance cue that lands after it) */
   .hero-dot, .advance-dot, .hero-in > *, .hero-cue { animation: none !important; }
+  /* the station panel's arrival choreography and the evidence disclosure's:
+     both are pure entrance, so both are simply absent here. `both` fill is
+     what makes turning them off safe rather than destructive — with the
+     animation gone the parts sit at their own styles, which is the finished
+     state, so a reduced-motion visitor gets an assembled panel with a drawn
+     rule and a full list rather than a panel holding its breath. */
+  .panel.arrive > *, .panel.arrive .eyebrow-rule,
+  .expand.open li, .expand.open > div > a, .expand.open > div > figure { animation: none !important; }
   /* .expand > div joins its parent here for a reason beyond taste: the
      visibility transition is what takes a closed region out of the focus
      order, and leaving it running while the height snapped to zero would
@@ -655,6 +903,12 @@ kbd {
      halves of the mechanism have to stop together or the disclosure is
      briefly the exact broken state the rule up there exists to prevent. */
   .expand, .expand > div, .evidence-chev,
+  /* the tether draws and its terminal springs; under this preference the
+     callout is simply where it points, at the length it is */
+  .tether line, .tether circle,
+  /* the two sub-element transitions the .btn line below cannot reach: they
+     live on children of a control, not on the control */
+  .btn-arrow, .evidence-toggle .toggle-rule,
   .btn, .card, .task, .section, .tabs button, .seg button, .rail button .dot,
   /* the rail's travelled route and its station tag: both are STATE, and state
      under this preference is drawn instantly rather than travelled to */
@@ -864,11 +1118,16 @@ kbd {
 }
 .telemetry-read .tl { color: rgba(154, 220, 255, 0.5); }
 .telemetry-read .tv { justify-self: end; color: var(--hud); white-space: nowrap; }
-/* the zero padding: present, holding the column still, deliberately not
-   competing with the figure it is padding. No margin — the padding and the
-   significant digits are ONE number and must not be separated. */
-.telemetry-read .tz { color: rgba(154, 220, 255, 0.28); }
-/* SEC's `//` is a separator, not padding, so unlike .tz it takes space on both
+/* The zero padding is present, holding the column still, deliberately not
+   competing with the figure it is padding — no margin, because the padding and
+   the significant digits are ONE number and must not be separated. It used to
+   be a `.tz` wrapper span around the whole run of leading zeros; it is now
+   `data-pad` on each individual drum cell (see INSTRUMENT MOTION at the foot
+   of this file), so the quiet/bright boundary fades as it slides instead of
+   stepping. The `.tz` rule that lived here matched nothing after that change
+   and was pruned by the integration pass. */
+/* SEC's `//` is a separator, not padding, so unlike the zero padding it takes
+   space on both
    sides. The left margin is not symmetry for its own sake: SEC carries the
    LONGEST figure of the three, so it is the row that fills the column edge to
    edge and the only one where the label and the figure meet at the bare
@@ -888,9 +1147,21 @@ kbd {
    station to fix one. An out-of-flow box changes no measurement. The radial
    falloff is what keeps it from reading as a rectangle floating in space. */
 .telemetry-read { position: relative; }
+/* THE PLATE IS NOW OPAQUE WHERE THE TYPE IS, and translucent only outside it.
+   The old ramp (0.92 at the centre, 0.8 by 52%, gone by 84%) was holding the
+   MEAN of what sits behind this block down to ~28 while the lit office windows
+   behind it still peaked at 210 — and it is the peaks the glyphs sit on, so
+   the average was measuring the wrong thing. Two stops moved: the core goes to
+   0.985 (a 210-luminance window reads through at ~3, i.e. not at all) and the
+   solid zone is pushed out to 52%, which on a farthest-corner ellipse reaches
+   ~0.73 of the box's half-width — past the last glyph on every row. The
+   falloff still exists, still starts before the type ends, and still does the
+   job it was added for, which is stopping this reading as a rectangle floating
+   in space. It just no longer does it across the digits. */
 .telemetry-read::before {
   content: ''; position: absolute; inset: -15px -17px; z-index: -1;
-  background: radial-gradient(ellipse at center, rgba(4, 8, 12, 0.92), rgba(4, 8, 12, 0.8) 52%, rgba(4, 8, 12, 0) 84%);
+  background: radial-gradient(ellipse at center,
+    rgba(4, 8, 12, 0.985) 0 52%, rgba(4, 8, 12, 0.9) 72%, rgba(4, 8, 12, 0) 94%);
   pointer-events: none;
 }
 
@@ -962,4 +1233,146 @@ kbd {
      35rem. (Replacing that arbitrary value at its source is listed under
      needsIntegration; it lives in a file this pass could not touch.) */
   .panelwrap > *, .anchorpos > * { max-width: none; }
+}
+
+/* ==== INSTRUMENT MOTION (Telemetry / HUD / Rail) ==========================
+   These rules were authored in three scoped <style> elements inside the
+   component bodies, because the round that wrote them did not own this file.
+   They are lifted here verbatim by the integration pass: <style> in <body> is
+   non-conforming HTML, and three of them were being re-emitted by components
+   that re-render on every docking.
+
+   POSITION IS LOAD-BEARING, IN BOTH DIRECTIONS.
+   (a) The :active press rules below override `.btn:active` (line ~114) and
+       `.btn.hudcta:hover` (line ~1170) at EQUAL specificity, so they resolve
+       by source order and must stay after both. That is why this section is
+       at the end of the file rather than beside the other chrome.
+   (b) The reduce block at line ~886 comes BEFORE these rules and therefore
+       cannot switch them off — later wins at equal specificity. The
+       animations and transitions introduced here get their own reduce block
+       at the very bottom of this file instead. Anything added to this section
+       must be named there too, or it will keep animating under the
+       preference. */
+
+/* ---- Telemetry: the readouts as drum cells ------------------------------
+   ALT/VEL/SEC are runs of one-glyph cells so a digit that changes can settle
+   on its own. The cells carry NO width and NO overflow clipping: an
+   overflow:hidden inline-block takes its bottom margin edge as its baseline,
+   and this grid is align-items:baseline, so clipping is precisely what would
+   break the row. The leading-zero split rides on data-pad per cell rather
+   than a wrapper span, so the quiet/bright boundary fades as it slides. */
+.telemetry-read .tdig {
+  display: inline-block;
+  transition: color var(--dur-2) ease;
+}
+/* 0.28 was tuned against the near-black of deep space and disappeared entirely
+   over the lit skyline at STN 11. 0.42 is still unmistakably the quiet half of
+   the number — the lit digits run at full --hud — and it survives the one
+   background on the route that is not black. */
+.telemetry-read .tdig[data-pad='1'] { color: rgba(154, 220, 255, 0.42); }
+.telemetry-read .tsec { display: inline-block; }
+/* the comet head that rides the progress rail's fill tip */
+.telemetry-head {
+  position: absolute; left: 50%; top: 0;
+  width: 3px; height: 18px; margin: -18px 0 0 -1.5px;
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+  background: linear-gradient(180deg,
+    rgba(125, 249, 255, 0) 0%,
+    rgba(125, 249, 255, 0.45) 62%,
+    rgba(125, 249, 255, 0.95) 100%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ---- HUD: the station counter's two-stage settle + real press physics ----
+   The counter is keyed on `current`, so React remounts it per docking and the
+   settle restarts by construction. Press physics are asymmetric — a control
+   goes down faster than it comes back — so the active state states its own
+   transform (the lift explicitly zeroed rather than left to cancel) and
+   shortens to 70ms on the way IN only; release inherits the 140ms house
+   curve. The inset shadow is what makes the button read as pressed INTO the
+   bar rather than merely scaled. */
+.hudtick { animation: hud-tick 240ms var(--ease-out) both; }
+.hudtick .hudtick-b { animation: hud-fade 240ms var(--ease-out) 80ms both; }
+@keyframes hud-tick {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes hud-fade { from { opacity: 0; } to { opacity: 1; } }
+.hud .btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.962);
+  transition-duration: 70ms;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+.hud .btn.hudcta:active:not(:disabled) {
+  background: rgba(76, 201, 240, 0.16);
+  box-shadow: inset 0 0 14px rgba(76, 201, 240, 0.22);
+}
+/* The house focus ring is 2px of --dim, which is right on every grey control
+   and reads as a dead ring around the one cyan control on the bar. */
+.hud .btn.hudcta:focus-visible { outline-color: var(--cyan); }
+
+/* ---- Rail: a travelling index mark ---------------------------------------
+   Its x is MEASURED off the live button rather than computed from the 20px
+   cell constant — one forced layout per docking and per resize, never per
+   frame. A measurement cannot drift at a breakpoint; the constant can. */
+.railmark {
+  position: absolute; top: 50%; left: 0;
+  width: 34px; height: 30px; margin: -15px 0 0 -17px;
+  pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(76, 201, 240, 0.15), rgba(76, 201, 240, 0) 62%);
+  will-change: transform;
+}
+/* The index ticks. A hairline BEZEL around the diamond was the first attempt
+   and it was invisible on the shipped build: the docked dot carries a 10px
+   cyan box-shadow, so a ring drawn inside that radius is simply flooded. The
+   detent that survives its own glow is the one every scale-and-needle
+   instrument uses — an index mark clear of the pointer, above and below it. */
+.railmark::before, .railmark::after {
+  content: ''; position: absolute; left: 50%; margin-left: -0.5px;
+  width: 1px; height: 5px;
+  background: rgba(154, 220, 255, 0.55);
+}
+.railmark::before { top: 0; }
+.railmark::after { bottom: 0; }
+/* Seated only after the first measurement lands, so the mark does not slide
+   in from the left edge of the rail on the opening frame. */
+.railmark[data-seated='1'] {
+  opacity: 1;
+  transition: transform var(--dur-3) var(--ease-out), opacity var(--dur-2) ease;
+}
+/* The tag's stem — the difference between a label that is near a waypoint and
+   a label that is pointing at one. Absolute, because .rail button is a grid
+   with place-items: center and an in-flow pseudo-element would become a
+   second grid item and shove the diamond off centre. */
+.rail button::before {
+  content: ''; position: absolute; left: 50%; margin-left: -0.5px;
+  bottom: calc(100% - 16px); height: 8px; width: 1px;
+  opacity: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(154, 220, 255, 0.6), rgba(154, 220, 255, 0));
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+@media (hover: hover) {
+  .rail button:hover::before { opacity: 1; }
+  /* Hover has to read at a glance against black, and a 7px hairline growing
+     to 9px does not. The halo is the same cyan the track is drawn in, well
+     under the docked diamond's own glow. */
+  .rail button:hover .dot { box-shadow: 0 0 9px rgba(154, 220, 255, 0.4); }
+}
+.rail button:focus-visible::before { opacity: 1; }
+
+/* ==== REDUCE, PART TWO ====================================================
+   The reduce block at line ~886 sits ABOVE the section immediately preceding
+   this one and so cannot reach it: at equal specificity the later rule wins,
+   and every rule in INSTRUMENT MOTION is later. This block is that section's
+   own switch, and it has to stay last in the file. Each of the three
+   components previously carried this clause inside its own scoped <style>;
+   the clauses are merged here unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  .telemetry-read .tdig { transition: none !important; }
+  .hudtick, .hudtick .hudtick-b { animation: none !important; }
+  .railmark[data-seated='1'] { transition: none !important; }
+  .rail button::before { transition: none !important; }
 }

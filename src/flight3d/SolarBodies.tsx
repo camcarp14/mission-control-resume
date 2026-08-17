@@ -15,6 +15,8 @@ import { useTexture } from '@react-three/drei';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Vec3, Waypoint } from '../engine';
 import { mulberry32 } from '../engine';
+import type { QualityBudget } from './quality';
+import { scaleSegments, useQuality } from './quality';
 import { FILL_FROM, FILL_INTENSITY, SUN_LIGHT_INTENSITY } from './SpaceEnvironment';
 
 export type SolarBodiesProps = {
@@ -419,13 +421,58 @@ function applyPlacements(mesh: THREE.InstancedMesh | null, list: readonly Placem
  * first GPU upload also avoids a needsUpdate re-upload on the 4k maps. */
 function useSurfaceTexture(url: string, srgb = true): THREE.Texture {
   const tex = useTexture(url);
+  // Anisotropy is the one texture knob the tier owns: these maps are seen at
+  // extreme grazing angles all the way round every limb, which is exactly the
+  // case trilinear filtering smears and anisotropic filtering does not. Mid
+  // reports the 8 that ships today, so this line is a no-op on the baseline
+  // device; high asks for 16 and low drops to 4. The value is clamped to what
+  // the renderer will actually honour by three itself.
+  const q = useQuality();
   const want = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-  if (tex.anisotropy !== 8 || tex.colorSpace !== want) {
-    tex.anisotropy = 8;
+  // Only colorSpace flags a re-upload, and the distinction is the point.
+  // colorSpace is baked into the UPLOAD (it picks the internal format), so
+  // changing it genuinely requires re-sending the image. Anisotropy is SAMPLER
+  // state — three applies it in setTextureParameters on the next bind — so
+  // flagging needsUpdate for it would re-send Earth's three 4k maps, plus
+  // every planet, Saturn, its ring and the sun, to change one integer. These
+  // textures live in drei's global cache, which is what made that mistake
+  // expensive: the budget the tier hands us is frozen at mount now
+  // (quality.ts), so this assignment settles before the first GPU upload and
+  // no re-upload is ever needed.
+  if (tex.colorSpace !== want) {
     tex.colorSpace = want;
     tex.needsUpdate = true;
   }
+  tex.anisotropy = q.anisotropy;
   return tex;
+}
+
+/** Width/height segment pair for a body sphere, scaled by the tier. Height is
+ *  three quarters of width — the ratio every sphere in this file already uses,
+ *  so passing today's width (48 for a standard body, 64 for Earth and the sun)
+ *  reproduces today's geometry exactly at mid. */
+function sphereSegs(q: QualityBudget, base: number): readonly [number, number] {
+  const w = scaleSegments(q, base);
+  return [w, Math.max(6, Math.round((w * 0.75) / 2) * 2)];
+}
+
+/** The same pair, but with `base` treated as a CEILING: the tier may take
+ *  segments away and never add any.
+ *
+ *  Not every sphere wants the high tier's extra density. Earth and the sun are
+ *  already art-directed at 64, and at the size they occupy on screen the
+ *  silhouette error of a 64-gon is about a quarter of a pixel — going to 86
+ *  buys a difference nobody can see and costs five thousand triangles on the
+ *  two biggest bodies in the flight. An atmosphere shell wants it even less:
+ *  its edge is an additive falloff that reaches zero INSIDE the shell, so the
+ *  shell has no silhouette of its own to facet. Measured on this box, capping
+ *  those three took the high tier's triangle count at STN 01 from +69k over
+ *  today to well under a fifth of that, with no visible change. The headroom
+ *  goes to the bodies that genuinely gain from it — the moon's cratered limb
+ *  at 48 does — and to the shading. */
+function sphereSegsCapped(q: QualityBudget, base: number): readonly [number, number] {
+  const [w, h] = sphereSegs(q, base);
+  return [Math.min(w, base), Math.min(h, Math.max(6, Math.round((base * 0.75) / 2) * 2))];
 }
 
 /* ---- generated billboard textures ----------------------------------------
@@ -945,8 +992,24 @@ void main() {
 
 /* Shell height as a fraction of the body radius. Generous on purpose: the
  * glow now dies out inside the shell instead of at it, so the extra room is
- * headroom for the falloff, not a thicker-looking band. */
-const ATMOS_THICKNESS = 0.1;
+ * headroom for the falloff, not a thicker-looking band.
+ *
+ * THE LADDER. Index 0 is exactly what ships — same thickness, same intensity —
+ * so `budget.atmosphere === 1` (low AND mid) is byte-for-byte today's single
+ * shell. Index 1 is the high tier's second shell, and it is not a brighter
+ * version of the first: the fragment shader's density term is
+ * exp(-3.4 · (b − R)/(thickness · R)), so THICKNESS IS THE SCALE HEIGHT. A
+ * shell three times as tall is a haze that thins three times more slowly and
+ * therefore reaches three times further off the limb, while still dying out at
+ * the same fraction of its own height — which is what keeps it from having a
+ * visible outer edge. At a quarter of the brightness it is the faint outer
+ * scattering that sits under the tight bright band, and the two together are
+ * the difference between an atmosphere and a rim light. One extra draw call on
+ * each of the five bodies that have air, desktop-high only. */
+const ATMOS_SHELLS: ReadonlyArray<{ thickness: number; gain: number }> = [
+  { thickness: 0.1, gain: 1 },
+  { thickness: 0.3, gain: 0.26 },
+];
 /* The warm end of every limb — one shared terminator colour, because the
  * reddening is Rayleigh scattering doing the same thing to every atmosphere
  * and giving each world its own sunset colour would read as decoration. */
@@ -975,52 +1038,81 @@ function Atmosphere({
   /** 0 = full shell, 1 = invisible — driven by the landing ramp. */
   fadeRef?: { current: number };
 }) {
-  const outer = radius * (1 + ATMOS_THICKNESS);
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        uniforms: {
-          uColor: { value: new THREE.Color(color) },
-          uWarm: { value: new THREE.Color(ATMOS_WARM) },
-          uLight: { value: new THREE.Vector3() },
-          uIntensity: { value: intensity },
-          uDusk: { value: dusk },
-          uFade: { value: 1 },
-          uInner: { value: radius },
-          uOuter: { value: outer },
-        },
-        vertexShader: ATMOS_VERT,
-        fragmentShader: ATMOS_FRAG,
-        blending: THREE.AdditiveBlending,
-        side: THREE.BackSide,
-        transparent: true,
-        depthWrite: false,
-      }),
-    [color, intensity, dusk, radius, outer],
-  );
+  const q = useQuality();
+  // One shell at low and mid, two at high. Clamped to the ladder's length so a
+  // budget that ever asks for more than exists cannot index past the end.
+  const shellCount = Math.max(1, Math.min(ATMOS_SHELLS.length, Math.round(q.atmosphere)));
+  const [segW, segH] = sphereSegsCapped(q, 48);
+
+  const shells = useMemo(() => {
+    const built: Array<{ material: THREE.ShaderMaterial; outer: number }> = [];
+    for (let i = 0; i < shellCount; i++) {
+      const spec = ATMOS_SHELLS[i];
+      if (!spec) continue;
+      const outer = radius * (1 + spec.thickness);
+      built.push({
+        outer,
+        material: new THREE.ShaderMaterial({
+          uniforms: {
+            uColor: { value: new THREE.Color(color) },
+            uWarm: { value: new THREE.Color(ATMOS_WARM) },
+            uLight: { value: new THREE.Vector3() },
+            uIntensity: { value: intensity * spec.gain },
+            uDusk: { value: dusk },
+            uFade: { value: 1 },
+            uInner: { value: radius },
+            uOuter: { value: outer },
+          },
+          vertexShader: ATMOS_VERT,
+          fragmentShader: ATMOS_FRAG,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          transparent: true,
+          depthWrite: false,
+        }),
+      });
+    }
+    return built;
+  }, [color, intensity, dusk, radius, shellCount]);
+
   // The key direction is written, never memo-keyed: a fresh [x,y,z] literal
   // from the caller would otherwise rebuild the material on every render and
   // hand the compiler a new program mid-flight.
   useLayoutEffect(() => {
-    const u = material.uniforms['uLight'];
-    if (u) (u.value as THREE.Vector3).set(light[0], light[1], light[2]);
-  }, [material, light]);
-  useEffect(() => () => material.dispose(), [material]);
+    for (const shell of shells) {
+      const u = shell.material.uniforms['uLight'];
+      if (u) (u.value as THREE.Vector3).set(light[0], light[1], light[2]);
+    }
+  }, [shells, light]);
+  useEffect(
+    () => () => {
+      for (const shell of shells) shell.material.dispose();
+    },
+    [shells],
+  );
   useFrame(() => {
-    const u = material.uniforms['uFade'];
-    if (fadeRef && u) {
-      // Hold the blue limb through the whole return arc — Earth should look
-      // like Earth until the final descent, when the LandingSite's own sky
-      // takes over. (An early linear fade stripped the glow mid-approach.)
-      const r = (fadeRef.current - 0.75) / 0.2;
-      const s = r < 0 ? 0 : r > 1 ? 1 : r;
-      u.value = 1 - s * s * (3 - 2 * s);
+    if (!fadeRef) return;
+    // Hold the blue limb through the whole return arc — Earth should look
+    // like Earth until the final descent, when the LandingSite's own sky
+    // takes over. (An early linear fade stripped the glow mid-approach.)
+    const r = (fadeRef.current - 0.75) / 0.2;
+    const s = r < 0 ? 0 : r > 1 ? 1 : r;
+    const fade = 1 - s * s * (3 - 2 * s);
+    for (const shell of shells) {
+      const u = shell.material.uniforms['uFade'];
+      if (u) u.value = fade;
     }
   });
   return (
-    <mesh material={material}>
-      <sphereGeometry args={[outer, 48, 36]} />
-    </mesh>
+    <>
+      {shells.map((shell, i) => (
+        // Every shell shares ONE compiled program — same source, same defines —
+        // so the second one costs a draw call and nothing else.
+        <mesh key={i} material={shell.material}>
+          <sphereGeometry args={[shell.outer, segW, segH]} />
+        </mesh>
+      ))}
+    </>
   );
 }
 
@@ -1055,6 +1147,161 @@ const ATMOS_TINT: Partial<Record<RockyKind, { color: string; intensity: number; 
     neptune: { color: '#5f86e8', intensity: 1.15, dusk: 0.4 },
   };
 
+/* ==== SURFACE SHADING — the day/night boundary ON the body =================
+ *
+ * The Atmosphere shell above draws the air. This draws what the air does to
+ * the GROUND, which is the other half of the same photograph and the half the
+ * scene did not have. Two defects, both visible in the shipped screenshots:
+ *
+ *   THE CITY LIGHTS WERE ALWAYS ON. Earth's night map is wired as an
+ *   emissiveMap, and emissive in a standard material is added unconditionally
+ *   — so every city on the planet was glowing at local noon, laid over the day
+ *   map as a faint dirty haze. It is the single most artificial thing about
+ *   the globe, and it is worst exactly where the eye is: the sunlit face that
+ *   fills the frame at STN 01. The fix is to mask the emissive by the surface's
+ *   own angle to the key light, with a soft ramp rather than a step, so the
+ *   lights come up THROUGH the terminator over ~15° of longitude instead of
+ *   switching on along a line.
+ *
+ *   THE TERMINATOR WAS A KNIFE EDGE. Lambert takes a surface to exactly black
+ *   at ndl = 0 and a textured sphere therefore shows a hard arc. A real
+ *   terminator is not hard: light grazing the surface travels through a long
+ *   column of air (or, on an airless body, scatters off a rough regolith), so
+ *   there is a warm, rapidly-thinning band that straddles the boundary and
+ *   reaches a little way onto the night side. That band is what every orbital
+ *   photograph has and no renderer gives you for free.
+ *
+ * Both are a handful of ALU on pixels the body already covers — no extra
+ * texture fetch, no extra draw call, no extra geometry — and both are driven
+ * by the SAME world-space key direction the Atmosphere shell uses, so the air
+ * and the ground can never disagree about where the sun is. The direction is
+ * constant per body (planets do not orbit here, they spin), so it is written
+ * into the uniform once at build time and never touched again: there is
+ * nothing per-frame in any of this.
+ * ========================================================================= */
+
+/** The colour of grazing sunlight. One shared value for the same reason
+ *  ATMOS_WARM is one shared value — the reddening is the same physics on every
+ *  world, and giving each its own sunset would read as a colour grade. */
+const SHADE_DAWN = '#ff9a5e';
+
+/** Per-body tuning for the injection. `night` is a switch (1 only where the
+ *  emissiveMap really is a night map); `dusk` and `duskWidth` are the strength
+ *  and tightness of the terminator band. */
+type SurfaceShading = { night: number; dusk: number; duskWidth: number };
+
+const SHADE_VERT_PARS = `varying vec3 vSurfN;`;
+/* objectNormal is what <beginnormal_vertex> just declared. modelMatrix carries
+ * the body's spin, so a WORLD-space normal against a world-space sun direction
+ * stays correct as the globe turns without anything being written per frame. */
+const SHADE_VERT_MAIN = `vSurfN = normalize(mat3(modelMatrix) * objectNormal);`;
+
+const SHADE_FRAG_PARS = `
+uniform vec3 uSunDir;
+uniform vec3 uDawn;
+uniform float uDusk;
+uniform float uDuskWidth;
+uniform float uNight;
+varying vec3 vSurfN;`;
+
+/* Injected AFTER <emissivemap_fragment>, which is the one point in the
+ * standard shader where diffuseColor is final and totalEmissiveRadiance has
+ * already picked up the emissive map — and it is still ahead of
+ * <lights_fragment_begin>, so a change to diffuseColor here is a change the
+ * lighting sees. */
+const SHADE_FRAG_MAIN = `
+  float ndl = dot(normalize(vSurfN), uSunDir);
+  // Cities only where the sun is not. The ramp starts a hair before the
+  // geometric terminator and takes ~14 degrees to reach full, which is the
+  // width of real dusk — a step here reads as a drawn line every time.
+  totalEmissiveRadiance *= mix(1.0, smoothstep(-0.06, 0.24, -ndl), uNight);
+  // The terminator band itself: a warm wash centred ON the boundary, so it
+  // over-brightens the last few degrees of daylight and carries a thinning
+  // twilight the same distance past it. Scaled by the albedo, so it follows
+  // the map — bright over cloud and desert, almost nothing over ocean, which
+  // is what makes it read as light on a surface rather than a painted rim.
+  totalEmissiveRadiance += diffuseColor.rgb * uDawn * (exp(-ndl * ndl * uDuskWidth) * uDusk);`;
+
+/** Everything a variant adds on top of the shared injection. `key` is the
+ *  program-cache identity and MUST be distinct per source (see below). */
+type ShadeExtra = {
+  vertPars: string;
+  vertMain: string;
+  fragPars: string;
+  fragMain: string;
+  uniforms: Record<string, THREE.IUniform>;
+  key: string;
+};
+
+/**
+ * Attach the day/night injection to a standard material.
+ *
+ * NOTE ON THE CACHE KEY. three keys its compiled-program cache on
+ * `material.customProgramCacheKey()`, which defaults to
+ * `onBeforeCompile.toString()`. Every closure this factory returns has the
+ * SAME source text — only the captured values differ — so on the default key
+ * two materials with genuinely different injected GLSL would silently share
+ * one compiled program, and whichever compiled second would render with the
+ * first one's shader. So the key is stated explicitly and it is the only thing
+ * that decides reuse: every body without a variant shares one program, and
+ * each variant gets exactly one of its own.
+ */
+function injectSurfaceShading(
+  mat: THREE.MeshStandardMaterial,
+  sun: readonly [number, number, number],
+  s: SurfaceShading,
+  extra?: ShadeExtra,
+): void {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(sun[0], sun[1], sun[2]) },
+    uDawn: { value: new THREE.Color(SHADE_DAWN) },
+    uDusk: { value: s.dusk },
+    uDuskWidth: { value: s.duskWidth },
+    uNight: { value: s.night },
+    ...(extra?.uniforms ?? {}),
+  };
+  const vertPars = SHADE_VERT_PARS + (extra?.vertPars ?? '');
+  const vertMain = SHADE_VERT_MAIN + (extra?.vertMain ?? '');
+  const fragPars = SHADE_FRAG_PARS + (extra?.fragPars ?? '');
+  const fragMain = SHADE_FRAG_MAIN + (extra?.fragMain ?? '');
+  const key = `solar-surface-${extra?.key ?? 'base'}`;
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${vertPars}`)
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>\n${vertMain}`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${fragPars}`)
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>\n${fragMain}`,
+      );
+  };
+  mat.customProgramCacheKey = () => key;
+}
+
+/* Per-body tuning. Earth gets the full treatment: it is the only body with a
+ * night map, and the only one the camera closes on, so its terminator is the
+ * one the visitor can actually inspect. The MOON gets almost nothing on
+ * purpose — an airless world genuinely does have a near-hard terminator, and
+ * the tiny value it keeps is regolith backscatter, not air. The gas giants sit
+ * in between: enough that the boundary is a gradient rather than an arc, not
+ * enough that a salmon band reads as a colour grade. */
+const SHADE_EARTH: SurfaceShading = { night: 1, dusk: 0.2, duskWidth: 46 };
+/* Cloud tops are the first thing the sunrise reaches and the last thing it
+ * leaves — a wider band, brighter, and no night map to mask. */
+const SHADE_CLOUD: SurfaceShading = { night: 0, dusk: 0.26, duskWidth: 32 };
+const SHADE_BY_KIND: Record<RockyKind, SurfaceShading> = {
+  moon: { night: 0, dusk: 0.04, duskWidth: 120 },
+  mars: { night: 0, dusk: 0.14, duskWidth: 42 },
+  jupiter: { night: 0, dusk: 0.11, duskWidth: 34 },
+  neptune: { night: 0, dusk: 0.1, duskWidth: 34 },
+};
+const SHADE_SATURN: SurfaceShading = { night: 0, dusk: 0.11, duskWidth: 34 };
+
 /* ==== EARTH ==== */
 
 function Earth({
@@ -1063,6 +1310,7 @@ function Earth({
   sunPos,
   landingRef,
 }: LitBodyProps & { landingRef?: { current: number } }) {
+  const q = useQuality();
   const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const day = useSurfaceTexture(TEX.earthDay);
   const night = useSurfaceTexture(TEX.earthNight);
@@ -1070,16 +1318,66 @@ function Earth({
   const clouds = useSurfaceTexture(TEX.earthClouds, false);
   const globeRef = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
+  const [globeW, globeH] = sphereSegsCapped(q, 64);
+  const [cloudW, cloudH] = sphereSegs(q, 48);
+
+  /* White emissive + the night map makes the dark limb glitter with cities.
+     The day map re-used as a bump map gives the terminator texture, and the
+     lowered roughness puts a specular sheen on the oceans.
+     The injection is what confines those cities to the night side; without it
+     (low tier) the emissive is unmasked, which is exactly today's material, so
+     the intensity drops back to today's 0.6 to match. With it, the day-side
+     contribution is gone and the night side can afford to actually read. */
+  const globeMat = useMemo(() => {
+    const rich = q.tier !== 'low';
+    const mat = new THREE.MeshStandardMaterial({
+      map: day,
+      bumpMap: day,
+      bumpScale: BUMP.earth,
+      emissiveMap: night,
+      emissive: new THREE.Color('#ffffff'),
+      emissiveIntensity: (rich ? 1.15 : 0.6) * q.cityLights,
+      roughness: 0.55,
+      metalness: 0.02,
+    });
+    if (rich) injectSurfaceShading(mat, light, SHADE_EARTH);
+    return mat;
+  }, [day, night, light, q.tier, q.cityLights]);
+
+  /* The clouds map is greyscale with no alpha channel, so it feeds alphaMap
+     under a white color — using it as a plain map would grey the whole planet.
+     Cloud TOPS are the first thing the sunrise reaches and the last thing it
+     leaves, so they get a wider, stronger dusk band than the ground does. */
+  const cloudMat = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#ffffff'),
+      alphaMap: clouds,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      roughness: 1,
+      metalness: 0,
+    });
+    if (q.tier !== 'low') injectSurfaceShading(mat, light, SHADE_CLOUD);
+    return mat;
+  }, [clouds, light, q.tier]);
+
+  useEffect(
+    () => () => {
+      globeMat.dispose();
+      cloudMat.dispose();
+    },
+    [globeMat, cloudMat],
+  );
 
   useFrame((_state, delta) => {
     // The orbital cloud shell fades late in the landing approach — state,
     // not motion, so it runs on every rung. Earth keeps its clouds through
     // the return arc; LandingSite's cumulus takes over on final descent.
-    if (landingRef && cloudRef.current) {
+    if (landingRef) {
       const r = (landingRef.current - 0.75) / 0.2;
       const s = r < 0 ? 0 : r > 1 ? 1 : r;
-      (cloudRef.current.material as THREE.MeshStandardMaterial).opacity =
-        0.55 * (1 - s * s * (3 - 2 * s));
+      cloudMat.opacity = 0.55 * (1 - s * s * (3 - 2 * s));
     }
     if (reduced) return;
     if (globeRef.current) globeRef.current.rotation.y += EARTH_SPIN * delta;
@@ -1090,38 +1388,11 @@ function Earth({
     // Axial tilt lives on the group so the spin axis stays tilted while the
     // children rotate on local Y.
     <group position={wp.bodyPos} rotation={[0, 0, 0.41]}>
-      <mesh ref={globeRef}>
-        <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
-        {/* White emissive + the night map makes the dark limb glitter with
-            cities without washing out the lit side. The day map re-used as a
-            bump map gives the terminator texture, and the lowered roughness
-            puts a specular sheen on the oceans — the single cheapest "that is
-            a real planet" upgrade. */}
-        <meshStandardMaterial
-          map={day}
-          bumpMap={day}
-          bumpScale={BUMP.earth}
-          emissiveMap={night}
-          emissive="#ffffff"
-          emissiveIntensity={0.6}
-          roughness={0.55}
-          metalness={0.02}
-        />
+      <mesh ref={globeRef} material={globeMat}>
+        <sphereGeometry args={[wp.bodyRadius, globeW, globeH]} />
       </mesh>
-      <mesh ref={cloudRef}>
-        <sphereGeometry args={[wp.bodyRadius * 1.03, 48, 36]} />
-        {/* The clouds map is greyscale with no alpha channel, so it feeds
-            alphaMap under a white color — using it as a plain map would grey
-            the whole planet. */}
-        <meshStandardMaterial
-          color="#ffffff"
-          alphaMap={clouds}
-          transparent
-          opacity={0.55}
-          depthWrite={false}
-          roughness={1}
-          metalness={0}
-        />
+      <mesh ref={cloudRef} material={cloudMat}>
+        <sphereGeometry args={[wp.bodyRadius * 1.03, cloudW, cloudH]} />
       </mesh>
       {/* The blue limb is most of what makes it read as HOME — and it doubles
           as the landing glow on the return approach. Earth is the one body
@@ -1152,10 +1423,29 @@ const PLANET_TUNING: Record<RockyKind, { url: string; spin: number; tilt: number
 };
 
 function Planet({ wp, reduced, sunPos, kind }: LitBodyProps & { kind: RockyKind }) {
+  const q = useQuality();
   const spec = PLANET_TUNING[kind];
   const tex = useSurfaceTexture(spec.url);
   const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const ref = useRef<THREE.Mesh>(null);
+  const [segW, segH] = sphereSegs(q, 48);
+
+  /* Self-bump: craters and cloud bands catch the key light instead of
+     rendering as flat decals. All four bodies share ONE compiled program —
+     same defines, and injectSurfaceShading gives them the same cache key — so
+     the terminator work costs four materials and no extra shader. */
+  const material = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex,
+      bumpMap: tex,
+      bumpScale: BUMP[kind],
+      roughness: 0.95,
+      metalness: 0,
+    });
+    if (q.tier !== 'low') injectSurfaceShading(mat, light, SHADE_BY_KIND[kind]);
+    return mat;
+  }, [tex, kind, light, q.tier]);
+  useEffect(() => () => material.dispose(), [material]);
 
   useFrame((_state, delta) => {
     if (reduced) return;
@@ -1165,17 +1455,8 @@ function Planet({ wp, reduced, sunPos, kind }: LitBodyProps & { kind: RockyKind 
   const tint = ATMOS_TINT[kind];
   return (
     <group position={wp.bodyPos} rotation={[0, 0, spec.tilt]}>
-      <mesh ref={ref}>
-        <sphereGeometry args={[wp.bodyRadius, 48, 36]} />
-        {/* Self-bump: craters and cloud bands catch the key light instead of
-            rendering as flat decals. */}
-        <meshStandardMaterial
-          map={tex}
-          bumpMap={tex}
-          bumpScale={BUMP[kind]}
-          roughness={0.95}
-          metalness={0}
-        />
+      <mesh ref={ref} material={material}>
+        <sphereGeometry args={[wp.bodyRadius, segW, segH]} />
       </mesh>
       {tint && (
         <Atmosphere
@@ -1190,19 +1471,188 @@ function Planet({ wp, reduced, sunPos, kind }: LitBodyProps & { kind: RockyKind 
   );
 }
 
-/* ==== SATURN ==== */
+/* ==== SATURN ================================================================
+ *
+ * A ringed planet is the one body in the sky whose realism is decided almost
+ * entirely by how the ring and the globe treat EACH OTHER, and today they do
+ * not treat each other at all: the ring is a lit annulus floating in front of
+ * an evenly lit ball, and the shipped screenshot reads exactly that way — the
+ * ring passes behind the planet at full brightness, and the planet's daylit
+ * face has nothing on it. Three things are missing, and they are the three
+ * things every Cassini frame has.
+ *
+ *   THE PLANET'S SHADOW ON THE RING. The single most recognisable feature of
+ *   the system: a dark wedge cut out of the ring where the globe blocks the
+ *   sun. It is a cylinder test in the fragment shader — recover the ring
+ *   point's distance from the sun-axis through the body centre, and darken it
+ *   if that distance is inside the globe and the point is on the far side.
+ *   The edge gets a penumbra a tenth of a radius wide, because the sun is a
+ *   disc and a hard-edged shadow reads as a decal.
+ *
+ *   THE RING'S SHADOW ON THE PLANET. The mirror of it, and the reason a real
+ *   Saturn has dark bands laid across its daylit hemisphere. Same geometry
+ *   read the other way: from each point on the globe, march toward the sun,
+ *   find where that ray crosses the ring plane, and look up the ring's own
+ *   alpha strip at that radius. The Cassini division shows up in the shadow
+ *   as a bright gap, for free, because the shadow is sampled from the same
+ *   texture that draws the ring.
+ *
+ *   THE UNLIT FACE. A ring is a sheet lit on ONE side. three's DoubleSide
+ *   flips the normal and lights both faces identically, so today's ring is as
+ *   bright seen from the shadowed side as from the sunlit one. It should not
+ *   be — and while we are there, a sheet seen at a grazing angle is a longer
+ *   path through the material than one seen face-on, so the bands should
+ *   thicken toward edge-on rather than fading out.
+ *
+ * All of it is ALU on pixels that already exist: no new geometry, no new draw
+ * call, one extra texture fetch on the globe (the ring strip, which is already
+ * resident) and two extra compiled programs total. Desktop-mid and up. */
+
+/** How dark the ring's shadow gets on the globe, and the globe's on the ring.
+ *  Neither goes to zero: both bodies sit in a sky full of scattered light. */
+const RING_SHADOW_ON_GLOBE = 0.8;
+const RING_UMBRA = 0.9;
+/** Brightness of the ring's unlit face relative to its lit one. */
+const RING_UNLIT = 0.4;
+/** Ceiling on the grazing-angle optical-depth thickening. */
+const RING_DEPTH_MAX = 1.7;
+
+const RING_VERT_PARS = `
+varying vec3 vRingWorld;
+varying vec3 vRingCentre;
+varying vec3 vRingNrm;`;
+/* modelMatrix's translation IS the body centre — the ring mesh is a direct
+ * child of the group parked at waypoint.bodyPos and carries no local offset —
+ * and the ring's local normal is +Z before the mesh's own quarter turn, so
+ * both the plane and its centre come out of one matrix with no uniforms. */
+const RING_VERT_MAIN = `
+  vRingWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+  vRingCentre = modelMatrix[3].xyz;
+  vRingNrm = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));`;
+
+const RING_FRAG_PARS = `
+uniform vec3 uSunDir;
+uniform float uBodyR;
+uniform float uUmbra;
+uniform float uUnlit;
+uniform float uDepthMax;
+varying vec3 vRingWorld;
+varying vec3 vRingCentre;
+varying vec3 vRingNrm;`;
+
+const RING_FRAG_MAIN = `
+  vec3 rd = vRingWorld - vRingCentre;
+  vec3 rn = normalize(vRingNrm);
+  float along = dot(rd, uSunDir);
+  // Distance from the shadow axis — the cylinder the globe casts down-sun.
+  float off = length(rd - along * uSunDir);
+  // Penumbra: the sun is a disc, so the wedge's edge is soft over roughly a
+  // tenth of a body radius. The second term is the "behind the planet, not in
+  // front of it" test, faded so the wedge does not begin at a hard line on the
+  // terminator either.
+  float umbra = (1.0 - smoothstep(uBodyR * 0.94, uBodyR * 1.10, off))
+              * (1.0 - smoothstep(-uBodyR * 0.30, 0.0, along));
+  float shade = 1.0 - uUmbra * umbra;
+  // Which face are we looking at? The product of the two side tests flips sign
+  // exactly when the camera crosses the ring plane — at which point the ring
+  // is edge-on and the transition has nowhere to show.
+  float eyeSide = dot(normalize(cameraPosition - vRingWorld), rn);
+  float face = mix(uUnlit, 1.0, smoothstep(-0.02, 0.02, eyeSide * dot(uSunDir, rn)));
+  // Optical depth: a grazing sightline passes through more ring than a
+  // face-on one, so the bands thicken toward edge-on instead of thinning away.
+  float depth = clamp(1.0 / max(abs(eyeSide), 0.14), 1.0, uDepthMax);
+  diffuseColor.rgb *= shade * face;
+  diffuseColor.a = min(1.0, diffuseColor.a * depth);
+  totalEmissiveRadiance *= shade * face;`;
+
+/** The ring's own material. Same explicit-cache-key discipline as
+ *  injectSurfaceShading, and for the same reason. */
+function injectRingShading(
+  mat: THREE.MeshStandardMaterial,
+  sun: readonly [number, number, number],
+  bodyRadius: number,
+): void {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(sun[0], sun[1], sun[2]) },
+    uBodyR: { value: bodyRadius },
+    uUmbra: { value: RING_UMBRA },
+    uUnlit: { value: RING_UNLIT },
+    uDepthMax: { value: RING_DEPTH_MAX },
+  };
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${RING_VERT_PARS}`)
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>\n${RING_VERT_MAIN}`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${RING_FRAG_PARS}`)
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>\n${RING_FRAG_MAIN}`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'solar-ring';
+}
+
+/* The globe's half of the pair: the ring's shadow, read out of the ring's own
+ * alpha strip. */
+const RING_CAST_VERT_PARS = `
+varying vec3 vSurfWorld;
+varying vec3 vSurfCentre;
+varying vec3 vRingAxis;`;
+/* The globe spins about the group's local Y, which is also the ring plane's
+ * normal — so a spin cannot move the axis and the shadow stays put while the
+ * bands turn underneath it, which is what actually happens. */
+const RING_CAST_VERT_MAIN = `
+  vSurfWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+  vSurfCentre = modelMatrix[3].xyz;
+  vRingAxis = normalize(mat3(modelMatrix) * vec3(0.0, 1.0, 0.0));`;
+
+const RING_CAST_FRAG_PARS = `
+uniform sampler2D uRingMap;
+uniform float uRingInner;
+uniform float uRingOuter;
+uniform float uRingShadow;
+varying vec3 vSurfWorld;
+varying vec3 vSurfCentre;
+varying vec3 vRingAxis;`;
+
+const RING_CAST_FRAG_MAIN = `
+  vec3 rp = vSurfWorld - vSurfCentre;
+  vec3 axis = normalize(vRingAxis);
+  float dn = dot(uSunDir, axis);
+  // Guard the grazing case: with the sun IN the ring plane the ring casts no
+  // shadow at all, and an unclamped divide would put one everywhere.
+  float sdn = dn < 0.0 ? min(dn, -0.02) : max(dn, 0.02);
+  vec3 hit = rp + uSunDir * (-dot(rp, axis) / sdn);
+  float rr = length(hit - dot(hit, axis) * axis);
+  float ru = clamp((rr - uRingInner) / max(uRingOuter - uRingInner, 1e-4), 0.0, 1.0);
+  // Sampled unconditionally and masked after — a fetch inside divergent
+  // control flow has undefined derivatives. The mask is "the crossing is
+  // inside the annulus, and it is toward the sun rather than behind me".
+  float band = step(uRingInner, rr) * step(rr, uRingOuter)
+             * step(0.0, -dot(rp, axis) / sdn);
+  float occ = texture2D(uRingMap, vec2(ru, 0.5)).a * band;
+  // Only daylight can be shadowed, and the shadow fades out with the light
+  // itself rather than ending on the terminator.
+  diffuseColor.rgb *= 1.0 - uRingShadow * occ * smoothstep(0.0, 0.18, ndl);`;
 
 function Saturn({ wp, reduced, sunPos }: LitBodyProps) {
+  const q = useQuality();
   const tex = useSurfaceTexture(TEX.saturn);
   const ringTex = useSurfaceTexture(TEX.saturnRing);
   const light = useMemo(() => keyLight(wp.bodyPos, sunPos), [wp.bodyPos, sunPos]);
   const sphereRef = useRef<THREE.Mesh>(null);
+  const [segW, segH] = sphereSegs(q, 48);
 
   const inner = wp.bodyRadius * 1.35;
   const outer = wp.bodyRadius * 2.3;
 
   const ringGeo = useMemo(() => {
-    const geo = new THREE.RingGeometry(inner, outer, 96, 1);
+    const geo = new THREE.RingGeometry(inner, outer, scaleSegments(q, 96), 1);
     // RingGeometry ships planar UVs, which smear the band texture across the
     // disc. Rewriting u to run RADIALLY (inner edge 0, outer edge 1, constant
     // v) makes the alpha strip read as concentric rings.
@@ -1214,11 +1664,71 @@ function Saturn({ wp, reduced, sunPos }: LitBodyProps) {
       uv.setXY(i, (v.length() - inner) / (outer - inner), 0.5);
     }
     return geo;
-  }, [inner, outer]);
+    // `q` is a dependency because the tessellation is read from it. The budget
+    // object is referentially stable for as long as the tier is, so this
+    // rebuilds only if the runtime actually demotes — which is the one moment
+    // a rebuild is the point.
+  }, [inner, outer, q]);
 
   // R3F only auto-disposes JSX-created objects, so the memoized geometry
   // cleans up after itself.
   useEffect(() => () => ringGeo.dispose(), [ringGeo]);
+
+  const globeMat = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex,
+      bumpMap: tex,
+      bumpScale: BUMP.saturn,
+      roughness: 0.95,
+      metalness: 0,
+    });
+    if (q.tier !== 'low') {
+      injectSurfaceShading(mat, light, SHADE_SATURN, {
+        vertPars: RING_CAST_VERT_PARS,
+        vertMain: RING_CAST_VERT_MAIN,
+        fragPars: RING_CAST_FRAG_PARS,
+        fragMain: RING_CAST_FRAG_MAIN,
+        uniforms: {
+          uRingMap: { value: ringTex },
+          uRingInner: { value: inner },
+          uRingOuter: { value: outer },
+          uRingShadow: { value: RING_SHADOW_ON_GLOBE },
+        },
+        key: 'ringcast',
+      });
+    }
+    return mat;
+  }, [tex, ringTex, light, inner, outer, q.tier]);
+
+  /* depthWrite off so the translucent ring never punches sorting holes against
+     the globe behind it. A touch of self-emission keeps the bands legible even
+     when the sun key light rakes them edge-on — unlit they photographed as
+     washed grey (live-site finding). The injection then takes the globe's
+     shadow, the unlit face and the grazing-angle thickening off the same
+     material without touching any of that. */
+  const ringMat = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({
+      map: ringTex,
+      emissiveMap: ringTex,
+      emissive: new THREE.Color('#cbbfa4'),
+      emissiveIntensity: 0.38,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      roughness: 0.9,
+      metalness: 0,
+    });
+    if (q.tier !== 'low') injectRingShading(mat, light, wp.bodyRadius);
+    return mat;
+  }, [ringTex, light, wp.bodyRadius, q.tier]);
+
+  useEffect(
+    () => () => {
+      globeMat.dispose();
+      ringMat.dispose();
+    },
+    [globeMat, ringMat],
+  );
 
   useFrame((_state, delta) => {
     if (reduced) return;
@@ -1228,33 +1738,10 @@ function Saturn({ wp, reduced, sunPos }: LitBodyProps) {
   return (
     // One tilt on the group keeps the ring plane and the spin axis agreeing.
     <group position={wp.bodyPos} rotation={[0.08, 0, RING_TILT]}>
-      <mesh ref={sphereRef}>
-        <sphereGeometry args={[wp.bodyRadius, 48, 36]} />
-        <meshStandardMaterial
-          map={tex}
-          bumpMap={tex}
-          bumpScale={BUMP.saturn}
-          roughness={0.95}
-          metalness={0}
-        />
+      <mesh ref={sphereRef} material={globeMat}>
+        <sphereGeometry args={[wp.bodyRadius, segW, segH]} />
       </mesh>
-      <mesh geometry={ringGeo} rotation={[Math.PI / 2, 0, 0]}>
-        {/* depthWrite off so the translucent ring never punches sorting holes
-            against the globe behind it. A touch of self-emission keeps the
-            bands legible even when the sun key light rakes them edge-on —
-            unlit they photographed as washed grey (live-site finding). */}
-        <meshStandardMaterial
-          map={ringTex}
-          emissiveMap={ringTex}
-          emissive="#cbbfa4"
-          emissiveIntensity={0.38}
-          transparent
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          roughness={0.9}
-          metalness={0}
-        />
-      </mesh>
+      <mesh geometry={ringGeo} material={ringMat} rotation={[Math.PI / 2, 0, 0]} />
       <Atmosphere radius={wp.bodyRadius} color="#e0cf9e" light={light} intensity={0.8} dusk={0.6} />
     </group>
   );
@@ -2658,8 +3145,14 @@ void main() {
 }`;
 
 function Sun({ wp, reduced }: BodyProps) {
+  const q = useQuality();
   const tex = useSurfaceTexture(TEX.sun);
   const ref = useRef<THREE.Mesh>(null);
+  // The star's silhouette IS the finale — limb darkening drops the rim under
+  // the bloom threshold precisely so the edge reads hard, and a faceted edge
+  // would undo that. So it stays on the art-directed 64 base at mid and takes
+  // the extra density at high.
+  const [segW, segH] = sphereSegsCapped(q, 64);
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -2722,7 +3215,7 @@ function Sun({ wp, reduced }: BodyProps) {
           a standard material here was quietly asking the rig to shade it —
           which is why the disc had no shape of its own to lose. */}
       <mesh ref={ref} material={material}>
-        <sphereGeometry args={[wp.bodyRadius, 64, 48]} />
+        <sphereGeometry args={[wp.bodyRadius, segW, segH]} />
       </mesh>
       {/* Streamers outside, hot ring on the limb inside. They breathe and
           counter-rotate in useFrame (frozen under reduced motion), so the two

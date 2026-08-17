@@ -18,11 +18,12 @@
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../engine';
 import type { Vec3, Waypoint } from '../engine';
+import { useQuality } from './quality';
 
 const MOON_TEXTURE_URL = '/textures/2k_moon.webp'; // same vendored map SolarBodies uses
 
@@ -33,18 +34,65 @@ useTexture.preload(MOON_TEXTURE_URL);
 // Dust corridor: a long box hugging the whole flight line. Near points sweep
 // past the camera during travel; at dock the additive shimmer reads as vacuum
 // that is not quite empty.
+//
+// The field used to be one uniform point size on drei's sizeAttenuation, and
+// that had two visible faults. Every mote was the SAME grain, so the corridor
+// read as evenly-spread confetti rather than as particulate with a size
+// distribution; and a mote passing within a couple of units of the lens blew
+// up to an ~80px soft ball — the bokeh blobs that photographed beside the
+// ship in every screenshot. Both are fixed by owning the point shader: a
+// per-point size on a steep power law (many fine grains, a few coarse ones),
+// a hard pixel clamp, and a NEAR FADE that retires a mote before it can
+// become a blob. Still one draw call and one program.
 const DUST_SEED = 0xd057;
 const DUST_COUNT = 700;
 const DUST_X = 70; // half-width of the corridor
 const DUST_Y = 40; // half-height
 const DUST_Z_NEAR = 40; // starts behind the departure camera
 const DUST_Z_PAD = 60; // extends past the deepest waypoint
-const DUST_SIZE = 0.35;
+// World-unit grain radius. The shader projects these through the live camera
+// (fov included), so unlike drei's sizeAttenuation they hold their angular
+// size when the flight's fov breathes.
+const DUST_SIZE_MIN = 0.06;
+const DUST_SIZE_MAX = 0.42;
+const DUST_SIZE_POW = 2.6; // u^POW → the coarse grains stay rare
+const DUST_BRIGHT_MIN = 0.34; // faintest grain, × DUST_OPACITY
+const DUST_MAX_PX = 20; // no mote may ever become a lens blob again
+const DUST_FADE_IN = 1.8; // view depth at which a mote is fully gone…
+const DUST_FADE_FULL = 7.5; // …and at which it is whole
 const DUST_OPACITY = 0.5;
 const DUST_COLOR = '#cfe0f0'; // white-blue, additive
 const DUST_SPIN = 0.004; // rad/s around the flight axis
 const DUST_BOB_AMP = 1.4; // world units of vertical breathing
 const DUST_BOB_FREQ = 0.07; // rad/s
+
+const DUST_VERT = `
+uniform float uPx;
+uniform vec2 uFade;
+attribute float aSize;
+attribute float aBright;
+varying float vA;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  // View depth sizes the point (that is what the perspective divide uses);
+  // RADIAL distance drives the fade, so a mote at the edge of frame is not
+  // retired earlier than one dead ahead at the same range.
+  float depth = max(-mv.z, 0.001);
+  gl_PointSize = clamp(aSize * uPx * projectionMatrix[1][1] / depth, 0.5, ${DUST_MAX_PX.toFixed(1)});
+  vA = aBright * smoothstep(uFade.x, uFade.y, length(mv.xyz));
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const DUST_FRAG = `
+uniform vec3 uColor;
+uniform float uOpacity;
+varying float vA;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0;
+  float a = exp(-d * d * 3.2) * vA * uOpacity;
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(uColor * a, 1.0);
+}`;
 
 
 // Flyby: a small satellite crossing the deep background near mid-voyage.
@@ -367,35 +415,12 @@ const ROCK_MATERIAL = new THREE.MeshStandardMaterial({
   metalness: 0.04,
 });
 
-// Soft radial disc, drawn once: the map that makes the dust points read as
-// round, soft-edged sprites instead of hard GL squares.
-let glowTexture: THREE.CanvasTexture | null = null;
-function getGlowTexture(): THREE.CanvasTexture {
-  if (glowTexture) return glowTexture;
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.35, 'rgba(196,226,244,0.55)');
-    g.addColorStop(1, 'rgba(76,201,240,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
-  }
-  glowTexture = new THREE.CanvasTexture(canvas);
-  glowTexture.colorSpace = THREE.SRGBColorSpace;
-  return glowTexture;
-}
-
 /* ---- spacecraft surface maps ---------------------------------------------
  * Canvas maps for the flyby satellite, painted once and cached at module
- * scope exactly like getGlowTexture above. Seeded through mulberry32, so the
- * craft is pixel-identical on every visit. SolarBodies carries the same
- * technique for its relay station; the two files deliberately do not import
- * each other's internals. 256px is power-of-two, so mipmaps and
- * RepeatWrapping both behave. */
+ * scope. Seeded through mulberry32, so the craft is pixel-identical on every
+ * visit. SolarBodies carries the same technique for its relay station; the
+ * two files deliberately do not import each other's internals. 256px is
+ * power-of-two, so mipmaps and RepeatWrapping both behave. */
 
 let mliTexture: THREE.CanvasTexture | null = null;
 /** Gold multi-layer insulation: an amber base under seeded crinkle facets
@@ -552,22 +577,65 @@ function deepestZ(waypoints: Waypoint[]): number {
 
 function DustCorridor({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: boolean }) {
   const pointsRef = useRef<THREE.Points>(null);
+  // Read once. `dust` is the tier's knob for exactly this population; it is
+  // never zero at any tier, because the corridor is part of the still image a
+  // reduced-motion visitor sees, not only part of the motion.
+  const quality = useQuality();
+  const count = Math.max(120, Math.round(DUST_COUNT * quality.dust));
 
   const geometry = useMemo(() => {
     const rng = mulberry32(DUST_SEED);
     const zFar = deepestZ(waypoints) - DUST_Z_PAD;
-    const positions = new Float32Array(DUST_COUNT * 3);
-    for (let i = 0; i < DUST_COUNT; i++) {
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const bright = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
       positions[i * 3] = (rng() * 2 - 1) * DUST_X;
       positions[i * 3 + 1] = (rng() * 2 - 1) * DUST_Y;
       positions[i * 3 + 2] = DUST_Z_NEAR + rng() * (zFar - DUST_Z_NEAR);
+      // Grain size on a steep power law, and brightness CORRELATED with it —
+      // a big dim mote reads as a smudge, a big bright one as a fleck of ice
+      // catching the sun, which is what the layer is meant to be.
+      const grain = Math.pow(rng(), DUST_SIZE_POW);
+      sizes[i] = DUST_SIZE_MIN + (DUST_SIZE_MAX - DUST_SIZE_MIN) * grain;
+      bright[i] = DUST_BRIGHT_MIN + (1 - DUST_BRIGHT_MIN) * Math.pow(grain, 0.6);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    g.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    g.setAttribute('aBright', new THREE.BufferAttribute(bright, 1));
     return g;
-  }, [waypoints]);
+  }, [waypoints, count]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
+
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uPx: { value: 450 },
+          uFade: { value: new THREE.Vector2(DUST_FADE_IN, DUST_FADE_FULL) },
+          uColor: { value: new THREE.Color(DUST_COLOR) },
+          uOpacity: { value: DUST_OPACITY },
+        },
+        vertexShader: DUST_VERT,
+        fragmentShader: DUST_FRAG,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    [],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+
+  // Half the drawing buffer's height in device pixels — the one number the
+  // point-size projection needs. Read from React state rather than per frame
+  // so it also lands under reduced motion, where the frameloop is "demand"
+  // and useFrame does not run. (Same contract as the star field.)
+  const height = useThree((s) => s.size.height);
+  const dpr = useThree((s) => s.viewport.dpr);
+  const uPx = material.uniforms['uPx'];
+  if (uPx) uPx.value = height * dpr * 0.5;
 
   useFrame((state) => {
     if (reduced) return;
@@ -580,20 +648,7 @@ function DustCorridor({ waypoints, reduced }: { waypoints: Waypoint[]; reduced: 
     pts.position.y = Math.sin(t * DUST_BOB_FREQ) * DUST_BOB_AMP;
   });
 
-  return (
-    <points ref={pointsRef} geometry={geometry}>
-      <pointsMaterial
-        map={getGlowTexture()}
-        color={DUST_COLOR}
-        size={DUST_SIZE}
-        sizeAttenuation
-        transparent
-        opacity={DUST_OPACITY}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 /* ---- 3. distant satellite flyby ----------------------------------------- */
@@ -1094,7 +1149,7 @@ function RockCluster({ spec, reduced }: { spec: ClusterSpec; reduced: boolean })
 /* ---- 5. hero neighborhood ------------------------------------------------ */
 
 /* Deterministic canvas textures for the hero bodies — each drawn once and
- * cached at module scope, exactly like getGlowTexture above. */
+ * cached at module scope, exactly like the satellite maps above. */
 
 function makeRadialHeroTexture(
   stops: ReadonlyArray<readonly [number, string]>,

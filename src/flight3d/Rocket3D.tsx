@@ -23,9 +23,25 @@
  *               the engine band, plus conduit runs radiating from the core.
  *   ENGINE      the blue strip, inset into a dark recessed housing framed by
  *               deck lips above and below and by the two cutouts outboard.
+ *   SURFACE     panel-line NORMALS on the hull and the plating sheet, so the
+ *               seams the albedo paints are lit as real grooves and swap sides
+ *               as the light travels; a wear sheet in roughness + metalness;
+ *               and a fresnel rim that goes hot and hard where the direct
+ *               light actually lands and stays cool starlight everywhere else.
+ *   LAMPS       every glowing thing — the layered hyperdrive plume, the belly
+ *               repulsor, nav lamps, anti-collision strobes and attitude jets
+ *               — is ONE quad batch, one program, one draw, driven by two
+ *               vec4 uniforms. See the EMISSIVE LAMP SYSTEM block below.
  *
  * Everything static is MERGED into five buffers (hull / grey / mid / dark /
- * gear) so the whole freighter is a handful of draw calls.
+ * gear) so the whole freighter is a handful of draw calls. In flight the
+ * ship is 15 drawables and ~12.5k triangles, gear stowed.
+ *
+ * QUALITY: read once via useQuality(). low drops the normal maps and thins
+ * the exhaust pool; mid is exactly what shipped before this pass (260
+ * particles, anisotropy 8, no anisotropic hull); high adds a denser wash, a
+ * hotter bloom-feeding filament, a long plume tail and a hint of azimuthal
+ * anisotropy on the hull. Nothing here is sampled per frame.
  *
  * Contract: renders at local origin, nose (mandibles) along local -Z. Envelope
  * z in [-2.2, +2.2] (mandible tips exactly -2.2, engine lip 2.145), x within
@@ -37,8 +53,10 @@
  * whole gear group is .visible = false; the belly bay doors close flush.
  *
  * thrustRef is 0..1 (may spike ~1.2); `reduced` gates every continuous
- * animation (band flicker, dish sweep, trail) — value-tracking state (glow
- * intensity, sprite scale, GEAR POSE) still follows its ref.
+ * animation (band flicker, plume idle, dish sweep, strobes, attitude jets,
+ * gear spring, trail) — value-tracking state (plume and repulsor intensity,
+ * nav lamps, GEAR POSE) still follows its ref, so the one frame a
+ * reduced-motion visitor is given is still the good one.
  * ========================================================================= */
 
 import * as THREE from 'three';
@@ -46,6 +64,7 @@ import { forwardRef, useEffect, useMemo, useRef } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../engine';
+import { useQuality } from './quality';
 
 const TAU = Math.PI * 2;
 
@@ -241,6 +260,65 @@ const CUT_WALL_GEO = new THREE.ShapeGeometry(cutoutWallShape());
  * band in the middle of the canvas). Light warm grey, panel grid, darker
  * patches, rust hints, scorch streaks, greeble dots — lived-in.
  */
+/* ---- panel-line normal detail ----------------------------------------------
+ * The albedo sheets PAINT the seams; a light moving across a painted seam does
+ * nothing, which is why the hull held its shape but never caught the sun. A
+ * tangent-space normal map costs one texture fetch and gives every panel line
+ * a real pair of walls: the seam goes dark on the side facing away from the
+ * key and bright on the side facing it, and it swaps as the camera travels.
+ *
+ * These are authored, not derived — a groove is two opposed slopes, so the
+ * whole map is "flat everywhere, ramp one channel either side of a line", and
+ * a bevelled plate is the same trick on four sides of a rectangle. Both sheets
+ * are DATA (NoColorSpace); sRGB-decoding a normal map would bend every wall.
+ */
+const N_FLAT = 'rgb(128,128,255)';
+/** Vertical seam at x: tilts the surface in +/-x either side of the line. */
+function grooveV(ctx: CanvasRenderingContext2D, x: number, w: number, d: number, h: number): void {
+  const k = Math.round(d * 127);
+  ctx.fillStyle = `rgb(${128 - k},128,255)`;
+  ctx.fillRect(x - w, 0, w, h);
+  ctx.fillStyle = `rgb(${128 + k},128,255)`;
+  ctx.fillRect(x, 0, w, h);
+}
+/** Horizontal seam at y. G is three's +v axis, so the sign convention matches. */
+function grooveH(ctx: CanvasRenderingContext2D, y: number, w: number, d: number, s: number): void {
+  const k = Math.round(d * 127);
+  ctx.fillStyle = `rgb(128,${128 - k},255)`;
+  ctx.fillRect(0, y - w, s, w);
+  ctx.fillStyle = `rgb(128,${128 + k},255)`;
+  ctx.fillRect(0, y, s, w);
+}
+/** A plate standing proud of its neighbours: bevel on all four edges. */
+function bevelRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  b: number,
+  d: number,
+): void {
+  const k = Math.round(d * 127);
+  ctx.fillStyle = `rgb(${128 + k},128,255)`;
+  ctx.fillRect(x, y, b, h);
+  ctx.fillStyle = `rgb(${128 - k},128,255)`;
+  ctx.fillRect(x + w - b, y, b, h);
+  ctx.fillStyle = `rgb(128,${128 + k},255)`;
+  ctx.fillRect(x, y, w, b);
+  ctx.fillStyle = `rgb(128,${128 - k},255)`;
+  ctx.fillRect(x, y + h - b, w, b);
+}
+
+/* Layout shared by the hull's ALBEDO and its normal map: the two sheets have
+ * to put their seams in the same places or the panel lines painted in one
+ * would be lit as flat plate by the other. Hoisted for exactly that reason. */
+const HULL_SECTORS = 24;
+const HULL_RING_US = [0.14, 0.28, 0.42, 0.56, 0.7, 0.84, 0.97];
+/** v(profile index) -> canvas y, for a ring at radius fraction u on each shell. */
+const hullTopY = (u: number, S: number): number => ((DISC_N * u) / DISC_LAST) * S;
+const hullBotY = (u: number, S: number): number => S - ((DISC_N * u) / DISC_LAST) * S;
+
 let hullCache: THREE.CanvasTexture | null = null;
 function hullTexture(): THREE.CanvasTexture {
   if (hullCache) return hullCache;
@@ -252,9 +330,8 @@ function hullTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   const rand = mulberry32(0x0fa1c02);
 
-  // v(profile index) -> canvas y, for a ring at radius fraction u on each shell.
-  const topY = (u: number): number => ((DISC_N * u) / DISC_LAST) * S;
-  const botY = (u: number): number => S - ((DISC_N * u) / DISC_LAST) * S;
+  const topY = (u: number): number => hullTopY(u, S);
+  const botY = (u: number): number => hullBotY(u, S);
 
   ctx.fillStyle = '#b8bcc0';
   ctx.fillRect(0, 0, S, S);
@@ -266,9 +343,9 @@ function hullTexture(): THREE.CanvasTexture {
     ctx.fillRect(rand() * S, rand() * S, 14 + rand() * 90, 8 + rand() * 60);
   }
 
-  const SECTORS = 24;
+  const SECTORS = HULL_SECTORS;
   const secW = S / SECTORS;
-  const RING_US = [0.14, 0.28, 0.42, 0.56, 0.7, 0.84, 0.97];
+  const RING_US = HULL_RING_US;
 
   // Darker replacement panels snapped to the seam grid, both shells.
   for (let i = 0; i < 58; i++) {
@@ -364,6 +441,62 @@ function hullTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.anisotropy = 4;
   hullCache = tex;
+  return tex;
+}
+
+/** The hull's panel lines as geometry-for-free: the same 24 radial seams and
+ *  seven ring seams the albedo paints, plus bevelled plates and the rim band's
+ *  two lips, cut into the normal so a raking sun finds every one of them. */
+let hullNormalCache: THREE.CanvasTexture | null = null;
+function hullNormalTexture(): THREE.CanvasTexture {
+  if (hullNormalCache) return hullNormalCache;
+  const S = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(0x0fa1c17);
+
+  ctx.fillStyle = N_FLAT;
+  ctx.fillRect(0, 0, S, S);
+
+  const secW = S / HULL_SECTORS;
+  // Bevelled replacement plates first, so the seams cut across them.
+  for (let i = 0; i < 46; i++) {
+    const bi = Math.floor(rand() * (HULL_RING_US.length - 1));
+    const u1 = HULL_RING_US[bi] ?? 0.2;
+    const u2 = HULL_RING_US[bi + 1] ?? 0.9;
+    const topHalf = rand() < 0.55;
+    const ya = topHalf ? hullTopY(u1, S) : hullBotY(u2, S);
+    const yb = topHalf ? hullTopY(u2, S) : hullBotY(u1, S);
+    const x = Math.floor(rand() * HULL_SECTORS) * secW;
+    const w = (rand() < 0.3 ? 2 : 1) * secW;
+    bevelRect(ctx, x + 2, Math.min(ya, yb) + 2, w - 4, Math.abs(yb - ya) - 4, 2, 0.5);
+  }
+
+  // Radial seams (spokes), deeper every fourth — the structural frames.
+  for (let i = 0; i < HULL_SECTORS; i++) {
+    grooveV(ctx, i * secW, i % 4 === 0 ? 2 : 1, i % 4 === 0 ? 0.62 : 0.4, S);
+  }
+  // Ring seams, mirrored on both shells.
+  for (const u of HULL_RING_US) {
+    grooveH(ctx, hullTopY(u, S), 1.5, 0.42, S);
+    grooveH(ctx, hullBotY(u, S), 1.5, 0.42, S);
+  }
+  // The rim band reads as a wrapped belt: a hard lip top and bottom.
+  grooveH(ctx, hullTopY(1, S), 2.5, 0.72, S);
+  grooveH(ctx, hullBotY(1, S), 2.5, 0.72, S);
+  // Vent ticks in the band itself, matching the albedo's cadence.
+  const rimA = hullTopY(1, S);
+  for (let i = 0; i < 32; i++) {
+    if (rand() < 0.35) continue;
+    bevelRect(ctx, i * 16 + 3, rimA + 5 + rand() * 16, 4, 16 + rand() * 14, 1.5, 0.5);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  hullNormalCache = tex;
   return tex;
 }
 
@@ -507,6 +640,64 @@ function platingTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/** The plating sheet's seams and rivets, in normals. Same 16-cell grid, same
+ *  every-fourth emphasis, so a face lit from the side shows the plate edges
+ *  the albedo only draws. Deliberately shallower than the hull's: this sheet
+ *  lands once per box FACE at whatever size that face is, and a deep bevel on
+ *  a 6 cm greeble would read as a dent. */
+let platingNormalCache: THREE.CanvasTexture | null = null;
+function platingNormalTexture(): THREE.CanvasTexture {
+  if (platingNormalCache) return platingNormalCache;
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  const rand = mulberry32(0x0fa1c19);
+
+  ctx.fillStyle = N_FLAT;
+  ctx.fillRect(0, 0, S, S);
+
+  const CELLS = 16;
+  const cw = S / CELLS;
+  // A few plates standing proud, on the cell grid.
+  for (let i = 0; i < 22; i++) {
+    const x = Math.floor(rand() * CELLS) * cw;
+    const y = Math.floor(rand() * CELLS) * cw;
+    const w = (1 + Math.floor(rand() * 3)) * cw;
+    const h = (1 + Math.floor(rand() * 2)) * cw;
+    bevelRect(ctx, x + 1, y + 1, w - 2, h - 2, 1.5, 0.34);
+  }
+  for (let i = 0; i < CELLS; i++) {
+    const heavy = i % 4 === 0;
+    grooveV(ctx, i * cw, heavy ? 1.5 : 1, heavy ? 0.5 : 0.3, S);
+    grooveH(ctx, i * cw, heavy ? 1.5 : 1, heavy ? 0.5 : 0.3, S);
+  }
+  // Rivets: a lit crescent and a shadowed one, two pixels apart. At the size
+  // these land on screen that is all a rivet ever is.
+  for (let i = 0; i < CELLS; i += 4) {
+    for (let j = 0; j < S; j += 11) {
+      if (rand() < 0.3) continue;
+      for (const [px, py] of [
+        [i * cw + 4, j],
+        [j, i * cw + 4],
+      ] as ReadonlyArray<readonly [number, number]>) {
+        ctx.fillStyle = 'rgb(96,150,255)';
+        ctx.fillRect(px - 1.5, py - 1.5, 3, 1.5);
+        ctx.fillStyle = 'rgb(160,106,255)';
+        ctx.fillRect(px - 1.5, py, 3, 1.5);
+      }
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  platingNormalCache = tex;
+  return tex;
+}
+
 /* ---- wear map: roughness in G, metalness in B ------------------------------
  * three multiplies material.roughness by roughnessMap.g and material.metalness
  * by metalnessMap.b, so ONE sheet in both slots breaks up the uniform sheen
@@ -582,6 +773,19 @@ function wearTexture(): THREE.CanvasTexture {
  * geometryNormal and geometryViewDir in scope and outgoingLight assembled.
  */
 const RIM_TINT = 'vec3(0.44, 0.62, 0.88)'; // cool starlight, a cousin of HYPER_CORE
+/* The half of the ship the sun is actually on gets a HARDER, warmer edge —
+ * the hot key-light wrap every practical render has and this one did not,
+ * because a constant fresnel lights the shadow side exactly as brightly as the
+ * lit side and so says nothing about where the light is.
+ *
+ * It needs no sun position and no uniform to update: by the time three reaches
+ * <opaque_fragment> it has already summed every direct light into
+ * reflectedLight, so the fragment can simply ASK how lit it is. That keeps the
+ * term correct through the whole flight — the sun's pulse, the hyperdrive's
+ * own point light, the swing from Earth to the sun and back — with no plumbing
+ * between this file and Scene3D's light rig at all. */
+const RIM_SUN = 'vec3(1.00, 0.83, 0.62)'; // the sun light's colour, warmed
+const RIM_KEY_K = 2.6; // how fast "lit" saturates; higher = harder terminator
 // The exponent is the whole difference between an edge light and a wash. The
 // hull is a flattened DISC, so at the docked three-quarter views most of its
 // upper shell already sits at a shallow angle to the lens: at pow 3.2 the term
@@ -591,12 +795,19 @@ const RIM_TINT = 'vec3(0.44, 0.62, 0.88)'; // cool starlight, a cousin of HYPER_
 // which is the only place it was ever meant to be.
 const RIM_POWER = 5.0;
 
-function withRim(mat: THREE.MeshStandardMaterial, strength: number): void {
+function withRim(mat: THREE.MeshStandardMaterial, strength: number, sunGain: number): void {
   mat.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <opaque_fragment>',
-      `float rimK = 1.0 - abs(dot(geometryNormal, geometryViewDir));
-       outgoingLight += ${RIM_TINT} * pow(rimK, ${RIM_POWER.toFixed(1)}) * ${strength.toFixed(3)};
+      `float rimK = pow(1.0 - abs(dot(geometryNormal, geometryViewDir)), ${RIM_POWER.toFixed(1)});
+       // How much DIRECT light reached this fragment, as a 0..1 key term. The
+       // shadow side keeps the cool starlight edge; the sunward side gets a
+       // hotter, brighter one, and the terminator between them is the shape.
+       float rimLit = dot(reflectedLight.directDiffuse + reflectedLight.directSpecular,
+                          vec3(0.2126, 0.7152, 0.0722));
+       float rimKey = 1.0 - exp2(-rimLit * ${RIM_KEY_K.toFixed(1)});
+       outgoingLight += mix(${RIM_TINT}, ${RIM_SUN}, rimKey) * rimK *
+                        (${strength.toFixed(3)} + rimKey * ${sunGain.toFixed(3)});
        #include <opaque_fragment>`,
     );
   };
@@ -608,29 +819,7 @@ function withRim(mat: THREE.MeshStandardMaterial, strength: number): void {
   // asks for the same rim compiles one program between them, and Scene3D's
   // warm-up pays for that program once per light signature instead of once per
   // material per light signature.
-  mat.customProgramCacheKey = () => `falcon-rim-${strength.toFixed(3)}`;
-}
-
-/* Radial glow sprite texture: white-hot core through hyperdrive blue. */
-let glowCache: THREE.CanvasTexture | null = null;
-function glowTexture(): THREE.CanvasTexture {
-  if (glowCache) return glowCache;
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-  g.addColorStop(0.25, 'rgba(185, 220, 255, 0.62)');
-  g.addColorStop(0.6, 'rgba(125, 184, 255, 0.22)');
-  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  glowCache = tex;
-  return tex;
+  mat.customProgramCacheKey = () => `falcon-rim-${strength.toFixed(3)}-${sunGain.toFixed(3)}`;
 }
 
 /* ---- mandibles -------------------------------------------------------------
@@ -1054,13 +1243,312 @@ const { GREY_GEO, MID_GEO, DARK_GEO } = ((): {
   return out;
 })();
 
-/* Stern glow sprites, sitting on the band's arc. */
-const GLOW_POS: ReadonlyArray<readonly [number, number, number]> = [
-  [-0.72, 0, 1.96],
-  [0, 0, 2.12],
-  [0.72, 0, 1.96],
-];
-const GLOW_BASE = [0.85, 1.3, 0.85];
+/* ==== EMISSIVE LAMP SYSTEM ===================================================
+ * Everything on this ship that GLOWS — the hyperdrive plume, the belly
+ * repulsor, the nav lamps, the strobes and the attitude jets — is one mesh,
+ * one draw call, one program. Three sprites used to cost three draws between
+ * them and could only ever be a texture stretched two ways; a quad batch with
+ * a falloff EXPONENT per quad buys a real layered plume (a tight hot core, a
+ * soft shroud, a wide wash) plus a dozen lamps for fewer draws than the
+ * sprites cost, and every one of them is driven by an eight-float uniform
+ * rather than by touching a material per frame.
+ *
+ * Two billboard modes:
+ *   SCREEN  the quad faces the lens outright. Lamps and jets: point sources,
+ *           which look the same from everywhere.
+ *   AXIAL   the quad's long axis is pinned to the ship's local X — the line
+ *           of the stern band — and it spins about that axis to face the
+ *           lens. A screen-facing plume rotates with the camera and slides off
+ *           the engine; an axial one stays welded to the strip it comes out of.
+ * ========================================================================= */
+
+/** Channel index. A quad's brightness is uChanA/uChanB dotted with its one-hot
+ *  pair, so adding a behaviour never touches the shader's structure. */
+const CH_PLUME = 0;
+const CH_HOT = 1;
+const CH_BELLY = 2;
+const CH_NAV = 3;
+const CH_STROBE = 4;
+const CH_RCS_P = 5;
+const CH_RCS_S = 6;
+const CH_SHROUD = 7;
+
+type Lamp = {
+  /** Centre, ship-local. */
+  p: readonly [number, number, number];
+  /** Half-extents along the quad's own axes, in ship units. */
+  w: number;
+  h: number;
+  /** Falloff exponent: 1 is a soft wash, 3+ is a hard point. */
+  e: number;
+  /** 0 = screen billboard, 1 = axial about ship X. */
+  mode: 0 | 1;
+  /** Peak colour. Over 1.0 on purpose where the lamp should feed bloom. */
+  c: readonly [number, number, number];
+  ch: number;
+};
+
+const HOT_RGB = [0.78, 0.9, 1.05] as const; // #b9dcff, hot end
+const CORE_RGB = [0.33, 0.56, 0.98] as const; // #7db8ff, the wash
+const NAV_PORT = [1.0, 0.3, 0.13] as const; // accent orange, the console's own
+const NAV_STBD = [0.34, 0.7, 1.0] as const; // hud cyan, ditto
+const STROBE_RGB = [1.35, 1.42, 1.55] as const;
+const RCS_RGB = [0.72, 0.86, 1.15] as const;
+
+/** A point on the stern band's arc at angle th, radius r from the disc centre. */
+function bandPt(th: number, r: number): readonly [number, number, number] {
+  return [r * Math.sin(th), 0, DISC_CZ + r * Math.cos(th)] as const;
+}
+
+function buildLamps(high: boolean): Lamp[] {
+  const L: Lamp[] = [];
+
+  /* --- PLUME: three layers, all axial on the band's line ------------------
+   * The exponents are the whole design. A low exponent is a FOG — it fills a
+   * big soft area with low alpha, and five of them stacked turn the stern into
+   * a weather system rather than an engine. The layers are therefore tight
+   * (2.5-3) and small, and they get their depth from being three distinct
+   * shells at three radii, not from any one of them being broad. */
+  // Core: five tight, hot licks sitting just aft of the emissive strip.
+  for (const th of [-0.5, -0.25, 0, 0.25, 0.5]) {
+    L.push({ p: bandPt(th, 1.82), w: 0.27, h: 0.125, e: 2.7, mode: 1, c: HOT_RGB, ch: CH_PLUME });
+  }
+  // Shroud: the cooler envelope the core burns inside, further aft and softer.
+  for (const th of [-0.44, -0.15, 0.15, 0.44]) {
+    L.push({ p: bandPt(th, 2.08), w: 0.44, h: 0.24, e: 2.1, mode: 1, c: CORE_RGB, ch: CH_SHROUD });
+  }
+  // Wash: one wider, softer body so the plume has a far edge instead of
+  // stopping dead where the shroud quads end.
+  L.push({
+    p: [0, 0, DISC_CZ + 2.5],
+    w: 1.05,
+    h: 0.34,
+    e: 1.9,
+    mode: 1,
+    c: [0.13, 0.24, 0.52],
+    ch: CH_SHROUD,
+  });
+  // The bloom feeder: a thin white-hot line ON the strip. Authored over 1.0 so
+  // it crosses the bloom threshold and the engine reads as a light SOURCE
+  // rather than as a bright surface. High only — this is the one lamp whose
+  // whole job is to make the post chain work harder.
+  L.push({
+    p: [0, 0, DISC_CZ + 1.78],
+    w: 0.92,
+    h: 0.075,
+    e: 3.2,
+    mode: 1,
+    c: high ? [1.75, 1.95, 2.2] : [1.15, 1.35, 1.6],
+    ch: CH_HOT,
+  });
+  if (high) {
+    // A long, almost-not-there tail. It costs one quad and it is the whole
+    // difference between an engine that glows and an engine that is throwing
+    // something out the back.
+    L.push({
+      p: [0, 0, DISC_CZ + 3.75],
+      w: 1.45,
+      h: 0.3,
+      e: 1.7,
+      mode: 1,
+      c: [0.07, 0.14, 0.32],
+      ch: CH_SHROUD,
+    });
+  }
+
+  /* --- BELLY REPULSOR ----------------------------------------------------- */
+  L.push({
+    p: [0, -0.74, 0.3],
+    w: 1.25,
+    h: 0.6,
+    e: 1.3,
+    mode: 0,
+    c: CORE_RGB,
+    ch: CH_BELLY,
+  });
+
+  /* --- NAV LAMPS: port red-orange, starboard cyan, on the mandible tips ---
+   * Aviation convention, in the console's own palette rather than in traffic
+   * colours. Each is a hard point PLUS a soft companion at the same spot: the
+   * companion is the light pooling on the plate around it, which is what sells
+   * a lamp as being ON the hull instead of floating in front of it. */
+  const navSides: ReadonlyArray<readonly [number, readonly [number, number, number]]> = [
+    [1, NAV_STBD],
+    [-1, NAV_PORT],
+  ];
+  for (const [side, col] of navSides) {
+    // Clear of the slab (half-thickness 0.14) and of the dorsal spine that
+    // runs out to the tip at y 0.18 — a lamp buried in its own hull is a lamp
+    // the depth test eats from every angle but one.
+    L.push({
+      p: [side * 0.6, 0.215, -2.1],
+      w: 0.06,
+      h: 0.06,
+      e: 3.0,
+      mode: 0,
+      c: col,
+      ch: CH_NAV,
+    });
+    L.push({
+      p: [side * 0.6, 0.185, -2.04],
+      w: 0.3,
+      h: 0.23,
+      e: 1.7,
+      mode: 0,
+      c: [col[0] * 0.32, col[1] * 0.32, col[2] * 0.32],
+      ch: CH_NAV,
+    });
+  }
+
+  /* --- STROBES: dorsal and ventral, on the hull's own surface -------------- */
+  for (const up of [1, -1] as const) {
+    const y = up * (surfaceY(0, -0.75) + 0.02);
+    L.push({ p: [0, y, -0.75], w: 0.07, h: 0.07, e: 3.0, mode: 0, c: STROBE_RGB, ch: CH_STROBE });
+    // The pool of light the flash throws on the plate around it. Kept well
+    // under the lamp itself: at parity the flash reads as a white patch
+    // painted on the deck rather than as a beacon sitting on it.
+    L.push({
+      p: [0, y + up * 0.01, -0.75],
+      w: 0.36,
+      h: 0.27,
+      e: 1.9,
+      mode: 0,
+      c: [0.26, 0.29, 0.36],
+      ch: CH_STROBE,
+    });
+  }
+
+  /* --- ATTITUDE JETS: two couples, fore-outboard + aft-opposite ------------
+   * A yaw is a COUPLE, so the jets fire in diagonal pairs: nose pushed one way
+   * by the forward thruster, tail the other by the aft one. Which pair lights
+   * is read from the ship's own angular velocity, so they answer the spline's
+   * curvature and the bank without the Rig having to tell them anything. */
+  for (const [ch, sFore, sAft] of [
+    [CH_RCS_P, -1, 1],
+    [CH_RCS_S, 1, -1],
+  ] as ReadonlyArray<readonly [number, number, number]>) {
+    L.push({
+      p: [sFore * 1.13, 0, -0.83],
+      w: 0.115,
+      h: 0.115,
+      e: 2.2,
+      mode: 0,
+      c: RCS_RGB,
+      ch,
+    });
+    L.push({ p: [sAft * 1.6, 0, 0.84], w: 0.115, h: 0.115, e: 2.2, mode: 0, c: RCS_RGB, ch });
+  }
+
+  return L;
+}
+
+/** Quad batch: four corners per lamp, centre in `position`, corner sign in
+ *  `aCorner`, and the rest as flat per-vertex constants. */
+function buildLampGeometry(lamps: readonly Lamp[]): THREE.BufferGeometry {
+  const n = lamps.length;
+  const pos = new Float32Array(n * 12);
+  const corner = new Float32Array(n * 8);
+  const spec = new Float32Array(n * 16);
+  const col = new Float32Array(n * 12);
+  const chA = new Float32Array(n * 16);
+  const chB = new Float32Array(n * 16);
+  const idx = new Uint16Array(n * 6);
+  const CORNERS = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ] as const;
+  lamps.forEach((l, i) => {
+    for (let v = 0; v < 4; v++) {
+      const c = CORNERS[v] ?? [0, 0];
+      const p3 = (i * 4 + v) * 3;
+      const p2 = (i * 4 + v) * 2;
+      const p4 = (i * 4 + v) * 4;
+      pos[p3] = l.p[0];
+      pos[p3 + 1] = l.p[1];
+      pos[p3 + 2] = l.p[2];
+      corner[p2] = c[0];
+      corner[p2 + 1] = c[1];
+      spec[p4] = l.w;
+      spec[p4 + 1] = l.h;
+      spec[p4 + 2] = l.e;
+      spec[p4 + 3] = l.mode;
+      col[p3] = l.c[0];
+      col[p3 + 1] = l.c[1];
+      col[p3 + 2] = l.c[2];
+      if (l.ch < 4) chA[p4 + l.ch] = 1;
+      else chB[p4 + (l.ch - 4)] = 1;
+    }
+    const o = i * 4;
+    idx.set([o, o + 1, o + 2, o, o + 2, o + 3], i * 6);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
+  g.setAttribute('aSpec', new THREE.BufferAttribute(spec, 4));
+  g.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aChanA', new THREE.BufferAttribute(chA, 4));
+  g.setAttribute('aChanB', new THREE.BufferAttribute(chB, 4));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  // The corners live in the shader, so a bounding sphere off the centres alone
+  // would cull the plume the moment its centre left frame. Sized to the
+  // envelope by hand instead.
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, DISC_CZ), 9);
+  return g;
+}
+
+const LAMP_VERT = /* glsl */ `
+uniform vec4 uChanA;
+uniform vec4 uChanB;
+attribute vec2 aCorner;
+attribute vec4 aSpec;   // [halfW, halfH, falloff exponent, mode]
+attribute vec3 aColor;
+attribute vec4 aChanA;
+attribute vec4 aChanB;
+varying vec2 vC;
+varying vec3 vCol;
+varying float vExp;
+void main() {
+  float k = dot(uChanA, aChanA) + dot(uChanB, aChanB);
+  vCol = aColor * k;
+  vExp = aSpec.z;
+  vC = aCorner;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  // The parent scales the whole freighter, so the lamps have to read that
+  // scale off the matrix or they would swell as the ship shrank.
+  float sc = length(modelViewMatrix[0].xyz);
+  // A hotter lamp is also a BIGGER one — the bloom of a real light source
+  // grows with its output, and a plume that only brightens reads as painted.
+  float g = sc * (0.74 + 0.4 * clamp(k, 0.0, 1.6));
+  vec3 off;
+  if (aSpec.w < 0.5) {
+    off = vec3(aCorner.x * aSpec.x, aCorner.y * aSpec.y, 0.0) * g;
+  } else {
+    vec3 axis = normalize((modelViewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+    vec3 up = cross(axis, normalize(-mv.xyz));
+    float ul = length(up);
+    // Dead-on down the axis there is no perpendicular to pick; anything
+    // stable will do, because the quad is edge-on and about to vanish anyway.
+    up = ul > 1e-3 ? up / ul : vec3(0.0, 1.0, 0.0);
+    off = (axis * (aCorner.x * aSpec.x) + up * (aCorner.y * aSpec.y)) * g;
+  }
+  gl_Position = projectionMatrix * vec4(mv.xyz + off, 1.0);
+}`;
+
+const LAMP_FRAG = /* glsl */ `
+varying vec2 vC;
+varying vec3 vCol;
+varying float vExp;
+void main() {
+  float r = length(vC);
+  if (r > 1.0) discard;
+  // pow() on a 0..1 ramp IS the falloff: 1.1 is a fog, 3+ is a filament.
+  float a = pow(1.0 - r, vExp);
+  float lum = max(max(vCol.r, vCol.g), vCol.b) * a;
+  if (lum < 0.004) discard;
+  gl_FragColor = vec4(vCol, a);
+}`;
 
 /* ---- world-space trail -----------------------------------------------------
  * The signature system, kept exactly in architecture: points live in SCENE
@@ -1069,7 +1557,13 @@ const GLOW_BASE = [0.85, 1.3, 0.85];
  * travel RELATIVE to the camera. Emission is spread across the stern strip
  * following the band's arc — white-blue aging, 2.4 s life, alpha peak ~0.45.
  */
-const T_COUNT = 260;
+/* Pool CAPACITY, and the slice of it a mid-tier machine runs. 260 is what has
+ * always shipped, so mid draws exactly that many; the extra slots exist only
+ * so the high tier has somewhere to put its denser wash. Every per-slot array
+ * below is seeded in one pass, so the first 260 slots hold the same values
+ * they always did — the buffer grew, the shipped exhaust did not change. */
+const T_COUNT = 360;
+const T_ACTIVE_MID = 260;
 const T_LIFE = 2.4;
 const T_RATE = 80; // particles/s at full thrust
 const T_THRUST_MIN = 0.1;
@@ -1155,6 +1649,8 @@ void main() {
 const SCRATCH_POS = new THREE.Vector3();
 const SCRATCH_DIR = new THREE.Vector3();
 const SCRATCH_QUAT = new THREE.Quaternion();
+const SCRATCH_DQ = new THREE.Quaternion();
+const SCRATCH_STEP = new THREE.Vector3();
 
 type TrailState = {
   pos: Float32Array;
@@ -1169,6 +1665,9 @@ type TrailState = {
   accum: number;
   camPrev: THREE.Vector3;
   camInit: boolean;
+  /** Emitter world position last frame — the step a birth is backdated along. */
+  emitPrev: THREE.Vector3;
+  emitInit: boolean;
 };
 
 function makeTrailState(): TrailState {
@@ -1199,6 +1698,8 @@ function makeTrailState(): TrailState {
     accum: 0,
     camPrev: new THREE.Vector3(),
     camInit: false,
+    emitPrev: new THREE.Vector3(),
+    emitInit: false,
   };
 }
 
@@ -1216,16 +1717,54 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
   ref,
 ) {
   const scene = useThree((s) => s.scene);
+  // Read ONCE. Every branch below is a build-time decision — which maps get
+  // bound, how many particles the pool runs, how hot the bloom feeder is —
+  // and none of them is ever re-read inside useFrame.
+  const q = useQuality();
+  const rich = q.tier !== 'low'; // normal-mapped panel lines cost a fetch
+  // `&& !q.mobile`: what `high` unlocks below is a MeshPhysicalMaterial with a
+  // clearcoat and anisotropy on the hull — a materially more expensive shader
+  // over the one object that is on screen in every single frame of the
+  // voyage. That is a fill-rate spend, and fill rate is exactly where a
+  // handheld and a desktop at the same nominal tier are least alike.
+  const high = q.tier === 'high' && !q.mobile;
   const groupRef = useRef<THREE.Group | null>(null);
   const dishRef = useRef<THREE.Group | null>(null);
   const gearGroupRef = useRef<THREE.Group | null>(null);
   const doorRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null, null, null]);
+  /** Damped follower for the gear pose, and its velocity — see the spring in
+   *  useFrame. -1 forces the first frame to adopt gearRef outright. */
+  const gearVis = useRef(-1);
+  const gearVel = useRef(0);
   const gearPrev = useRef(-1);
-  const glowRefs = useRef<Array<THREE.Sprite | null>>([null, null, null]);
   const lightRef = useRef<THREE.PointLight | null>(null);
+  /** Ship attitude last frame, for the angular velocity the jets answer to. */
+  const attPrev = useRef(new THREE.Quaternion());
+  const attInit = useRef(false);
+  /** Slow average of the turn rate — the baseline a jet burst is measured
+   *  against, so a steady sweep reads as no thrust at all. */
+  const turnAvg = useRef(0);
+  const jetP = useRef(0);
+  const jetS = useRef(0);
   const trail = useMemo(makeTrailState, []);
 
-  const { mats, trailU } = useMemo(() => {
+  /** How much of the trail pool this tier runs. The buffers are module-scope
+   *  and full size; the draw range and the ring cursor are what move, so a
+   *  demotion mid-flight costs nothing and drops no live particle. */
+  const trailCount = Math.min(
+    T_COUNT,
+    Math.max(72, Math.round(T_ACTIVE_MID * q.particleScale)),
+  );
+  const lampGeo = useMemo(() => buildLampGeometry(buildLamps(high)), [high]);
+  useEffect(() => () => lampGeo.dispose(), [lampGeo]);
+
+  const { mats, trailU, lampU } = useMemo(() => {
+    const lampUniforms = {
+      // [plume, hot core, belly repulsor, nav lamps]
+      uChanA: { value: new THREE.Vector4(0, 0, 0, 0) },
+      // [strobe, jets port couple, jets starboard couple, plume shroud]
+      uChanB: { value: new THREE.Vector4(0, 0, 0, 0) },
+    };
     const trailUniforms = {
       uH: { value: 720 },
       uAspect: { value: 16 / 9 },
@@ -1242,15 +1781,48 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     // the audit asked for.
     const plating = platingTexture();
     const wear = wearTexture();
-    const hull = new THREE.MeshStandardMaterial({
-      map: hullTexture(),
+    // Texture filtering is a budget knob now: 8 is what shipped, 16 is close
+    // to free on a desktop GPU and distinctly not on a tiler. Anisotropy is
+    // SAMPLER state, so it is set and NOT flagged — three picks it up in
+    // setTextureParameters on the next bind, and flagging needsUpdate here
+    // would re-upload the hull, plating and normal canvases (module-cached
+    // singletons shared across every mount) to change one integer. The tier's
+    // build budget is frozen at mount now, so this value settles once, before
+    // the first upload, and never moves again within a session.
+    const setAniso = (tex: THREE.Texture): void => {
+      tex.anisotropy = q.anisotropy;
+    };
+    const hullMap = hullTexture();
+    // Panel-line normals: the raking-light detail. Skipped entirely at low,
+    // where the fetch buys less than it costs — and the canvas is never even
+    // built there, so the memory goes with it.
+    const hullN = rich ? hullNormalTexture() : null;
+    const plateN = rich ? platingNormalTexture() : null;
+    // The normal sheets want the filtering MORE than the albedo does: a panel
+    // line seen at a grazing angle is exactly the case anisotropy exists for,
+    // and it is also exactly where an unfiltered normal map turns to noise.
+    for (const tex of [hullMap, plating, hullN, plateN]) if (tex) setAniso(tex);
+    const nScale = (x: number): THREE.Vector2 => new THREE.Vector2(x, x);
+
+    const hullParams = {
+      map: hullMap,
       roughnessMap: wear,
       metalnessMap: wear,
       color: '#ffffff',
       roughness: 0.62 / WEAR_G,
       metalness: 0.25 / WEAR_B,
       envMapIntensity: 0.7,
-    });
+      ...(hullN ? { normalMap: hullN, normalScale: nScale(0.7) } : {}),
+    };
+    // A HINT of anisotropy, desktop-high only. The hull's UVs run u around the
+    // azimuth, so brushing along u is brushing in rings about the ship's axis
+    // — which is how a lathed plate is actually finished, and it means the sun
+    // travels along the hull as an arc rather than sitting on it as a spot.
+    // It is a MeshPhysicalMaterial branch and therefore a second program, so
+    // it is the one piece of surface treatment gated on the top tier alone.
+    const hull: THREE.MeshStandardMaterial = high
+      ? new THREE.MeshPhysicalMaterial({ ...hullParams, anisotropy: 0.34, anisotropyRotation: 0 })
+      : new THREE.MeshStandardMaterial(hullParams);
     const grey = new THREE.MeshStandardMaterial({
       map: plating,
       roughnessMap: wear,
@@ -1259,6 +1831,7 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       roughness: 0.62 / WEAR_G,
       metalness: 0.25 / WEAR_B,
       envMapIntensity: 0.7,
+      ...(plateN ? { normalMap: plateN, normalScale: nScale(0.55) } : {}),
     });
     const greyDark = new THREE.MeshStandardMaterial({
       map: plating,
@@ -1268,6 +1841,7 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       roughness: 0.7 / WEAR_G,
       metalness: 0.3 / WEAR_B,
       envMapIntensity: 0.6,
+      ...(plateN ? { normalMap: plateN, normalScale: nScale(0.55) } : {}),
     });
     const dark = new THREE.MeshStandardMaterial({
       map: plating,
@@ -1277,17 +1851,23 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       roughness: 0.5 / WEAR_G,
       metalness: 0.6 / WEAR_B,
       side: THREE.DoubleSide,
+      ...(plateN ? { normalMap: plateN, normalScale: nScale(0.4) } : {}),
     });
     // Two tiers, not four. The plate materials own the outline and take the
     // full rim; the dark furniture is edges and recesses all the way down, and
     // at full strength every greeble picked out its own corners until the
     // stern deck read as a glowing wireframe. Two tiers is also two shader
     // programs instead of four — see withRim on why the strength is the key.
-    for (const m of [hull, grey, greyDark]) withRim(m, 0.22);
-    withRim(dark, 0.12);
+    // The second number is the SUNWARD bonus: the plates take a hard hot edge
+    // where the key hits them, the dark furniture almost none, because a
+    // recess that catches the sun as brightly as the plate around it stops
+    // reading as a recess.
+    for (const m of [hull, grey, greyDark]) withRim(m, 0.22, 0.42);
+    withRim(dark, 0.12, 0.16);
 
     return {
       trailU: trailUniforms,
+      lampU: lampUniforms,
       mats: {
         hull,
         grey,
@@ -1316,23 +1896,17 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
           roughness: 0.4,
           side: THREE.DoubleSide,
         }),
-        glow: new THREE.SpriteMaterial({
-          map: glowTexture(),
-          color: '#9cc8ff',
+        // Plume, repulsor, nav lamps, strobes and jets — one material, one
+        // program, one draw. Depth-TESTED (the hull must occlude a lamp on its
+        // far side) but never depth-writing, because everything here is light.
+        lamps: new THREE.ShaderMaterial({
+          uniforms: lampUniforms,
+          vertexShader: LAMP_VERT,
+          fragmentShader: LAMP_FRAG,
           transparent: true,
-          opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
-          toneMapped: false,
-        }),
-        underGlow: new THREE.SpriteMaterial({
-          map: glowTexture(),
-          color: HYPER_CORE,
-          transparent: true,
-          opacity: 0,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          toneMapped: false,
+          side: THREE.DoubleSide,
         }),
         trail: new THREE.ShaderMaterial({
           uniforms: trailUniforms,
@@ -1344,7 +1918,9 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         }),
       },
     };
-  }, []);
+    // Tier is the only dependency, and it moves at most twice a session and
+    // only downward — so this rebuilds materials essentially never.
+  }, [rich, high, q.anisotropy]);
 
   // Per-mount resources go away with the component; module-scope geometry
   // and cached canvas textures are shared across visits on purpose.
@@ -1355,6 +1931,14 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     };
   }, [trail, mats]);
 
+  // The pool is allocated once at full size; the tier only decides how much of
+  // it is drawn and how far the ring cursor walks. A demotion mid-flight is
+  // therefore free and cannot strand a live particle outside the draw range.
+  useEffect(() => {
+    trail.geo.setDrawRange(0, trailCount);
+    if (trail.cursor >= trailCount) trail.cursor = 0;
+  }, [trail, trailCount]);
+
   useFrame((state, rawDt) => {
     // Clamp dt: a backgrounded tab must not dump a giant step into the sim.
     const dt = Math.min(rawDt, 0.05);
@@ -1362,42 +1946,74 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     const t = state.clock.elapsedTime;
 
     // ---- hyperdrive band: intensity TRACKS thrust (state, allowed under
-    // reduced); the subtle flicker is motion, gated off.
+    // reduced); the flicker is motion, gated off.
+    //
+    // TWO SUMMED SINES, NOT NOISE. A random-per-frame flicker is what a
+    // screensaver does: it is frame-rate dependent, it never repeats a shape,
+    // and it reads as a fault in the render rather than as combustion. Two
+    // detuned sines beat against each other on a period neither of them has,
+    // which is what an unstable burn actually looks like, and it is identical
+    // at 30fps and at 120. The fast pair is the burn; the slow pair below is
+    // the IDLE — a calm breath so a coasting ship is never quite dead.
     const flick = reduced ? 0 : 0.05 * Math.sin(t * 12.4) + 0.035 * Math.sin(t * 7.9 + 1.3);
+    const idle = reduced ? 0 : 0.045 * Math.sin(t * 1.31) + 0.03 * Math.sin(t * 2.07 + 2.2);
     mats.engineCore.emissiveIntensity = (1.2 + thrust * 2.6) * (1 + flick);
     mats.engineHot.emissiveIntensity = (1.7 + thrust * 3.0) * (1 + flick);
 
-    // ---- stern glow sprites + hyperdrive light: value-tracking state.
-    mats.glow.opacity = Math.min(1, thrust * 0.95);
-    const gs = 0.55 + thrust * 1.6;
-    for (let i = 0; i < 3; i++) {
-      const spr = glowRefs.current[i];
-      if (spr) {
-        const m = GLOW_BASE[i] ?? 1;
-        spr.scale.set(gs * m * 1.2, gs * m * 0.7, 1);
-      }
-    }
+    // ---- THE PLUME. Three layers off one thrust value, each with its own
+    // curve: the shroud is broad and lags behind the throttle, the core tracks
+    // it, and the hot filament is quadratic so it only shows up when the
+    // engine is really working. The 0.13 floor is the idle glow — the strip
+    // is emissive at rest, so the air in front of it has to be too.
+    const burn = thrust > 0 ? thrust : 0;
+    const chA = lampU.uChanA.value;
+    const chB = lampU.uChanB.value;
+    chA.x = (0.13 + burn * 0.92) * (1 + flick * burn + idle); // plume core
+    chA.y = 0.05 + burn * burn * 1.15; // hot filament (bloom feeder)
+    chA.z = burn > 0.6 ? Math.min(0.62, (burn - 0.6) * 1.3) : 0; // belly repulsor
+    chA.w = 1; // nav lamps: steady, always lit, cheap and still under reduced
+    chB.w = (0.09 + burn * 0.62) * (1 + idle * 0.6); // plume shroud
+
     const light = lightRef.current;
     if (light) light.intensity = thrust * 22;
 
-    // ---- belly repulsor under-glow: fades in above thrust 0.6 (landing read).
-    mats.underGlow.opacity = thrust > 0.6 ? Math.min(0.5, (thrust - 0.6) * 1.2) : 0;
-
-    // ---- LANDING GEAR: pure value-tracking off gearRef, so it still poses
-    // correctly under reduced motion. 0 = stowed (hidden), 1 = soles at -1.0.
+    // ---- LANDING GEAR. The value comes from gearRef, but what the legs
+    // actually do is chase it through a spring: gear that arrives exactly when
+    // the ramp says so arrives with zero velocity and reads as a prop being
+    // slid into place. Slightly under-damped, so the struts overshoot by a
+    // hair and settle — the weight of the thing, which is the only reason to
+    // animate this at all. Under reduced the spring is skipped outright and
+    // the pose snaps, as every other animation here does.
     const raw = gearRef ? gearRef.current : 0;
     // Written so a NaN falls through to 0 rather than poisoning the transform.
     const gear = raw > 0 ? (raw < 1 ? raw : 1) : 0;
-    if (gear !== gearPrev.current) {
-      gearPrev.current = gear;
+    if (reduced || gearVis.current < 0) {
+      gearVis.current = gear;
+      gearVel.current = 0;
+    } else if (Math.abs(gear - gearVis.current) > 1e-4 || Math.abs(gearVel.current) > 1e-4) {
+      // Semi-implicit Euler at a stiffness the clamped dt cannot destabilise.
+      // k=34, c=8.2 is zeta 0.70: about 4.6% overshoot, settled inside a
+      // second. The ceiling is 1.03 and not the spring's natural peak because
+      // over-extension pushes the soles BELOW the plane the finale stands the
+      // craft on — 1.3cm for a fifth of a second, mid-descent and metres off
+      // the deck, is a settle; 4.6% at the wrong moment would be a foot
+      // through the pier.
+      gearVel.current += ((gear - gearVis.current) * 34 - gearVel.current * 8.2) * dt;
+      gearVis.current += gearVel.current * dt;
+      if (gearVis.current < 0) gearVis.current = 0;
+      else if (gearVis.current > 1.03) gearVis.current = 1.03;
+    }
+    const gv = gearVis.current;
+    if (Math.abs(gv - gearPrev.current) > 1e-4) {
+      gearPrev.current = gv;
       const gg = gearGroupRef.current;
       if (gg) {
-        const shown = gear > 0.02;
+        const shown = gv > 0.02;
         gg.visible = shown;
-        if (shown) gg.position.y = (1 - gear) * GEAR_TUCK;
+        if (shown) gg.position.y = (1 - gv) * GEAR_TUCK;
       }
       // Doors lead the legs: fully open by gear 0.4, smoothstepped.
-      const o = Math.min(1, gear / 0.4);
+      const o = Math.min(1, gv / 0.4);
       const angle = o * o * (3 - 2 * o) * DOOR_MAX;
       for (let i = 0; i < 6; i++) {
         const d = doorRefs.current[i];
@@ -1406,7 +2022,64 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     }
 
     // Everything past here is pure motion — parked entirely under reduced.
-    if (reduced) return;
+    if (reduced) {
+      chB.x = 0;
+      chB.y = 0;
+      chB.z = 0;
+      return;
+    }
+
+    // ---- STROBE: two hard flashes 0.19s apart, then 2.4s of nothing. That
+    // double-blink is the cadence every anti-collision beacon in the sky uses
+    // and the reason a light on a hull reads as a VEHICLE; a sine here would
+    // read as a pulsing prop. Shaped as a squared triangle so the flash has an
+    // edge on it without needing an exp().
+    const cyc = t % 2.62;
+    let strobe = 0;
+    for (const at of [0, 0.19]) {
+      const d = Math.abs(cyc - at);
+      if (d < 0.075) {
+        const s = 1 - d / 0.075;
+        strobe = Math.max(strobe, s * s);
+      }
+    }
+    chB.x = strobe;
+
+    // ---- ATTITUDE JETS. Nothing tells this component that the ship is
+    // turning, so it measures: the delta between this frame's orientation and
+    // the last one IS the angular velocity, and for a small rotation the
+    // quaternion's vector part is half the axis-angle. Yaw and roll are summed
+    // because the Rig banks INTO its turns, so both say "manoeuvring", and the
+    // sign says which way.
+    const g0 = groupRef.current;
+    let turn = 0;
+    if (g0) {
+      if (attInit.current && dt > 5e-4) {
+        SCRATCH_DQ.copy(attPrev.current).invert().multiply(g0.quaternion);
+        // A quaternion and its negation are the same rotation; pick the one
+        // whose vector part has the sign of the actual motion.
+        const sgn = SCRATCH_DQ.w < 0 ? -1 : 1;
+        turn = ((SCRATCH_DQ.y * 2 + SCRATCH_DQ.z * 1.1) * sgn) / dt;
+      }
+      attPrev.current.copy(g0.quaternion);
+      attInit.current = true;
+    }
+    // A thruster fires to CHANGE a rotation, never to hold one — nothing in
+    // vacuum needs thrust to keep turning. So the jets answer the rate's
+    // DEVIATION from its own slow average, not the rate: entering a bend and
+    // coming out of it both spike, the long steady sweep in between does not,
+    // and a docked ship is silent. Cheaper and far more stable than
+    // differentiating a per-frame quaternion delta twice.
+    turnAvg.current += (turn - turnAvg.current) * Math.min(1, dt * 1.6);
+    const dev = turn - turnAvg.current;
+    // Deadband first, then an attack/decay follower so each burst is a PUFF
+    // that fades rather than a lamp that tracks.
+    const fire = Math.min(1, Math.max(0, (Math.abs(dev) - 0.05) * 3.2));
+    const fade = Math.max(0, 1 - dt * 3.4);
+    jetP.current = Math.max(dev > 0 ? fire : 0, jetP.current * fade);
+    jetS.current = Math.max(dev < 0 ? fire : 0, jetS.current * fade);
+    chB.y = jetP.current;
+    chB.z = jetS.current;
 
     // ---- sensor dish: slow 0.1 rad/s sweep.
     const dish = dishRef.current;
@@ -1426,12 +2099,12 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
     const { pos, drop, vel, ages } = trail;
 
     // Age, integrate and fade every live particle in place.
-    for (let i = 0; i < T_COUNT; i++) {
+    for (let i = 0; i < trailCount; i++) {
       const age = (ages[i] ?? T_LIFE) + dt;
       ages[i] = age;
-      const q = i * 4;
+      const qi = i * 4;
       if (age >= T_LIFE) {
-        drop[q + 1] = 0;
+        drop[qi + 1] = 0;
         continue;
       }
       const k = i * 3;
@@ -1440,8 +2113,8 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
       pos[k + 2] = (pos[k + 2] ?? 0) + (vel[k + 2] ?? 0) * dt;
       const u = age / T_LIFE;
       const inv = 1 - u;
-      drop[q] = (T_SIZE[i] ?? 0.2) * (0.7 + u * 1.5); // wash expands as it cools
-      drop[q + 1] = 0.45 * inv * inv * Math.min(1, age * 10); // peak ~0.45, quadratic fade
+      drop[qi] = (T_SIZE[i] ?? 0.2) * (0.7 + u * 1.5); // wash expands as it cools
+      drop[qi + 1] = 0.45 * inv * inv * Math.min(1, age * 10); // peak ~0.45, quadratic fade
     }
 
     // Emit across the stern strip's WORLD position, aft along WORLD +Z.
@@ -1451,31 +2124,50 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         g.updateWorldMatrix(true, false);
         g.getWorldQuaternion(SCRATCH_QUAT);
         SCRATCH_DIR.set(0, 0, 1).applyQuaternion(SCRATCH_QUAT).normalize();
-        trail.accum += T_RATE * Math.min(thrust, 1.2) * dt;
-        while (trail.accum >= 1) {
-          trail.accum -= 1;
+        // CONTINUITY. Every particle born this frame used to be stamped at the
+        // ship's CURRENT position, so a frame where the freighter crossed four
+        // metres laid all four of that frame's particles on top of each other
+        // and left four metres of nothing behind them — a string of beads that
+        // slides instead of a wash that trails. Each birth is now backdated
+        // along the ship's own step by its share of the frame, which turns the
+        // same particles into an even ribbon and costs one subtraction. It
+        // matters most exactly where it shows most: a slow frame.
+        SCRATCH_STEP.set(0, 0, 0);
+        SCRATCH_POS.setFromMatrixPosition(g.matrixWorld);
+        if (trail.emitInit) SCRATCH_STEP.subVectors(SCRATCH_POS, trail.emitPrev);
+        trail.emitPrev.copy(SCRATCH_POS);
+        trail.emitInit = true;
+
+        const want = trail.accum + T_RATE * q.particleScale * Math.min(thrust, 1.2) * dt;
+        const born = Math.floor(want);
+        trail.accum = want - born;
+        for (let j = 0; j < born; j++) {
           const i = trail.cursor;
-          trail.cursor = (i + 1) % T_COUNT;
-          ages[i] = 0;
+          trail.cursor = (i + 1) % trailCount;
+          // Fraction of the frame ago this one was born: the first of the
+          // batch is the oldest, so it sits furthest back along the step.
+          const back = (born - j - 0.5) / born;
+          ages[i] = back * dt;
           const k = i * 3;
-          const q = i * 4;
+          const qi = i * 4;
           // Per-slot emit point spread along the band's arc, to world space.
           SCRATCH_POS.set(T_EMIT[k] ?? 0, T_EMIT[k + 1] ?? 0, T_EMIT[k + 2] ?? 2.1).applyMatrix4(
             g.matrixWorld,
           );
-          pos[k] = SCRATCH_POS.x + (T_SCAT[k] ?? 0) * 0.05;
-          pos[k + 1] = SCRATCH_POS.y + (T_SCAT[k + 1] ?? 0) * 0.05;
-          pos[k + 2] = SCRATCH_POS.z + (T_SCAT[k + 2] ?? 0) * 0.05;
+          pos[k] = SCRATCH_POS.x + (T_SCAT[k] ?? 0) * 0.05 - SCRATCH_STEP.x * back;
+          pos[k + 1] = SCRATCH_POS.y + (T_SCAT[k + 1] ?? 0) * 0.05 - SCRATCH_STEP.y * back;
+          pos[k + 2] = SCRATCH_POS.z + (T_SCAT[k + 2] ?? 0) * 0.05 - SCRATCH_STEP.z * back;
           const spd = T_SPEED[i] ?? 3.5;
           vel[k] = SCRATCH_DIR.x * spd + (T_SCAT[k] ?? 0) * 0.6;
           vel[k + 1] = SCRATCH_DIR.y * spd + (T_SCAT[k + 1] ?? 0) * 0.6;
           vel[k + 2] = SCRATCH_DIR.z * spd + (T_SCAT[k + 2] ?? 0) * 0.6;
-          drop[q + 2] = T_SOFT[i] ?? 0.3;
-          drop[q + 3] = T_SEED[i] ?? 0;
+          drop[qi + 2] = T_SOFT[i] ?? 0.3;
+          drop[qi + 3] = T_SEED[i] ?? 0;
         }
       }
     } else {
       trail.accum = 0; // a coast must not bank up a burst
+      trail.emitInit = false; // and must not backdate across the gap
     }
 
     trail.posAttr.needsUpdate = true;
@@ -1553,17 +2245,12 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
         />
       ))}
 
-      {/* Row of three stern glow sprites scaling with thrust. */}
-      {GLOW_POS.map((p, i) => (
-        <sprite
-          key={i}
-          material={mats.glow}
-          position={[p[0], p[1], p[2]]}
-          ref={(s: THREE.Sprite | null) => {
-            glowRefs.current[i] = s;
-          }}
-        />
-      ))}
+      {/* EVERY light on the ship, in one draw: the layered hyperdrive plume,
+          the belly repulsor, the nav lamps and their spill, the anti-collision
+          strobes and the attitude jets. Driven entirely by two vec4 uniforms
+          written in useFrame — no material is touched per frame and no lamp
+          costs a draw call of its own. */}
+      <mesh geometry={lampGeo} material={mats.lamps} renderOrder={2} />
 
       {/* The one hyperdrive light, painting blue onto nearby hull/planets. */}
       <pointLight
@@ -1576,9 +2263,6 @@ export const Rocket3D = forwardRef<THREE.Group, Rocket3DProps>(function Rocket3D
           lightRef.current = l;
         }}
       />
-
-      {/* Faint repulsor under-glow beneath the hull, thrust > 0.6 only. */}
-      <sprite material={mats.underGlow} position={[0, -0.72, 0.3]} scale={[2.5, 1.25, 1]} />
 
       {/* World-space trail: portaled to the scene root so particles stay
           where they were emitted and the wash arcs along the flight path.

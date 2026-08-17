@@ -133,7 +133,11 @@ export function StationContent({
           rel="noreferrer"
         >
           {a.label ?? 'View the artifact'}
-          <span aria-hidden="true">↗</span>
+          {/* the one glyph that points out of the site — it travels the way
+              it points on hover (polish.css, .btn-arrow) */}
+          <span aria-hidden="true" className="btn-arrow">
+            ↗
+          </span>
         </a>
       )}
 
@@ -166,7 +170,12 @@ export function StationContent({
         <span className="font-mono text-2xs uppercase tracking-widest text-faint">
           {station.code}
         </span>
-        <span aria-hidden="true" className="h-px flex-1 bg-rule" />
+        {/* `eyebrow-rule` is a hook for the arrival choreography only — the
+            rule draws out from the station code instead of fading in with it
+            (polish.css, .panel.arrive). It carries no appearance of its own,
+            so the static document, which renders this same row with no
+            .arrive above it, is byte-identical. */}
+        <span aria-hidden="true" className="eyebrow-rule h-px flex-1 bg-rule" />
       </div>
 
       <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink md:text-2xl">
@@ -265,14 +274,22 @@ function Evidence({ station, children }: { station: Station; children: ReactNode
           chosen.set(station.id, next);
           setChoice(next);
         }}
-        className={`btn mt-4 flex w-full items-center gap-3 font-mono text-2xs uppercase tracking-widest ${
-          open ? 'text-faint' : 'rounded border border-rule-strong bg-raised px-3 py-2.5 text-ink'
+        /* `evidence-toggle` + `is-open` are the hooks for this control's press
+           and hover physics (polish.css). They carry no appearance: the two
+           states are still the Tailwind classes below, and the stylesheet only
+           needs to know WHICH of them is on screen, because a full-width bar
+           and a rule row want opposite hovers and .btn's generic one is right
+           for neither. */
+        className={`btn evidence-toggle mt-4 flex w-full items-center gap-3 font-mono text-2xs uppercase tracking-widest ${
+          open
+            ? 'is-open text-faint'
+            : 'rounded border border-rule-strong bg-raised px-3 py-2.5 text-ink'
         }`}
       >
         <span className="num">{summary}</span>
         {/* One element, two jobs: the spacer that pushes the chevron to the
             far edge when closed IS the eyebrow's hairline when open. */}
-        <span aria-hidden="true" className={open ? 'h-px flex-1 bg-rule' : 'flex-1'} />
+        <span aria-hidden="true" className={`toggle-rule ${open ? 'h-px flex-1 bg-rule' : 'flex-1'}`} />
         {/* Drawn, not typed, for the reason spelled out under ArtifactDiagram:
             the mono stack is only proven to carry arrows and an em dash, and a
             control whose glyph renders as a tofu box is not a control. */}

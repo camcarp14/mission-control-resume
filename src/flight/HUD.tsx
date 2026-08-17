@@ -1,5 +1,41 @@
 import { stations } from '../content/stations.js';
 
+/* ---- the two things the masthead was missing ------------------------------
+ *
+ * 1. THE COUNTER NEVER MOVED. "STN 06 · 6 / 11" is the only element in the top
+ *    bar that is live, and it changed by being replaced between two frames —
+ *    the same way a typo gets corrected. On a console whose entire conceit is
+ *    that the chrome is instrumentation, the one live readout up there should
+ *    settle when it takes a new value. It is keyed on `current`, so React
+ *    remounts the run on each docking and the animation restarts by
+ *    construction rather than by a class being toggled off and on.
+ *    The two halves land in sequence — the section code, then the tally 80ms
+ *    behind it — because a single block fading in reads as a page transition
+ *    while two runs landing in order reads as a mechanism. The tally is an
+ *    inline span inside a block, so it gets opacity only: transforms do not
+ *    apply to non-replaced inline boxes, and asking for one would have been a
+ *    rule that silently did nothing.
+ *
+ * 2. THE PRESS WAS BORROWED. Both actions inherit .btn's scale(0.97), which is
+ *    the system's press and is correct everywhere else on the site. In the top
+ *    bar it fought the hover: .btn.primary and .btn.hudcta both lift by 1px on
+ *    hover, so pressing them ran the scale and the un-lift on the SAME 140ms
+ *    curve and the button drifted down rather than being pushed. Real press
+ *    physics are asymmetric — a control goes down faster than it comes back —
+ *    so the active state states its own transform (the lift explicitly zeroed
+ *    rather than left to cancel) and shortens the duration to 70ms on the way
+ *    in only. Release inherits the 140ms house curve again. The inset shadow
+ *    is what makes the two buttons read as pressed INTO the bar rather than
+ *    scaled: without it a shrinking button just gets smaller.
+ */
+/* The rules for all of the above live in src/ui/polish.css under INSTRUMENT
+   MOTION, at the end of the file. They were authored in a scoped <style>
+   element here because the round that wrote them did not own that stylesheet;
+   the integration pass lifted them. Their position at the bottom of
+   polish.css is load-bearing — `.hud .btn:active` ties with `.btn:active` and
+   `.btn.hudcta:hover` on specificity and resolves by source order — so do not
+   move them earlier without re-checking the press. */
+
 /**
  * The persistent chrome, visible in BOTH modes at every breakpoint. The two
  * escape hatches live here and never move: the PDF for people with four
@@ -58,9 +94,12 @@ export function HUD({
               aria-hidden="true"
               className="hidden h-2 w-px shrink-0 self-baseline bg-rule-strong sm:inline-block"
             />
-            <span className="num hidden whitespace-nowrap font-mono text-2xs uppercase tracking-widest text-dim sm:inline">
+            <span
+              key={current}
+              className="hudtick num hidden whitespace-nowrap font-mono text-2xs uppercase tracking-widest text-dim sm:inline"
+            >
               {station.code}{' '}
-              <span className="text-hud/70">
+              <span className="hudtick-b text-hud/70">
                 · {current + 1} / {stations.length}
               </span>
             </span>

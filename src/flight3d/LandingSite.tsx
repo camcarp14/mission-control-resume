@@ -41,13 +41,14 @@
  * moon-path shimmer — are gated off and parked when `reduced` is true.
  * ========================================================================= */
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { useFrame, useThree } from '@react-three/fiber';
 import type { MotionValue } from 'framer-motion';
 import { legInto, mulberry32 } from '../engine';
 import type { Waypoint } from '../engine';
+import { scaleSegments, useQuality, type QualityBudget } from './quality';
 
 /* ---- tunables ----------------------------------------------------------- */
 
@@ -83,6 +84,53 @@ const PAD_RADIUS = 4.0;
 const PAD_LIFT = 0.02;
 const PAD_CYAN = '#7df9ff';
 const PAD_LABEL = 'CC-01';
+// The pad's own private stream, for the same reason PIER_SEED exists: paintPad
+// runs THIRD in the site's fixed rng order, upstream of the window atlas and
+// of every building, so one extra draw in it would re-roll the whole skyline.
+const PAD_SEED = 0x3ec0de11;
+
+// TOUCHDOWN WASH. The finale used to ARRIVE: the ship's ramp reached 1 and it
+// was simply there. What was missing is the second before that — the moment a
+// descending craft announces itself on the ground, by throwing its own
+// exhaust back off the deck in a ring of lifted dust. That is what this is:
+// ONE additive quad lying just over the pad, growing and thinning as the ship
+// comes down and gone by the time it settles.
+//
+// It is driven by the flight RAMP, not by a clock, which is what makes it
+// honest in every mode: scrub the rail backwards and the dust un-lifts,
+// arrive slowly and it lingers. Under reduced motion the ramp SNAPS, so the
+// visitor's single rendered frame is either 0 (pre-descent) or 1 (docked) and
+// the wash is invisible at both — exactly the "off or instant" rule. The only
+// clock-driven part is the slow rotation, which is gated on `reduced`.
+const WASH_SEED = 0x7a5ed05e;
+const WASH_RADIUS = 5.4; // < DECK_WIDTH/2: the lit ring stays on the planking
+// Clear of the pad decal by a comfortable margin, not a hair. The pad is
+// drawn with polygonOffset (-1), which at the grazing angles this deck is
+// seen at can pull it a long way toward the camera in depth — close enough to
+// win against a quad sitting two hundredths above it. A tenth of a unit is
+// still invisible on a twelve-unit-wide deck and cannot be argued with.
+const WASH_LIFT = PAD_LIFT + 0.1;
+const WASH_IN = 0.84; // ramp: the plume's wash first reaches the deck
+const WASH_RISE = 0.09; // …fully lifted by 0.93
+const WASH_FALL = 0.945; // …and settling from here to nothing at touchdown
+const WASH_MIN_SCALE = 0.5; // tight under the ship, spreading to 1.0 as it dies
+const WASH_OPACITY = 0.5;
+const WASH_SPIN = 0.32; // rad/s of drift in the dust — parked when reduced
+
+// A FIFTH skyline row, HIGH TIER ONLY. Rows 0–3 end at ~282 units and the
+// hazier far veil stands at 243, so the deepest thing in the frame today is
+// still a distinct wall of towers. This row stands well behind that veil,
+// sparse and tall and sampling the atlas' dimmest band, so it reads as the
+// city continuing past the point where the eye can resolve it rather than as
+// more buildings. It costs ZERO draw calls — the facades merge into the
+// existing window batch and the roof boxes into the existing opaque batch —
+// and a few hundred triangles, which is why it is affordable at all. It comes
+// off its own stream so the signed-off skyline in front of it is untouched.
+const FAR_SEED = 0xd157a4ce;
+const FAR_COUNT = 16;
+const FAR_R_MIN = 286;
+const FAR_R_SPAN = 26;
+const FAR_ARC = 2.72;
 // The pier head's added detailing (coping, wale, fenders, bollards) comes off
 // its own stream for the same reason the lake's glitter does: the site's one
 // seeded rng feeds the whole city downstream of here, and its order is the
@@ -514,7 +562,15 @@ function paintDeck(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () 
 }
 
 /** The pad: concrete over the pier-tip deck, one bold glowing cyan ring, an
- *  inner dashed circle, four corner ticks, and 'CC-01' stencilled twice. */
+ *  inner dashed circle, four corner ticks, and 'CC-01' stencilled twice —
+ *  laid on WET stone, because this is a pier on a lake at night and dry
+ *  concrete is the one thing that could not possibly be there.
+ *
+ *  World → canvas, which decides every direction below: padGeo is a circle
+ *  rotated -π/2 about X, so its UVs are linear in position with u running
+ *  along +X (toward the landing camera) and v along -Z. The canvas is
+ *  flipY'd into the texture, so canvas RIGHT is +X — toward the viewer — and
+ *  that is the direction every reflection in this paint smears. */
 function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number): void {
   const S = size;
   const c = S / 2;
@@ -531,6 +587,63 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Everything from here to the ring comes off the pad's OWN stream. paintPad
+  // runs third in the site's fixed rng order — upstream of the window atlas
+  // and of every building placement — so a single extra draw against `rng`
+  // would re-roll the entire signed-off Chicago skyline downstream of it.
+  const prng = mulberry32(PAD_SEED);
+
+  // WET STONE. Damp patches pooled in the low spots, elongated along +X
+  // because that is the axis a near-horizontal view stretches everything
+  // along: a round wet patch at this grazing angle would read as a blob on
+  // the lens, the same failure the lake's glitter had to solve.
+  //
+  // Two calibrations came out of looking at this from the DESCENT camera, not
+  // from overhead:
+  //   · they live in an ANNULUS (0.3R out), because the middle of this pad
+  //     already carries the ship's painted contact shadow and stacking damp
+  //     over it turned the centre into a hole with a jagged spiky rim — the
+  //     union of a dozen overlapping dark ellipses, and it read as a tear in
+  //     the deck rather than as wet ground;
+  //   · the DARKENING is barely there and the bright LIP is doing the work.
+  //     What the eye reads as "wet" is the specular, not the tone: dark
+  //     patches alone just look like dirt.
+  // Twenty-two, not thirty: at thirty the patches overlapped into a
+  // continuous haze and the pad read as MIST sitting on it rather than as wet
+  // stone. Discrete puddles with dry ground between them is the read.
+  for (let i = 0; i < 22; i++) {
+    const a = prng() * Math.PI * 2;
+    const rr = R * (0.3 + Math.pow(prng(), 0.7) * 0.62);
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
+    const long = 14 + prng() * 44;
+    const short = 4 + prng() * 10;
+    ctx.fillStyle = `rgba(8,12,18,${(0.04 + prng() * 0.06).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, long, short, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (prng() < 0.6) {
+      ctx.fillStyle = `rgba(158,192,212,${(0.025 + prng() * 0.04).toFixed(3)})`;
+      ctx.fillRect(x - long * 0.2, y - short * 0.55, long * 0.9, 1.1);
+    }
+  }
+
+  // LAMP SPILL. The two nearest pier lamps stand at x = +6, z = ±5.25 — off
+  // the pad, on the camera side of it — so their warm light arrives from the
+  // canvas' two RIGHT corners and dies before it crosses the middle. This is
+  // the same reasoning as the deck's baked pools (there is no point light on
+  // this pier and there cannot be one, because a new light recompiles every
+  // material in the night pipeline at the worst possible moment) applied to
+  // the one surface the ship actually lands on.
+  for (const sy of [0.02, 0.98]) {
+    const g = ctx.createRadialGradient(S * 1.02, S * sy, 0, S * 1.02, S * sy, S * 0.78);
+    g.addColorStop(0, 'rgba(255,178,108,0.15)');
+    g.addColorStop(0.45, 'rgba(255,164,96,0.06)');
+    g.addColorStop(1, 'rgba(255,160,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
   }
 
   // CONTACT. Without this the ship reads as parked above the deck rather
@@ -592,6 +705,29 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
     ctx.stroke();
   }
 
+  // …and the ring lying IN the wet stone. A light source over a wet surface
+  // does not put a copy of itself on the ground, it puts a SMEAR pointing at
+  // the viewer, so each of these is a short cyan streak running from a point
+  // on the ring toward +X (canvas right). Drawn after the ring and before the
+  // stencil so the reflection sits under the markings, which is where a
+  // reflection belongs: in the surface, not on top of the paint.
+  for (let i = 0; i < 34; i++) {
+    const a = prng() * Math.PI * 2;
+    const rr = R * (0.83 + prng() * 0.05);
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
+    const len = 10 + prng() * 42;
+    // Only the far half of the ring can smear TOWARD the camera and still
+    // stay on the pad; a streak leaving the near rim would run off the disc.
+    if (x + len > S * 0.99) continue;
+    const g = ctx.createLinearGradient(x, 0, x + len, 0);
+    const al = 0.05 + prng() * 0.09;
+    g.addColorStop(0, rgba(PAD_CYAN, al));
+    g.addColorStop(1, rgba(PAD_CYAN, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y - 1.2, len, 1.4 + prng() * 2.2);
+  }
+
   // Pad designation, twice, tangent to the edge.
   ctx.fillStyle = rgba(PAD_CYAN, 0.85);
   ctx.font = '600 26px ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -624,9 +760,24 @@ function paintPad(ctx: CanvasRenderingContext2D, size: number, rng: () => number
  *  World → canvas: the disc's UVs are linear in position, so +X (toward the
  *  landing camera) runs RIGHT and +Z runs DOWN. The camera parks at x=+32
  *  looking down -X, which means every reflection smears toward +X — to the
- *  right — and that is why the streaks below are drawn horizontally. */
-function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: () => number): void {
+ *  right — and that is why the streaks below are drawn horizontally.
+ *
+ *  RESOLUTION-INDEPENDENT, because the high tier paints this lake at 1024²
+ *  instead of 512². Every hard-coded size below is therefore in 512-REFERENCE
+ *  pixels and scaled by `s`, so doubling the resolution buys sharper wavelets
+ *  rather than smaller ones, and `detail` multiplies the population of the two
+ *  private-stream passes to keep the density per unit of WATER constant. At
+ *  mid (512², detail 1) both factors are exactly 1 and this paints the same
+ *  lake it has always painted, mark for mark. */
+function paintWater(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  rng: () => number,
+  detail = 1,
+): void {
   const S = w / (2 * WATER_RADIUS); // canvas px per world unit
+  const s = w / 512; // canvas px per 512-reference px
   const px = (x: number) => w / 2 + x * S;
   const py = (z: number) => h / 2 + z * S;
   const c = w / 2;
@@ -675,8 +826,8 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   for (let i = 0; i < 130; i++) {
     const x = rng() * w;
     const y = rng() * h;
-    const long = 12 + rng() * 44;
-    const short = 1.5 + rng() * 4;
+    const long = (12 + rng() * 44) * s;
+    const short = (1.5 + rng() * 4) * s;
     ctx.fillStyle = rng() < 0.5 ? 'rgba(3,7,13,0.34)' : 'rgba(150,104,66,0.05)';
     ctx.beginPath();
     ctx.ellipse(x, y, long, short, 0, 0, Math.PI * 2);
@@ -692,18 +843,19 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   // dusty plain, which is exactly how the first calibration looked. These
   // are short, so they survive the smear as texture rather than as brush
   // strokes; the earlier long ones did the opposite.
-  for (let i = 0; i < 900; i++) {
+  const swell = Math.round(900 * detail);
+  for (let i = 0; i < swell; i++) {
     const a = grng() * Math.PI * 2;
     const rr = Math.pow(grng(), 0.62) * c;
     const x = c + Math.cos(a) * rr;
     const y = c + Math.sin(a) * rr;
-    const long = 3 + grng() * 16;
+    const long = (3 + grng() * 16) * s;
     ctx.fillStyle =
       grng() < 0.55
         ? `rgba(2,6,12,${(0.12 + grng() * 0.24).toFixed(3)})`
         : `rgba(168,120,78,${(0.03 + grng() * 0.07).toFixed(3)})`;
     ctx.beginPath();
-    ctx.ellipse(x, y, long, 1 + grng() * 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, long, (1 + grng() * 2) * s, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -711,18 +863,19 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   // "water". Density follows the glow ring, and every facet is a DASH, never
   // a round dot — a wave face turned toward the city smears along the view
   // axis, and dots read as dust on the lens.
-  for (let i = 0; i < 520; i++) {
+  const facets = Math.round(520 * detail);
+  for (let i = 0; i < facets; i++) {
     const a = grng() * Math.PI * 2;
     const rr = (0.24 + Math.pow(grng(), 0.5) * 0.68) * c;
     const x = c + Math.cos(a) * rr;
     const y = c + Math.sin(a) * rr;
     const near = 1 - Math.abs(rr / c - 0.6); // brightest out where the glow is
-    const len = 1.5 + grng() * 7;
+    const len = (1.5 + grng() * 7) * s;
     ctx.fillStyle =
       grng() < 0.22
         ? `rgba(206,222,244,${(0.1 + grng() * 0.16).toFixed(3)})` // moon-silver facets
         : `rgba(255,186,116,${(0.1 + grng() * 0.26 * near).toFixed(3)})`;
-    ctx.fillRect(x, y, len, 1 + (grng() < 0.3 ? 1 : 0));
+    ctx.fillRect(x, y, len, (1 + (grng() < 0.3 ? 1 : 0)) * s);
   }
 
   // Pier-lamp spill. The MIRROR image of each lamp lands under the deck (the
@@ -784,6 +937,91 @@ function paintWater(ctx: CanvasRenderingContext2D, w: number, h: number, rng: ()
   ctx.fillStyle = fade;
   ctx.fillRect(0, 0, w, h);
   ctx.globalCompositeOperation = 'source-over';
+}
+
+/** The touchdown wash: the ring of dust a descending engine throws off a
+ *  deck. Painted rather than simulated, because a particle system would need
+ *  a pool, a shader, a draw call and a per-frame integration on the single
+ *  most expensive moment of the flight — and none of that buys anything the
+ *  eye can tell apart from one textured quad at this scale and this speed.
+ *
+ *  ADDITIVE, so the canvas is transparent where nothing is happening and the
+ *  alpha does the modulating. The centre is EMPTY on purpose: the ship stands
+ *  there, and dust under an engine is blown outward, not lit up in place. */
+function paintWash(ctx: CanvasRenderingContext2D, size: number, rng: () => number): void {
+  const c = size / 2;
+  const R = size / 2;
+
+  // A faint warm floor over the WHOLE disc first. The pad carries a painted
+  // ambient occlusion at its centre, and an additive ring with an empty middle
+  // laid over that reads as a hole punched in the deck — which is exactly how
+  // the first calibration looked from the descent camera. This is also the
+  // physically right note: an engine close enough to raise dust is lighting
+  // the ground it is raising it from.
+  const floor = ctx.createRadialGradient(c, c, 0, c, c, R * 0.92);
+  floor.addColorStop(0, 'rgba(255,228,198,0.10)');
+  floor.addColorStop(0.55, 'rgba(240,202,172,0.05)');
+  floor.addColorStop(1, 'rgba(220,184,154,0)');
+  ctx.fillStyle = floor;
+  ctx.fillRect(0, 0, size, size);
+
+  // The wall of lifted dust: a broad, soft annulus peaking a little under
+  // halfway out and dying well before the rim, so the quad never shows an
+  // edge. Deliberately low contrast — this is air with grit in it, and the
+  // moment it has a defined boundary it stops being air.
+  const dust = ctx.createRadialGradient(c, c, R * 0.1, c, c, R * 0.97);
+  dust.addColorStop(0, 'rgba(255,220,186,0.02)');
+  dust.addColorStop(0.34, 'rgba(252,212,174,0.19)');
+  dust.addColorStop(0.6, 'rgba(232,188,152,0.12)');
+  dust.addColorStop(0.84, 'rgba(200,162,134,0.04)');
+  dust.addColorStop(1, 'rgba(186,152,126,0)');
+  ctx.fillStyle = dust;
+  ctx.fillRect(0, 0, size, size);
+
+  // …and the plume's own colour on the inside of it. The exhaust is teal, so
+  // the air closest to the engine is lit cool while the rest of the cloud
+  // falls back to the warm deck light it is standing in. That two-temperature
+  // read is most of the difference between "dust" and "a circular gradient".
+  const core = ctx.createRadialGradient(c, c, R * 0.05, c, c, R * 0.4);
+  core.addColorStop(0, 'rgba(150,226,238,0.05)');
+  core.addColorStop(0.45, 'rgba(138,214,230,0.13)');
+  core.addColorStop(1, 'rgba(120,190,210,0)');
+  ctx.fillStyle = core;
+  ctx.fillRect(0, 0, size, size);
+
+  // Radial wisps: many, long, thin and very faint. The count and the low alpha
+  // are doing the same job together — enough of them that they overlap into
+  // texture rather than resolving as spokes, faint enough that no single one
+  // is legible. A handful of strong ones is a turbine fan, which is what the
+  // first pass looked like from directly above.
+  for (let i = 0; i < 40; i++) {
+    const a = rng() * Math.PI * 2;
+    const r0 = R * (0.1 + rng() * 0.16);
+    const r1 = r0 + R * (0.3 + rng() * 0.44);
+    ctx.save();
+    ctx.translate(c, c);
+    ctx.rotate(a);
+    const g = ctx.createLinearGradient(r0, 0, r1, 0);
+    const al = 0.02 + rng() * 0.045;
+    g.addColorStop(0, `rgba(255,234,210,${al.toFixed(3)})`);
+    g.addColorStop(0.55, `rgba(244,212,184,${(al * 0.5).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(226,196,172,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse((r0 + r1) / 2, 0, (r1 - r0) / 2, R * (0.008 + rng() * 0.026), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // A scatter of individual motes out at the leading edge of the ring — the
+  // grit that got thrown clear of the cloud. Sub-pixel at flight distance;
+  // what they actually buy is a broken, non-analytic outer edge.
+  for (let i = 0; i < 70; i++) {
+    const a = rng() * Math.PI * 2;
+    const rr = R * (0.4 + Math.pow(rng(), 0.7) * 0.5);
+    ctx.fillStyle = `rgba(255,232,204,${(0.04 + rng() * 0.09).toFixed(3)})`;
+    ctx.fillRect(c + Math.cos(a) * rr, c + Math.sin(a) * rr, 1 + rng() * 3, 1 + rng() * 1.2);
+  }
 }
 
 /** Elongated cool silver blob (long axis = canvas y) for the moon's specular
@@ -1756,6 +1994,7 @@ type SiteAssets = {
   spinGeo: THREE.BufferGeometry;
   cabinGeo: THREE.BufferGeometry;
   waterGeo: THREE.BufferGeometry;
+  washGeo: THREE.BufferGeometry;
   streakGeo: THREE.BufferGeometry;
   domeGeo: THREE.BufferGeometry;
   gullGeo: THREE.BufferGeometry;
@@ -1770,6 +2009,7 @@ type SiteAssets = {
   steelMat: THREE.MeshStandardMaterial;
   cabinMat: THREE.MeshLambertMaterial;
   waterMat: THREE.MeshBasicMaterial;
+  washMat: THREE.MeshBasicMaterial;
   streakMat: THREE.MeshBasicMaterial;
   domeMat: THREE.ShaderMaterial;
   gullMat: THREE.MeshBasicMaterial;
@@ -1788,8 +2028,18 @@ type SiteAssets = {
  *  order so the site is identical on every visit. All merged batches follow
  *  the RR budget discipline: one vertex-colored mesh for ALL opaque
  *  architecture, one for every emissive bulb + beacon, and one atlas-windowed
- *  mesh for the ENTIRE skyline. */
-function buildAssets(): SiteAssets {
+ *  mesh for the ENTIRE skyline.
+ *
+ *  THE BUDGET MAY NOT MOVE THE RNG. Everything the tier changes here is either
+ *  a tessellation count, a texture resolution or content drawn from a PRIVATE
+ *  seeded stream — never a draw against `rng`, and never a change to how many
+ *  draws a painter takes from it. The whole Chicago skyline downstream of the
+ *  first texture is a function of that one sequence, and it must be the same
+ *  skyline whether the visitor arrived on a phone or a workstation. Segment
+ *  counts are safe because `tintGeom` takes one value per GEOMETRY, not per
+ *  vertex; canvas sizes are safe because every painter's loop count is a
+ *  constant rather than a function of `w`. */
+function buildAssets(q: QualityBudget): SiteAssets {
   const rng = mulberry32(SEED);
 
   /* -- textures (one rng, fixed order) -- */
@@ -1801,24 +2051,48 @@ function buildAssets(): SiteAssets {
   // lamp on the pool painted into it. See paintDeck.
   deckTex.repeat.set((DECK_TIP - DECK_END) / LAMP_STEP, 1);
   deckTex.offset.x = 0.5;
-  deckTex.anisotropy = 4;
+  // Half the budget's anisotropy for the surfaces that are NOT seen edge-on.
+  // Today's deck and atlas both sit at 4, which is what mid resolves to, so
+  // this is a no-op at the shipped tier, a real saving at low and real
+  // sharpening at high — anisotropy costs sampling, never memory.
+  const flatAniso = Math.max(2, Math.round(q.anisotropy / 2));
+  deckTex.anisotropy = flatAniso;
   const padTex = makeCanvasTexture(512, 512, (ctx, w) => paintPad(ctx, w, rng));
   // Texture budget: the atlas doubled its variant count (8 → 16) at the SAME
   // 1024², paid for by shrinking the surfaces that are seen at a glancing
   // angle or are pure soft gradients — the lake 1024² → 512² and the moon
   // path 256² → 128². Net budget DOWN ~30% (2.92 Mpx → 2.04 Mpx).
-  const waterTex = makeCanvasTexture(512, 512, (ctx, w, h) => paintWater(ctx, w, h, rng));
+  //
+  // …and the high tier buys the lake's half back. It is the largest surface in
+  // the finale and the one whose detail the grazing angle destroys fastest, so
+  // it is the best square inch of texture memory available to spend. `detail`
+  // is the AREA ratio, so the marks-per-unit-of-water density is identical at
+  // both resolutions and only the sharpness changes. Low and mid are byte-for-
+  // byte the lake that ships today.
+  // `&& !q.mobile`: a megabyte of texture for the largest surface in the
+  // finale is a desktop spend. The tier alone is not the right test here —
+  // `high` describes the machine's compute, `mobile` describes how much
+  // bandwidth and fill it has to move that texture with, and a handheld is
+  // where those two answers diverge most.
+  const waterPx = q.tier === 'high' && !q.mobile ? 1024 : 512;
+  const waterDetail = (waterPx / 512) ** 2;
+  const waterTex = makeCanvasTexture(waterPx, waterPx, (ctx, w, h) =>
+    paintWater(ctx, w, h, rng, waterDetail),
+  );
   // The lake is the ONE surface in this scene seen almost edge-on: the camera
   // sits 8 units above a 520-unit plane, so along the view axis a single texel
   // covers tens of pixels and the isotropic mip chain collapses every wavelet
   // into the gradient beneath it. Anisotropy is what lets the swell and the
   // glitter survive the angle they are actually viewed at, and it costs
-  // sampling only — no extra texel, no extra byte.
-  waterTex.anisotropy = 8;
+  // sampling only — no extra texel, no extra byte. Today's 8 is mid exactly.
+  waterTex.anisotropy = q.anisotropy;
   const streakTex = makeCanvasTexture(128, 128, paintStreak);
   const atlasTex = makeCanvasTexture(ATLAS_PX, ATLAS_PX, (ctx) => paintWindowAtlas(ctx, rng));
-  atlasTex.anisotropy = 4;
+  atlasTex.anisotropy = flatAniso;
   const hazeTex = makeCanvasTexture(256, 128, (ctx, w, h) => paintHaze(ctx, w, h));
+  // The touchdown wash. Off the site's rng entirely — it is not part of the
+  // seeded place, it is part of the landing.
+  const washTex = makeCanvasTexture(256, 256, (ctx, w) => paintWash(ctx, w, mulberry32(WASH_SEED)));
   // (the reflection texture is painted at the end of section 5, from the
   // tower positions generated there — same rng, same fixed order)
 
@@ -1858,7 +2132,10 @@ function buildAssets(): SiteAssets {
     // default single segment the only vertices are at y -0.3 and y -6.9 and
     // any shading over it interpolates across the buried half as well, which
     // wastes most of the ramp on stone nobody sees.
-    const caisson = new THREE.CylinderGeometry(11.0, 11.8, 6.6, 30, 4);
+    // 30 facets is mid — i.e. today. `scaleSegments` moves it with the tier
+    // and costs no rng draws: `tintGeom` takes exactly one value per GEOMETRY,
+    // never one per vertex, so the seeded order is blind to tessellation.
+    const caisson = new THREE.CylinderGeometry(11.0, 11.8, 6.6, scaleSegments(q, 30), 4);
     caisson.translate(-1, -3.6, 0); // apron at y -0.3, base buried at -6.9
     // The one rng draw the old flat tint took, kept so the seed order holds;
     // the gradient overwrites the colours it wrote.
@@ -2314,6 +2591,52 @@ function buildAssets(): SiteAssets {
     refl.push({ z: pz, w: cw, s: 0.5 });
   }
 
+  // 5d. THE CITY BEYOND THE CITY — high tier only.
+  //
+  // Rows 0–3 stop at ~282 units and the far haze veil stands at 243, so the
+  // deepest thing in today's frame is still a resolvable wall of towers with
+  // sky behind it. Real skylines do not end; they dissolve. This row stands
+  // 290–312 out, WELL behind the veil, sparse and tall and sampling only the
+  // atlas' dimmest band, so what it adds is not more buildings — it is the
+  // suggestion that the buildings keep going.
+  //
+  // Its cost is the reason it can exist at all: the facades merge into the
+  // window batch and the roof boxes into the opaque batch, so it adds ZERO
+  // draw calls, ZERO materials, ZERO textures and a few hundred triangles.
+  // The only real spend is at the vertex stage, which is why it is still
+  // gated: at low and mid this loop does not run and this file builds exactly
+  // what it built before. It reads from its own stream, so the signed-off
+  // skyline standing in front of it is bit-identical either way.
+  // `&& !q.mobile` for the same reason as the lake above: the cost of this row
+  // is at the vertex stage, and a tiler's vertex throughput is the thing it
+  // has least of relative to a desktop at the same nominal tier.
+  if (q.tier === 'high' && !q.mobile) {
+    const frng = mulberry32(FAR_SEED);
+    const pal = [0x3f4661, 0x454c69, 0x3a4159, 0x4a5273] as const;
+    const step = FAR_ARC / FAR_COUNT;
+    for (let i = 0; i < FAR_COUNT; i++) {
+      const phi = (i + 0.5 - FAR_COUNT / 2) * step + (frng() - 0.5) * step * 0.36;
+      const R = FAR_R_MIN + frng() * FAR_R_SPAN;
+      const w = 10 + frng() * 16;
+      const d = 10 + frng() * 12;
+      // Taller than row 3's ceiling on average, because a row that is both
+      // further away AND shorter subtends less angle than the row in front of
+      // it and simply never appears.
+      const h = 34 + Math.pow(frng(), 1.1) * 36;
+      const px = -Math.cos(phi) * R;
+      const pz = Math.sin(phi) * R;
+      const yaw = phi + (frng() - 0.5) * 0.16;
+      // Variants 11–15: the bottom of the dimmed far ladder. At this distance
+      // a legible window grid would pull the eye past the skyline it is
+      // supposed to be standing behind.
+      const v = variantAt(11 + Math.floor(frng() * 5));
+      towerTo(winParts, frng, d, h, w, px, SHORE_Y, pz, pal[i % pal.length] ?? 0x3f4661, v, yaw, 0.12);
+      if (frng() < 0.5) {
+        boxTo(arch, frng, d * 0.4, 1.2 + frng() * 1.6, w * 0.38, px, SHORE_Y + h + 1, pz, 0x2c3244, 0.08, yaw);
+      }
+    }
+  }
+
   // 5c. the reflection streaks, painted FROM the tower positions above.
   const reflTex = makeCanvasTexture(256, 512, (ctx, rw, rh) => paintReflections(ctx, rw, rh, refl, rng));
 
@@ -2322,11 +2645,28 @@ function buildAssets(): SiteAssets {
   const windowGeo = mergeAll(winParts);
 
   /* -- 6. pad, water, moon path, dome, gulls ------------------------------ */
-  const padGeo = new THREE.CircleGeometry(PAD_RADIUS, 48);
+  // Every radial count below is expressed as `scaleSegments(q, today)`, so mid
+  // reproduces the shipped numbers exactly (48 / 64 / 28 / 32) while low sheds
+  // vertices and high spends them. None of these primitives touch `rng`.
+  const padGeo = new THREE.CircleGeometry(PAD_RADIUS, scaleSegments(q, 48));
   padGeo.rotateX(-Math.PI / 2);
 
-  const waterGeo = new THREE.CircleGeometry(WATER_RADIUS, 64);
+  const waterGeo = new THREE.CircleGeometry(WATER_RADIUS, scaleSegments(q, 64));
   waterGeo.rotateX(-Math.PI / 2);
+
+  // The touchdown wash: a unit QUAD, not a disc, and the mesh scales it per
+  // frame as the ring spreads so the geometry itself carries no size.
+  //
+  // A circle was the obvious choice and it was wrong twice over. A CircleGeometry
+  // is a triangle FAN, and every one of its triangles collapses to the same
+  // vertex at the centre — which is exactly where this texture is at its most
+  // magnified, so the slivers rendered as a dark spiked starburst pinned to
+  // the middle of the pad (screenshot finding on the descent camera at 1440x900).
+  // A quad has no degenerate centre, is two triangles instead of forty-two, and
+  // shows no corners because the paint's alpha already reaches zero inside the
+  // inscribed circle — so the square's corners are transparent by construction.
+  const washGeo = new THREE.PlaneGeometry(2, 2);
+  washGeo.rotateX(-Math.PI / 2);
 
   const streakGeo = new THREE.PlaneGeometry(9, 170); // narrower than the old sun path
   streakGeo.rotateX(-Math.PI / 2); // flat on the water, long axis on Z…
@@ -2335,15 +2675,16 @@ function buildAssets(): SiteAssets {
   // Sky dome: a BAND, not a cap. Everything above theta 0.21π had alpha 0 and
   // was rasterizing transparent fragments for free every frame.
   const domeGeo = new THREE.SphereGeometry(
-    DOME_RADIUS, 28, 10, 0, Math.PI * 2, DOME_THETA_START, DOME_THETA_LEN,
+    DOME_RADIUS, scaleSegments(q, 28), 10, 0, Math.PI * 2, DOME_THETA_START, DOME_THETA_LEN,
   );
 
   // Horizon haze ring (open cylinder, seen from inside) + the reflection
   // plane lying just above the water: u runs toward the camera on it.
+  const hazeSegs = scaleSegments(q, HAZE_SEGS);
   const hazeGeo = mergeAll([
-    new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, HAZE_SEGS, 1, true),
+    new THREE.CylinderGeometry(HAZE_R, HAZE_R, HAZE_H, hazeSegs, 1, true),
     (() => {
-      const far = new THREE.CylinderGeometry(HAZE_FAR_R, HAZE_FAR_R, HAZE_FAR_H, HAZE_SEGS, 1, true);
+      const far = new THREE.CylinderGeometry(HAZE_FAR_R, HAZE_FAR_R, HAZE_FAR_H, hazeSegs, 1, true);
       const uv = far.getAttribute('uv') as THREE.BufferAttribute;
       for (let i = 0; i < uv.count; i++) uv.setY(i, HAZE_FAR_V0 + uv.getY(i) * (1 - HAZE_FAR_V0));
       uv.needsUpdate = true;
@@ -2484,6 +2825,21 @@ function buildAssets(): SiteAssets {
     depthWrite: false,
     toneMapped: false,
   });
+  // The touchdown wash. Deliberately configured IDENTICALLY to the streak
+  // above — Basic + map + transparent + additive + no depth write + no tone
+  // mapping — because three keys its program cache on exactly that feature
+  // set. Same defines, same program, no new shader compiles on the descent,
+  // which is the one moment in the flight that cannot afford any. It is NOT
+  // in the fade list: its opacity is the landing choreography, not the site's
+  // master ramp, and the frame loop multiplies the two together.
+  const washMat = new THREE.MeshBasicMaterial({
+    map: washTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
   const gullMat = new THREE.MeshBasicMaterial({
     color: 0x26222b,
     side: THREE.DoubleSide,
@@ -2513,7 +2869,17 @@ function buildAssets(): SiteAssets {
   // fade list to drive).
   const fw = buildFireworks();
 
-  const textures: THREE.Texture[] = [deckTex, padTex, waterTex, streakTex, atlasTex, hazeTex, reflTex, fw.tex];
+  const textures: THREE.Texture[] = [
+    deckTex,
+    padTex,
+    waterTex,
+    washTex,
+    streakTex,
+    atlasTex,
+    hazeTex,
+    reflTex,
+    fw.tex,
+  ];
   const geometries: THREE.BufferGeometry[] = [
     deckGeo,
     padGeo,
@@ -2526,6 +2892,7 @@ function buildAssets(): SiteAssets {
     spinGeo,
     cabinGeo,
     waterGeo,
+    washGeo,
     streakGeo,
     domeGeo,
     gullGeo,
@@ -2543,6 +2910,7 @@ function buildAssets(): SiteAssets {
     steelMat,
     cabinMat,
     waterMat,
+    washMat,
     streakMat,
     gullMat,
     domeMat,
@@ -2588,6 +2956,7 @@ function buildAssets(): SiteAssets {
     spinGeo,
     cabinGeo,
     waterGeo,
+    washGeo,
     streakGeo,
     domeGeo,
     gullGeo,
@@ -2602,6 +2971,7 @@ function buildAssets(): SiteAssets {
     steelMat,
     cabinMat,
     waterMat,
+    washMat,
     streakMat,
     domeMat,
     gullMat,
@@ -2627,6 +2997,7 @@ export function LandingSite({
   const groupRef = useRef<THREE.Group>(null);
   const spinnerRef = useRef<THREE.Mesh>(null);
   const cabinsRef = useRef<THREE.InstancedMesh>(null);
+  const washRef = useRef<THREE.Mesh>(null);
   const gullsRef = useRef<THREE.Group>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const moonLightRef = useRef<THREE.DirectionalLight>(null);
@@ -2673,7 +3044,18 @@ export function LandingSite({
     return { position, quaternion, yawQuat };
   }, [waypoints]);
 
-  const assets = useMemo(buildAssets, []);
+  // THE BUDGET IS FROZEN AT MOUNT, and that is a deliberate refusal to react.
+  // `useQuality()` moves when the runtime demotes the tier, but this component
+  // answers to it with ~15 merged geometry batches, nine canvases and a
+  // fourteen-material precompile — rebuilding all of that to shed a few
+  // hundred triangles would cost several orders of magnitude more than it
+  // saved, and it would do it DURING the descent, which is the exact moment
+  // the demotion is trying to rescue. So the site is built once, from the tier
+  // the device was detected at, and the runtime lever it responds to is the
+  // dpr ladder above it (which is free) rather than a rebuild (which is not).
+  const detected = useQuality();
+  const [buildBudget] = useState(detected);
+  const assets = useMemo(() => buildAssets(buildBudget), [buildBudget]);
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera);
   const scene = useThree((s) => s.scene);
@@ -2698,6 +3080,16 @@ export function LandingSite({
       if (!g) return;
       const wasVisible = g.visible;
       g.visible = true;
+      // The wash spends almost the whole flight with `visible = false` (it is
+      // a draw call that only exists during the final seconds), and an
+      // invisible mesh is one gl.compile walks straight past. Forcing it on
+      // for the warm-up is what keeps the descent from being the first time
+      // its program is asked for. Its material is configured to match the
+      // streak's exactly, so this should be a cache hit — "should be" is not a
+      // thing to find out mid-landing.
+      const wash = washRef.current;
+      const washWasVisible = wash?.visible ?? true;
+      if (wash) wash.visible = true;
       gl.compile(scene, camera);
       // …and the OPAQUE variant of every fade-only material too. three bakes
       // `transparent` into the program (#define OPAQUE), so the flip at full
@@ -2728,6 +3120,7 @@ export function LandingSite({
       gl.compile(scene, camera);
       assets.solidState.opaque = false;
       for (const tex of assets.textures) gl.initTexture(tex);
+      if (wash) wash.visible = washWasVisible;
       g.visible = wasVisible;
     };
     // Run it THREE times over the boot window, not once at mount. Mount is
@@ -2771,6 +3164,10 @@ export function LandingSite({
     const cab = cabinsRef.current;
     if (cab) poseCabins(cab, 0);
     if (gullsRef.current) gullsRef.current.rotation.y = 0;
+    // The wash's own opacity already resolves to zero at both ramps reduced
+    // motion can be at; this only clears the drift angle so a preference
+    // flipped mid-descent leaves it parked rather than frozen off-axis.
+    if (washRef.current) washRef.current.rotation.y = 0;
     fwKill(assets.fw);
   }, [reduced, assets]);
 
@@ -2842,6 +3239,34 @@ export function LandingSite({
     // (steady) under reduced motion.
     assets.streakMat.opacity = STREAK_OPACITY * k * (reduced ? 1 : 0.85 + 0.15 * Math.sin(e * 0.6));
 
+    // THE SETTLE. The wash is a function of the RAMP, not of the clock: it
+    // lifts as the ship comes down, spreads and thins, and is gone by the time
+    // the gear takes the weight. Scrubbing the rail runs it backwards, which
+    // is correct — the visitor is scrubbing the descent itself.
+    //
+    // Under reduced motion `t` snaps, so the one rendered frame lands on a
+    // ramp of either 0 or 1 and the wash is at zero in both. That is the "off
+    // or instant" rule satisfied by arithmetic rather than by a branch.
+    const wash = washRef.current;
+    if (wash) {
+      const lift = sstep((ramp - WASH_IN) / WASH_RISE);
+      const settle = 1 - sstep((ramp - WASH_FALL) / (1 - WASH_FALL));
+      const o = WASH_OPACITY * lift * settle * k;
+      // Below this the quad is contributing less than a bit of additive light
+      // per channel — so stop paying the draw call for it entirely, which is
+      // what keeps the wash free for the other 95% of the flight.
+      const on = o > 0.004;
+      wash.visible = on;
+      if (on) {
+        assets.washMat.opacity = o;
+        // Tight under the engine at first, spreading outward as it dissipates.
+        const spread = WASH_MIN_SCALE + (1 - WASH_MIN_SCALE) * sstep((ramp - WASH_IN) / (1 - WASH_IN));
+        const r = WASH_RADIUS * spread;
+        wash.scale.set(r, 1, r);
+        if (!reduced) wash.rotation.y = e * WASH_SPIN;
+      }
+    }
+
     if (hemiRef.current) hemiRef.current.intensity = HEMI_INTENSITY * k;
     if (moonLightRef.current) moonLightRef.current.intensity = MOON_INTENSITY * k;
     if (cityLightRef.current) cityLightRef.current.intensity = CITY_LIGHT_INTENSITY * k;
@@ -2869,8 +3294,24 @@ export function LandingSite({
         {/* 1. Wooden deck, pier tip at the origin. */}
         <mesh geometry={assets.deckGeo} material={assets.deckMat} />
 
-        {/* 2. Landing pad painted on the pier tip, under the ship. */}
+        {/* 2. Landing pad painted on the pier tip, under the ship — wet stone
+            with the lamps spilling in from the pier side and the ring's own
+            reflection smeared toward the camera. */}
         <mesh geometry={assets.padGeo} material={assets.padMat} position={[0, PAD_LIFT, 0]} />
+
+        {/* 2b. The touchdown wash: the ring of dust the descending engine
+            throws off the deck. ONE additive quad, scaled and faded from the
+            flight ramp, and `visible = false` — so not drawn at all, not even
+            as a transparent no-op — outside the last few seconds of the
+            approach. This is the difference between a ship that lands and a
+            ship that appears. */}
+        <mesh
+          ref={washRef}
+          geometry={assets.washGeo}
+          material={assets.washMat}
+          position={[0, WASH_LIFT, 0]}
+          renderOrder={2}
+        />
 
         {/* 3. All opaque architecture: ONE merged vertex-colored draw
             (caisson, pilings, railings, lamp posts, wheel base+struts,
