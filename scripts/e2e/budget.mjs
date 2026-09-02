@@ -52,11 +52,20 @@ const DIST = join(ROOT, 'dist-budget');
 
 /* ---- the budget ----------------------------------------------------------
  * Set against what this build ships, with headroom for one honest change and
- * not a byte more — a ceiling a regression fits inside is not a ceiling. A
- * new dependency in the flight chunk trips COLD; a texture that grew, or one
- * added to the scene and never added to WARM_MEDIA, trips WARM. */
+ * not a byte more — a ceiling a regression fits inside is not a ceiling.
+ *
+ * COLD is ~2.66 MB today and a new dependency in the flight chunk trips it.
+ *
+ * WARM measures 0 — every byte is already in the browser — so the ceiling is
+ * not "today plus room", it is set at the smallest thing whose absence would
+ * be felt: 150 kB sits just under the HDRI (128 kB) and well under the two
+ * files that dominate the wait, the Earth day map (418 kB) and the Milky Way
+ * (147 kB). Any of those going un-warmed trips this. A small texture slipping
+ * through would not, and does not need to — warm.test.ts fails at the unit
+ * level the moment WARM_MEDIA stops matching the set of media paths the
+ * source references, which is the cheaper place to catch it. */
 const COLD_BUDGET_KB = 2900;
-const WARM_BUDGET_KB = 250;
+const WARM_BUDGET_KB = 150;
 
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
