@@ -17,7 +17,7 @@
 
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { pw, serve, installGateMock, unlock, makeReporter } from './_lib.mjs';
+import { pw, serve, installGateMock, unlock, makeReporter, railDot } from './_lib.mjs';
 
 const PORT = 4313;
 const SETTLE = 7400; // cinematic legs run 2.6–6.2s (homecoming longest); generous margin
@@ -210,7 +210,7 @@ try {
 
     // ---- cell: flight station 6 via rail jump ----------------------------
     cell = `${w}x${h} flight station 6 (rail jump)`;
-    await page.click('nav[aria-label="Stations"] button:nth-child(6)');
+    await page.click(railDot(6));
     await page.waitForFunction(
       () =>
         Array.from(document.querySelectorAll('[aria-live="polite"]')).some((el) =>
@@ -223,7 +223,7 @@ try {
     await sleep(SETTLE); // let the multi-station transit fully dock
     r.ok(
       await page.$eval(
-        'nav[aria-label="Stations"] button:nth-child(6)',
+        railDot(6),
         (b) => b.getAttribute('aria-current') === 'step',
       ),
       `${cell}: rail dot 6 is aria-current="step" after the jump`,

@@ -125,35 +125,60 @@ function onIdle(fn: () => void, timeout: number): void {
   else window.setTimeout(fn, Math.min(timeout, 300));
 }
 
-async function warmMedia(): Promise<void> {
-  for (const asset of WARM_MEDIA) {
-    // Re-checked between files, not just once at the top. This loop is the
-    // only wave that can DUPLICATE work rather than share it: waves 1 and 2
-    // hand back the same promise the click would have made (getSupabase
-    // memoises its client, and a second import() of the flight chunk joins
-    // the first), but these are bare URLs, and a warm request still in flight
-    // when the scene asks for the same file is a second full download of it.
-    // Once the visitor has committed, the real loaders own the media.
-    if (stoodDown) return;
-    try {
-      if (asset.kind === 'font') {
-        if (document.fonts?.load) await document.fonts.load(DISPLAY_FONT);
-        continue;
-      }
-      // credentials: 'same-origin' is three's own FileLoader setting, and
-      // `priority: 'low'` (ignored where unsupported) keeps a megabyte of
-      // scenery behind anything the visitor actually asked for.
-      const res = await fetch(asset.href, {
-        credentials: 'same-origin',
-        priority: 'low',
-      } as RequestInit);
-      // The body has to be drained for the response to settle into the cache;
-      // the buffer itself is immediately garbage.
-      await res.arrayBuffer();
-    } catch {
-      // A warm-up that throws is worse than a warm-up that did not happen.
+/** How many media files are in the air at once.
+ *
+ *  Not one, and not thirteen. One serializes thirteen round trips, which on
+ *  the 4G link this is all for is a couple of seconds of pure latency added to
+ *  a wave the visitor may interrupt at any moment. Thirteen is a burst. Four
+ *  keeps the pipe full over one multiplexed HTTP/2 connection while the
+ *  transient ArrayBuffers stay bounded — the largest file here is 418 kB, and
+ *  four of those at once is the ceiling this number is really setting. */
+const MEDIA_CONCURRENCY = 4;
+
+async function warmOne(asset: WarmAsset): Promise<void> {
+  try {
+    if (asset.kind === 'font') {
+      if (document.fonts?.load) await document.fonts.load(DISPLAY_FONT);
+      return;
     }
+    // credentials: 'same-origin' is three's own FileLoader setting, and
+    // `priority: 'low'` (ignored where unsupported) keeps a megabyte of
+    // scenery behind anything the visitor actually asked for.
+    const res = await fetch(asset.href, {
+      credentials: 'same-origin',
+      priority: 'low',
+    } as RequestInit);
+    // The body has to be drained for the response to settle into the cache;
+    // the buffer itself is immediately garbage.
+    await res.arrayBuffer();
+  } catch {
+    // A warm-up that throws is worse than a warm-up that did not happen.
   }
+}
+
+async function warmMedia(): Promise<void> {
+  // A shared cursor rather than a chunked split, so a slow file cannot leave
+  // one worker holding the last three while the others idle.
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      // Re-checked before every file, not once at the top. This wave is the
+      // only one that can DUPLICATE work rather than share it: waves 1 and 2
+      // hand back the same promise the click would have made (getSupabase
+      // memoises its client, and a second import() of the flight chunk joins
+      // the first), but these are bare URLs, and a warm request still in
+      // flight when the scene asks for the same file is a second full
+      // download of it. Once the visitor has committed, the real loaders own
+      // the media.
+      if (stoodDown) return;
+      const asset = WARM_MEDIA[next++];
+      if (!asset) return;
+      await warmOne(asset);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(MEDIA_CONCURRENCY, WARM_MEDIA.length) }, worker),
+  );
 }
 
 let started = false;

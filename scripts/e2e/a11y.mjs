@@ -23,6 +23,7 @@ import {
   installGateMock,
   unlock,
   makeReporter,
+  railDot,
   E2E_PASSCODE,
 } from './_lib.mjs';
 
@@ -285,7 +286,7 @@ try {
   await sleep(SETTLE + 200);
   const afterDot = await focusedDescriptor(page);
   const stillCurrent = await page.$eval(
-    'nav[aria-label="Stations"] button:nth-child(1)',
+    railDot(1),
     (b) => b.getAttribute('aria-current') === 'step',
   );
   const panel1Exists = await page.evaluate(

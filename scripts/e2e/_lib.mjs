@@ -139,6 +139,27 @@ export async function installGateMock(target, { validToken = 'tok-e2e', validVis
   });
 }
 
+/* ---- the rail dot selector, and why it lives in one place ------------------
+ * `:nth-of-type`, NOT `:nth-child`, and this is not a style preference — it
+ * is a bug this repo has already shipped.
+ *
+ * The round that turned the rail into a route added `<div class="railmark">`
+ * as the FIRST child of `.railtrack`, and reasoned in its own comment that
+ * "the `.rail button` selector every script and check in the repo reaches for"
+ * was safe because "the wrapper is a plain div in between, which descendant
+ * selectors do not notice". True of `.rail button`. Not true of
+ * `:nth-child`, which counts EVERY sibling regardless of tag — so overnight
+ * `button:nth-child(1)` matched nothing and `button:nth-child(6)` became
+ * station 5. Five scripts used it. Four of the eight browser checks went red
+ * and stayed red: a11y and pdf crashed on a selector that no longer resolved,
+ * breakpoints timed out waiting for a station it never asked for, and prm
+ * reported an off-by-one as a focus bug.
+ *
+ * `:nth-of-type(n)` counts only buttons, so it survives any number of
+ * non-button siblings the rail grows next. One helper, one selector, so the
+ * next decoration cannot desynchronise five files again. */
+export const railDot = (n) => `nav[aria-label="Stations"] button:nth-of-type(${n})`;
+
 /** Sign in and fly: the standard way every script gets into the flight. The
  *  gate is open now (round 23) — name/company are optional — but the scripts
  *  fill them anyway so a real begin_visit row is exercised. */

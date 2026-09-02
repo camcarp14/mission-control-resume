@@ -26,6 +26,7 @@ import {
   unlock,
   ensureBuild,
   makeReporter,
+  railDot,
   E2E_PASSCODE,
 } from './_lib.mjs';
 
@@ -157,7 +158,7 @@ async function coreWalkthrough(page, base, name) {
     await page.$eval('.hudbar > button:first-of-type', (b) => b.disabled),
     `${name}: back button disabled at station 1`,
   );
-  await page.click('nav[aria-label="Stations"] button:nth-child(6)');
+  await page.click(railDot(6));
   await sleep(SETTLE);
   await assertStation(6, 'rail-dot jump -> station 6');
   r.ok(

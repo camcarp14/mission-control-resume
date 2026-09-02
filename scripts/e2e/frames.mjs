@@ -20,7 +20,7 @@
 // The GPU-fps half of bar 2 is delegated, loudly, to the real-device pass
 // (NEXT.md) — on actual phone/desktop GPUs this transform-and-shader scene is
 // exactly what hardware composites at 60.
-import { pw, serve, installGateMock, unlock, makeReporter } from './_lib.mjs';
+import { pw, serve, installGateMock, unlock, makeReporter, railDot } from './_lib.mjs';
 
 const PORT = 4311;
 const WINDOW_MS = 450;
@@ -77,7 +77,7 @@ async function domHealthProfile(browser, base, name, viewport, cpuRate, ltMax) {
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(420);
     }
-    await page.click('nav[aria-label="Stations"] button:nth-child(2)');
+    await page.click(railDot(2));
     await page.waitForTimeout(420);
     await page.keyboard.press('ArrowLeft');
     await page.waitForTimeout(420);

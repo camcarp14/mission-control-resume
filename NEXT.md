@@ -64,18 +64,43 @@ panel to remember this candidate.
    anti-goals). The 3D voyage makes the case stronger; the restraint rule
    stays.
 
-9. **Measure the flight, not just the gate.** `scripts/e2e/lighthouse.mjs`
-   scores 100, and it only ever loads the gate — 253 kB of a ~1.6 MB
-   experience. Every asset regression this project has ever had lived on the
-   far side of the code prompt, structurally invisible to its own green check.
-   Drive `unlock()` from `scripts/e2e/_lib.mjs`, sum response sizes to network
-   quiet, and assert a post-unlock transfer budget (~1.6 MB is the number to
-   beat today). That converts the whole asset round into a regression test.
+9. ~~**Measure the flight, not just the gate.**~~ — done, and the number was
+   worse than this entry guessed: `scripts/e2e/budget.mjs` measured **2.66 MB**
+   after the click, not 1.6. It asserts a cold ceiling and a warm one, because
+   the same round found the whole of that transfer sitting on the critical path
+   and moved it off (see 10). One warning for whoever writes the next check
+   here: **a registered Playwright route turns the browser's HTTP cache off**,
+   so every other script in `scripts/e2e/` is structurally blind to caching —
+   `budget.mjs` serves its Supabase stub as real same-origin HTTP instead.
 
-10. **Close the double loading screen.** Submitting the gate shows the lazy
-    chunk's `SplashSkeleton`, then the boot overlay — two full-screen states
-    with different layouts and no shared thread, which wastes the one moment
-    the visitor is most invested. Either pass a stage through so the skeleton
-    renders the same checklist shell the boot overlay does (one instrument
-    filling in, not two screens swapping), or let the gate hold its own submit
-    state until the flight module resolves.
+10. ~~**Close the double loading screen.**~~ — closed from both ends. The two
+    screens became one instrument first (`PreflightConsole` in
+    `src/ui/primitives.tsx`, rendered from both sides of the chunk boundary so
+    only a row changes across the seam), and then `src/lib/warm.ts` removed
+    most of the wait itself: the flight chunk and its media are pulled at idle
+    while the splash is being read, so a visitor who spends a few seconds there
+    presses the button and transfers **nothing**. What is left to spend on this
+    moment is the SCENE BUILD — shader compiles and geometry upload, which the
+    warm-up cannot touch and the boot overlay honestly reports.
+
+11. **The flight chunk is still 1.31 MB (381 kB gzipped).** The warm-up takes
+    it off the click for anyone who pauses at the splash; the visitor who
+    presses the button on arrival still waits for it, and it is the single
+    largest thing this site downloads. Two things are true about it and only
+    one of them is a lever:
+
+    - Chunking is NOT the lever. It deliberately has no named chunk — naming
+      one hoisted it into the entry preload twice, at ~1.4s of FCP each, and
+      vite.config.ts tells both stories at length. Splitting it further would
+      move bytes around, not remove them.
+    - `three`'s own minified build is ~750 kB of the 1.31 MB, so **most of
+      this is three.js and always will be**. What is worth an actual
+      measurement before anyone reaches for a config knob is the rest: drei is
+      pulled into six modules for exactly five helpers (`Billboard`,
+      `Environment`, `PerformanceMonitor`, `useProgress`, `useTexture`), and
+      `Effects.tsx` imports the postprocessing pipeline for a bloom and a
+      vignette. Both are ESM and should tree-shake; nobody has checked whether
+      they do. `rollup-plugin-visualizer` against the real build would answer
+      it in ten minutes and would say whether there is anything here at all —
+      the honest possibility is that the answer is "no, it's three.js", and
+      that is worth knowing before optimising on a hunch.

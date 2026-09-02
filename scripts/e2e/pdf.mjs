@@ -14,7 +14,7 @@
 //
 // Run: node scripts/e2e/pdf.mjs
 
-import { pw, serve, installGateMock, unlock, makeReporter } from './_lib.mjs';
+import { pw, serve, installGateMock, unlock, makeReporter, railDot } from './_lib.mjs';
 
 const PORT = 4316;
 const SETTLE = 7400; // cinematic legs run 2.6–6.2s (homecoming longest); generous margin
@@ -81,13 +81,13 @@ async function checkLinkVisible(page, cell) {
  *  future red can tell a genuine hang from a slow poll at a glance. */
 async function railJump(page, n) {
   const t0 = Date.now();
-  await page.click(`nav[aria-label="Stations"] button:nth-child(${n})`);
+  await page.click(railDot(n));
   await page.waitForFunction(
-    (i) => {
-      const dot = document.querySelector(`nav[aria-label="Stations"] button:nth-child(${i})`);
+    (sel) => {
+      const dot = document.querySelector(sel);
       return !!dot && dot.getAttribute('aria-current') === 'step';
     },
-    n,
+    railDot(n),
     { timeout: 30000 },
   );
   await page.waitForSelector(`section.panel[aria-label^="Station ${n}:"]`, { timeout: 30000 });
