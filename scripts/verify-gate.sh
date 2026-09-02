@@ -48,7 +48,8 @@ if [ "${RUN_E2E:-0}" = "1" ]; then
 else
   echo "  skipped. Run 'RUN_E2E=1 npm run gate' or 'npm run e2e' for the full bar:"
   echo "  frames (60fps) · a11y (axe+keyboard) · breakpoints (390/2560) ·"
-  echo "  gate-breach · reduced-motion · pdf · lighthouse (perf ≥ 90)"
+  echo "  budget (post-unlock bytes) · gate-breach · reduced-motion · pdf ·"
+  echo "  lighthouse (perf ≥ 90)"
 fi
 
 if [ $fails -eq 0 ]; then echo ""; echo "GATE: ALL GREEN"; else echo ""; echo "GATE: FAILURES ABOVE"; exit 1; fi

@@ -1451,7 +1451,18 @@ export function Scene3D({
 export function webglAvailable(): boolean {
   try {
     const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    const gl = c.getContext('webgl2') ?? c.getContext('webgl');
+    if (!gl) return false;
+    // Hand the context straight back. Browsers cap LIVE WebGL contexts at
+    // around sixteen and evict the OLDEST when the cap is hit — which in this
+    // app is the one drawing the flight. quality.ts's texture-size probe has
+    // released its throwaway context for exactly that reason since it was
+    // written; this one, the older of the two, never did. It is one context
+    // and it would be collected eventually, but "eventually" is the wrong
+    // guarantee for the resource the whole voyage runs on, and under
+    // StrictMode the probe runs twice before the canvas even mounts.
+    (gl as WebGLRenderingContext).getExtension('WEBGL_lose_context')?.loseContext();
+    return true;
   } catch {
     return false;
   }

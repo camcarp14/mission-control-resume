@@ -1,12 +1,11 @@
 # Mission Control — a résumé you pilot
 
-A gated, single-page interactive resume: the visitor pilots a rocket through a
+A single-page interactive resume: the visitor pilots a rocket through a
 WebGL solar system — Earth departure, Jupiter, Saturn's rings, an ember nebula,
-docking at the sun — with a career artifact stationed at every body. Advance is
-deliberate — spacebar, arrow keys, click, swipe, or the on-screen button — never
-free scroll. A Supabase-backed gate attributes every visit to a per-company access
-code and logs how far each visitor flew; a passcode-protected `/dashboard` shows
-you the logbook.
+docking at the sun, then the flight home — with a career artifact stationed at
+every body. Advance is deliberate — spacebar, arrow keys, click, swipe, or the
+on-screen button — never free scroll. A Supabase-backed sign-in records who came
+and how far they flew; a passcode-protected `/dashboard` shows you the logbook.
 
 Built with Vite + React 19 + Tailwind + Framer Motion + three.js
 (react-three-fiber, drei, postprocessing) + Supabase, deployed on Netlify. No CDN
@@ -24,11 +23,11 @@ npm run dev
 ```
 
 That's it — with no `.env` at all, dev boots into **offline preview** mode: the
-gate accepts any code, logs nothing, and says so on a badge. The full flight,
-static mode, reduced motion, and mobile layout all work offline. (A *production*
-build with missing env fails closed: config error screen, gate shut.)
+sign-in opens, logs nothing, and says so on a badge. The full flight, static
+mode, reduced motion, and mobile layout all work offline. (A *production* build
+with missing env fails closed: config error screen, door shut.)
 
-## Wiring up Supabase (the gate + logbook)
+## Wiring up Supabase (the sign-in + logbook)
 
 1. Create a Supabase project (free tier is fine).
 2. Open the SQL editor, paste **all of** `supabase/migrations/0001_resume_gate.sql`,
@@ -42,28 +41,22 @@ build with missing env fails closed: config error screen, gate shut.)
 update gate_config set dashboard_passcode_hash = extensions.crypt('your-new-passcode', extensions.gen_salt('bf'));
 ```
 
+Both migrations, in order. **0002 is the one that matters for how this reads
+today**: it retires the per-company access code and replaces `redeem_access_code`
+with `begin_visit`, an open front door that takes an optional name and company.
+The logbook still records who came and how far they flew; it just no longer asks
+for a ticket. `access_codes` and `redeem_access_code` survive in the schema —
+history, and a one-line re-grant away if codes ever come back — but nothing in
+the UI reaches them, and 0002 revokes anon's right to execute the old function.
+
 The schema is deny-all: RLS is enabled and *forced* on every table with zero
-policies, and the only doors are four `security definer` RPCs with explicit
-grants. Direct table reads with the anon key return permission-denied — if they
-ever return an empty success instead, that's a leak; `/api/env-check` probes for
+policies, and the only doors are `security definer` RPCs with explicit grants.
+Direct table reads with the anon key return permission-denied — if they ever
+return an empty success instead, that's a leak; `/api/env-check` probes for
 exactly that.
 
-## Minting access codes
-
-One code per company, so the dashboard attributes views:
-
-```sql
-insert into access_codes (code, company, note)
-values ('ACME-K7M3', 'Acme Corp', 'shared with J. Doe 2026-08-12');
-```
-
-Format advice: `COMPANY-XXXX` with four characters of entropy. Redemption is
-case- and whitespace-insensitive. Kill a code anytime with
-`update access_codes set active = false where code = 'ACME-K7M3';` — its rows and
-attribution stay in the logbook.
-
 There's in-database rate limiting (per-IP and global, per minute) in front of
-code redemption and the dashboard passcode check, so codes can't be sprayed.
+`begin_visit` and the dashboard passcode check, so neither can be sprayed.
 
 ## Adding / editing stations — one file
 
@@ -81,7 +74,7 @@ Two tests keep this honest:
 Screenshots go in `public/` (1200×750 works well — see `public/placeholders/`),
 and the walkthrough-video slot takes a `videoSrc` + optional `poster` per
 station. Replace `public/resume.pdf` with your real PDF — the download button is
-wired to that path from the gate, every station, and the static page.
+wired to that path from the sign-in, every station, and the static page.
 
 ## Deploying to Netlify
 
@@ -98,16 +91,21 @@ wired to that path from the gate, every station, and the static page.
 ## Verification
 
 ```bash
-npm test              # engine math, stations schema, polish invariants (fast)
+npm test              # engine math, stations schema, warm-up + polish invariants (fast)
 npm run gate          # + typecheck, Netlify-identical function bundles, build, secret sweep
-npm run e2e           # the browser bar: frames, axe+keyboard, breakpoints,
+npm run e2e           # the browser bar: frames, axe+keyboard, breakpoints, budget,
                       #   gate-breach, reduced-motion, pdf, lighthouse
 RUN_E2E=1 npm run gate  # everything
 npm run ready         # the CONTENT gate — run this before sending anyone the link
 ```
 
 The e2e suite runs a real production build against a mocked Supabase wire
-(Playwright route interception — no test hooks compiled into the app). The
+(Playwright route interception — no test hooks compiled into the app).
+`budget.mjs` is the one exception and the reason is worth knowing before you
+write another check here: **a registered Playwright route turns the browser's
+HTTP cache off**, so under interception a working prefetch is indistinguishable
+from no prefetch at all. That script therefore serves its Supabase stub as real
+same-origin HTTP and intercepts nothing. The
 frame check runs under 4× CPU throttle, which **approximates** a mid-range
 phone; the Lighthouse check asserts performance ≥ 90 with FCP and LCP under
 1.5s on simulated 4G (FMP is deprecated; FCP/LCP are the modern equivalents).
@@ -125,7 +123,7 @@ the first thing a hiring manager would see.
 
 `npm run ready` is that second gate. It fails on unfilled bracket slots,
 placeholder links and contact addresses, a stub `resume.pdf`, artifact diagrams
-with unfilled figures, a debug affordance rendering on the visitor-facing gate,
+with unfilled figures, a debug affordance rendering on the visitor-facing splash,
 and a missing share surface (og:image / favicon / a `<title>` carrying your
 name). It is deliberately **not** part of `npm run gate`: it is red until the
 content is written, and a permanently-red CI check is a check everyone learns to
@@ -133,13 +131,24 @@ ignore. Run it in the sixty seconds before the link goes into a DM.
 
 ## What the gate is, honestly
 
-The gate is **attribution and access control, not DRM**. No URL and no persisted
-client state unlocks the experience without a server-validated token
-(sessionStorage is re-validated on every cold load, and the flight/content
-chunk isn't even fetched until a code redeems). A technical visitor who has
-already redeemed a code can read the JS bundle — it contains nothing that isn't
-on the PDF you're handing out anyway. Visit tokens only authorize updating that
-visit's own progress row, so replay is harmless by construction.
+The splash is **attribution, not access control**. There is no access code: both
+fields are optional and "Begin the flight" opens on a blank form. What the
+server still owns is the session — no URL and no persisted client state renders
+the flight without a server-minted token, and sessionStorage is re-validated on
+every cold load, so a forged devtools entry buys a re-gate rather than a resume.
+Visit tokens only authorize updating that visit's own progress row, so replay is
+harmless by construction. The JS bundle contains nothing that isn't on the PDF
+you're handing out anyway.
+
+Because the door is open, the splash spends the time you take to read it:
+`src/lib/warm.ts` pulls the Supabase SDK, the flight chunk and the scene's media
+at idle, in the order the button will need them. Measured on a production build,
+that moves **2.66 MB off the click** — a visitor who reads the splash for a few
+seconds presses the button and transfers nothing at all. It skips itself
+entirely on `saveData`, `2g` and `slow-2g`. `npm run e2e` asserts both numbers
+(`scripts/e2e/budget.mjs`), and `gate-breach.mjs` asserts the constraint that
+makes it safe: the flight chunk is reachable only through a runtime `import()`,
+never the entry's static preload graph.
 
 ## Assets & credits
 
@@ -169,7 +178,7 @@ visit's own progress row, so replay is harmless by construction.
 
 ## Escape hatches (deliberate, load-bearing)
 
-- **Download PDF** — visible at the gate, at every station, and in static mode.
+- **Download PDF** — visible at the splash, at every station, and in static mode.
 - **Skip the flight** — collapses the whole thing into a clean scrollable page
   with identical content, one toggle, reversible.
 - **`prefers-reduced-motion`** — fully honored: cross-fades instead of flight,

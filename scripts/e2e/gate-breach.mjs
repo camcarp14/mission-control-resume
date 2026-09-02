@@ -7,10 +7,25 @@
 // invariants that never depended on the code:
 //
 // MOCKED-WIRE (always runs, against dist-e2e + Playwright route interception):
-//   1. Fresh load of '/'  → no station panel in the DOM, and the Flight
-//      content chunk (/assets/Flight*) is never even fetched pre sign-in.
-//      (The chunk is still lazy and still only imported once a visit begins —
-//      an optimization now rather than a lock, but the ordering is asserted.)
+//   1. Fresh load of '/'  → no station panel in the DOM, and the flight chunk
+//      is absent from index.html's STATIC preload graph.
+//
+//      This assertion used to read "the Flight chunk is never even fetched
+//      pre sign-in", which was the right test for a door with a lock on it
+//      and became the wrong one when round 23 took the lock off. Nothing was
+//      being protected by those bytes arriving late — a visitor obtains the
+//      chunk by pressing a button with a blank form — so src/lib/warm.ts now
+//      fetches it at idle while the splash is being read, and the old
+//      assertion would fail on a working warm-up.
+//
+//      What is actually load-bearing survives, in two halves. The SECURITY
+//      half is that the flight never RENDERS without a server-minted token,
+//      which is a property of gate/Experience.tsx and is asserted here (no
+//      panel) and in 2, 3 and 5. The PERFORMANCE half is that the flight
+//      chunk is reached only through a runtime import — never a static one —
+//      so it stays out of the entry's modulepreload graph. That is the
+//      regression vite.config.ts documents twice, both times worth ~1.4s of
+//      FCP, and until now nothing tested it.
 //   2. Forged sessionStorage 'mc.visit' seeded pre-load → the server-side
 //      validate_visit says no → sign-in shown, forged entry CLEARED. This is
 //      the token model, unchanged: a fabricated session never resumes.
@@ -18,8 +33,8 @@
 //      strings; /#unlocked and /?unlocked=1 still land on the sign-in.
 //   4. Wrong dashboard passcode → "Passcode not recognized.", still zero
 //      fixtures. The owner's logbook stays protected.
-//   5. Valid begin_visit → panel appears AND the Flight chunk request happened
-//      only AFTER the begin_visit RPC. Then a corrupted token + reload →
+//   5. Valid begin_visit → no panel before the click, panel after it, and the
+//      begin_visit RPC really happened. Then a corrupted token + reload →
 //      re-gated (validate_visit rejects it).
 //
 // REAL-DB (only when VITE_SUPABASE_URL points at a live project, not the
@@ -33,7 +48,10 @@
 // Run: node scripts/e2e/gate-breach.mjs
 
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  ROOT,
   pw,
   serve,
   installGateMock,
@@ -88,10 +106,27 @@ try {
     await sleep(1500); // let any idle-time prefetching happen, then look again
 
     r.ok((await countPanels(page)) === 0, 'fresh load: no section.panel in the DOM');
-    const flightReqs = requests.filter((u) => FLIGHT_RE.test(u));
+
+    // The flight chunk may be WARMED here (see the header) but it may never be
+    // reached statically: a <script> or <link rel=modulepreload> for it in
+    // index.html means the entry graph swallowed it and first paint now waits
+    // on 1.3 MB of WebGL.
+    const shell = readFileSync(join(ROOT, 'dist-e2e', 'index.html'), 'utf8');
+    const staticRefs = [...shell.matchAll(/<(?:script|link)[^>]*(?:src|href)="([^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((href) => FLIGHT_RE.test(href));
     r.ok(
-      flightReqs.length === 0,
-      `fresh load: no request matches /assets\\/Flight/ before sign-in (saw ${flightReqs.length}: ${flightReqs.join(', ') || 'none'})`,
+      staticRefs.length === 0,
+      `fresh load: flight chunk stays OUT of index.html's static graph (saw ${staticRefs.join(', ') || 'none'})`,
+    );
+
+    // And whatever it fetches, the gate's own resources come first — a
+    // warm-up that outranks the screen it is warming from is not a warm-up.
+    const flightIdx = requests.findIndex((u) => FLIGHT_RE.test(u));
+    const entryIdx = requests.findIndex((u) => /assets\/index-.*\.js$/.test(u));
+    r.ok(
+      flightIdx === -1 || (entryIdx !== -1 && flightIdx > entryIdx),
+      `fresh load: any flight-chunk warm comes after the entry chunk (entry @${entryIdx}, flight @${flightIdx})`,
     );
     await context.close();
   }
@@ -164,6 +199,10 @@ try {
     await page.waitForSelector('#g-name', { timeout: 10000 });
     await page.fill('#g-name', 'E2E Pilot');
     await page.fill('#g-company', 'Bar Check Co');
+    // The chunk may already be in the browser by now; what must still be true
+    // is that nothing has RENDERED. This is the assertion the old
+    // fetch-ordering check was standing in for.
+    r.ok((await countPanels(page)) === 0, 'valid sign-in: no panel until the button is pressed');
     await page.click('button[type="submit"]');
     await page.waitForSelector('section.panel', { timeout: 10000 });
     await sleep(SETTLE);
@@ -174,10 +213,6 @@ try {
     const flightIdx = requests.findIndex((u) => FLIGHT_RE.test(u));
     r.ok(beginIdx !== -1, 'valid sign-in: begin_visit RPC was requested');
     r.ok(flightIdx !== -1, 'valid sign-in: Flight content chunk was requested');
-    r.ok(
-      beginIdx !== -1 && flightIdx !== -1 && flightIdx > beginIdx,
-      `valid sign-in: Flight chunk fetched only AFTER the begin_visit POST (begin @${beginIdx}, flight @${flightIdx})`,
-    );
 
     // Corrupt the token in devtools style, reload → server says no → re-gated.
     await page.evaluate(() => {

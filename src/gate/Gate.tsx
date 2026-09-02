@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ENV_PRESENT, OFFLINE_DEV } from '../lib/supabase';
-import { prefetchSupabase, beginVisit, type GateFields } from '../lib/gate';
+import { beginVisit, type GateFields } from '../lib/gate';
+import { standDownWarming, warmForFlight } from '../lib/warm';
 import { ErrorState } from '../ui/primitives';
 
 /**
@@ -9,10 +10,16 @@ import { ErrorState } from '../ui/primitives';
  * code, nothing is required, and "Begin the flight" works with the form left
  * blank. The name/company still ride to the logbook so the owner can see who
  * came, but they are a courtesy the visitor may decline, not a toll. The PDF
- * remains a first-class second exit. The Supabase chunk warms while the
- * visitor reads; the flight chunk stays unfetched until they press the
- * button — the same lazy-load ordering, now an optimization rather than a
- * lock.
+ * remains a first-class second exit.
+ *
+ * And because the door is open, this screen spends the time the visitor takes
+ * to read it: warmForFlight() pulls the Supabase SDK, the flight chunk and the
+ * scene's media at idle, in the order the button will need them. That used to
+ * be two onFocus handlers on the two fields — which was correct when a code
+ * was mandatory and every visitor typed, and stopped being correct the moment
+ * both fields became optional and the copy started inviting people to skip
+ * straight to the button. src/lib/warm.ts carries the measurement and the
+ * argument.
  */
 
 type Status = 'idle' | 'checking' | 'rate_limited' | 'unreachable';
@@ -192,9 +199,19 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
   const set = (k: keyof GateFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }));
 
+  /* Everything the button is about to need, fetched while the visitor reads.
+   * In an effect and not at module scope: this must run AFTER first paint —
+   * the whole point is that it spends idle time, not the FCP budget the
+   * pre-rendered shell in index.html exists to protect. Idempotent, so the
+   * error/offline branches below re-entering this component cost nothing. */
+  useEffect(warmForFlight, []);
+
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (status === 'checking') return;
+    // The warm-up's media wave and the scene's own loaders would otherwise
+    // race for the same eleven files; from here the real loaders own them.
+    standDownWarming();
     setStatus('checking');
     const res = await beginVisit(f);
     if (res.ok) onUnlocked();
@@ -236,7 +253,6 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
               placeholder="Your name"
               value={f.name}
               onChange={set('name')}
-              onFocus={prefetchSupabase}
             />
           </div>
           <div>
@@ -248,7 +264,6 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
               placeholder="Your organization"
               value={f.company}
               onChange={set('company')}
-              onFocus={prefetchSupabase}
             />
           </div>
         </div>

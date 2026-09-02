@@ -85,12 +85,42 @@ function KbdHint({ mirror = false }: { mirror?: boolean }) {
   );
 }
 
+/* The viewport, and the two reasons it is not three lines.
+ *
+ * `vw` is a PROP OF THE 3D SCENE — Scene3D takes it, derives `mobile` from
+ * it, and re-derives the quality budget when it moves — so every state write
+ * here re-renders the entire flight tree, canvas included. The naive version
+ * wrote a FRESH OBJECT on every resize event whether or not either number had
+ * changed, and `resize` is not the rare event it looks like: iOS Safari fires
+ * it continuously while the URL bar collapses during a scroll, and a desktop
+ * window drag fires it at pointer rate.
+ *
+ * So: coalesced to one animation frame (a drag becomes one commit per frame
+ * instead of a dozen) and identity-stable when the numbers are unchanged (a
+ * URL-bar-only resize becomes no commit at all, because setState with the
+ * same reference bails out). The lazy initializer matters for the same
+ * reason in miniature — the eager form measured the window on every render
+ * to build an object React discarded. */
 function useViewport() {
-  const [v, setV] = useState({ vw: window.innerWidth, vh: window.innerHeight });
+  const [v, setV] = useState(() => ({ vw: window.innerWidth, vh: window.innerHeight }));
   useEffect(() => {
-    const on = () => setV({ vw: window.innerWidth, vh: window.innerHeight });
+    let raf = 0;
+    const on = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setV((prev) =>
+          prev.vw === window.innerWidth && prev.vh === window.innerHeight
+            ? prev
+            : { vw: window.innerWidth, vh: window.innerHeight },
+        );
+      });
+    };
     window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
+    return () => {
+      window.removeEventListener('resize', on);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
   return v;
 }
@@ -137,6 +167,35 @@ export default function Flight({
   // The scheduled kick bleed-off for the leg in flight — cleared whenever a
   // new leg preempts it, so back-to-back jumps never fight over the spring.
   const kickTimer = useRef<number | null>(null);
+  /* The flat deck's two-step cut-fade (veil in, reposition under it, veil
+   * out) is the one transition made of nothing but timers, and it used to own
+   * none of them. Two consequences, both on the rung that gets the least
+   * testing — reduced motion, and any machine without WebGL:
+   *
+   *   · a second advance inside the 250ms window scheduled a SECOND pair
+   *     against the first. The earlier pair still fired, so the deck settled
+   *     on the intermediate station and lifted the veil off it while the
+   *     later reposition was still pending — a visible flash of a station the
+   *     visitor did not ask for, then a jump to the one they did.
+   *   · switching to the static page mid-fade left both timers running into
+   *     an unmounted tree.
+   *
+   * Held here so a new leg cancels the old one and the effect below can empty
+   * the queue on the way out. */
+  const veilTimers = useRef<number[]>([]);
+  const clearVeilTimers = useCallback(() => {
+    for (const id of veilTimers.current) window.clearTimeout(id);
+    veilTimers.current = [];
+  }, []);
+
+  // Nothing scheduled by a leg may outlive the deck that scheduled it.
+  useEffect(
+    () => () => {
+      clearVeilTimers();
+      if (kickTimer.current !== null) window.clearTimeout(kickTimer.current);
+    },
+    [clearVeilTimers],
+  );
 
   const panelRefs = useRef(new Map<number, HTMLElement>());
   // World-anchor wrappers (desktop flight): the 3D rig projects each panel's
@@ -201,15 +260,21 @@ export default function Flight({
       if (flat) {
         // Flat mode: veil in, reposition under the veil, veil out — a
         // deliberate cut-fade (opacity only, reduced-motion safe), never a
-        // hard jump.
+        // hard jump. A leg already under the veil is CANCELLED rather than
+        // raced: the veil stays up, the reposition re-times to this target,
+        // and an impatient double-tap resolves to one fade to the station
+        // actually asked for.
+        clearVeilTimers();
         setVeil(true);
-        window.setTimeout(() => {
-          setFromIdx(c);
-          setCurrent(c);
-          setVisited((v) => Math.max(v, c));
-          t.set(c);
-          window.setTimeout(() => setVeil(false), 80);
-        }, 250);
+        veilTimers.current.push(
+          window.setTimeout(() => {
+            setFromIdx(c);
+            setCurrent(c);
+            setVisited((v) => Math.max(v, c));
+            t.set(c);
+            veilTimers.current.push(window.setTimeout(() => setVeil(false), 80));
+          }, 250),
+        );
         return;
       }
 
@@ -263,7 +328,7 @@ export default function Flight({
         });
       });
     },
-    [flat, t, kick, focusPanel],
+    [flat, t, kick, focusPanel, clearVeilTimers],
   );
 
   // Flat-mode arrivals focus after the re-render that mounts the panel.
