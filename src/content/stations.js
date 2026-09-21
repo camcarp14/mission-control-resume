@@ -67,7 +67,7 @@ export const pilot = {
   // Two words on purpose: Hero.tsx stacks each word of the name on its own
   // line, so the full name holds the same width the short handle used to.
   name: 'CAMERON CARPENTER',
-  role: 'REVENUE OPERATIONS \u00b7 PERFORMANCE MARKETING',
+  role: 'PERFORMANCE MARKETING \u00b7 CLIENT STRATEGY',
   status: 'ALL SYSTEMS GO',
   callsign: 'CC-01',
 };
@@ -78,18 +78,21 @@ export const stations = [
   // The thesis every later station proves. The $75M figure is the owner's
   // own calculation across his portfolios, stated the way he asked it to be
   // stated; the interview-safe unpacking is "channel lead on teams
-  // overseeing $75M." Titles are single names now (owner's call): the panel
-  // header and the 3D signage both show this one word/phrase.
+  // overseeing $75M." Repositioned (Sep 2026) from a revenue-ops thesis to a
+  // client-leadership one: the work is the same, the framing now leads with
+  // ownership and outcomes rather than the systems. Titles are single names
+  // (owner's call): the panel header and the 3D signage both show this one
+  // word/phrase.
   {
     id: 'liftoff',
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'Revenue operations and performance marketing \u2014 managing $75M+ in media investment since 2023, and building the forecasting, pacing, and reporting systems that connect it to pipeline and revenue.',
+      'Performance marketing with manager-level ownership \u2014 $75M+ in media investment managed since 2023, operating as channel lead on enterprise accounts and steering clients toward business outcomes rather than platform metrics.',
     bullets: [
-      'Managed $75M+ in media investment since 2023 across clients in healthcare, retail, and logistics \u2014 including a Fortune 5 healthcare payer',
-      'Owned budget forecasting, pacing models, and weekly performance analysis; presented quarterly business reviews and strategic roadmaps built in partnership with SEO, paid social, video, programmatic, and measurement teams',
-      'Built the forecasting, pacing, attribution, and reporting systems that connect advertising, analytics, and CRM data to pipeline and revenue \u2014 with AI tooling applied throughout to expand the scope a single analyst can own',
+      'Managed $75M+ in media investment since 2023 across clients in healthcare, retail, and logistics \u2014 including seven business units under a Fortune 5 healthcare payer',
+      'Operate as channel lead on enterprise accounts: set strategy, drive execution, and guide client stakeholders toward decisions that move the business, not the dashboard',
+      'Hands-on with call intelligence and value-based bidding to move healthcare programs from raw volume toward qualified lead outcomes \u2014 with AI tooling applied throughout to expand the scope a single analyst can own',
     ],
     artifact: { kind: 'none' },
   },
@@ -107,17 +110,17 @@ export const stations = [
     proves:
       'Scope that\u2019s outpaced the title since 2023 \u2014 consistently taking on more than the role asked, while running a company I founded and drawing on an enterprise-scale background.',
     bullets: [
-      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): own budget, pacing, and reporting across a $75M+ media-investment portfolio, with results like a 175% year-over-year lift in Medicare enrollments from restructured paid-search campaigns',
+      'Ovative Group \u2014 Senior Analyst, SEM (2023\u2013present): channel lead with manager-level ownership across a $75M+ media-investment portfolio, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP',
       'Zero To Secure \u2014 Founder (2025\u2013present): built and run a bootstrapped DTC e-commerce brand end to end on the side \u2014 positioning, custom Shopify build, SEO content, and go-to-market',
-      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration inside a highly matrixed organization, administering a 2,400-user project platform',
+      'AbbVie \u2014 Strategic Initiatives Analyst (2022\u201323): supported the $63B Allergan integration inside a highly matrixed organization, building the reporting that gave integration leadership visibility into workstream status and risk',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 03 \u00b7 THE STACK -------------------------------------------------
   // Where he operates, told as the two halves of the seam \u2014 the
-  // revenue-operations list and the media list, straight off the r\u00e9sum\u00e9\u2019s
-  // skills taxonomy. No diagram: the copy is the map.
+  // technical/analytics list and the client/media list, straight off the
+  // r\u00e9sum\u00e9\u2019s skills taxonomy. No diagram: the copy is the map.
   {
     id: 'the-stack',
     code: 'STN 03',
@@ -126,8 +129,8 @@ export const stations = [
       'I work across the full chain \u2014 ad platforms, call intelligence, analytics, and the reporting warehouse \u2014 with most of my time at the handoff between activation and measurement.',
     bullets: [
       'Hands-on daily across Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, and Invoca, together with the Apps Script automation that connects them',
-      'The revenue-operations half: conversion tracking and attribution, reporting and workflow automation, forecasting and pacing, funnel and cohort analysis, and data integrity and QA',
-      'The media half: media planning and investment, budget management, audience segmentation and targeting, experiment design, value-based bidding, and cross-channel strategy',
+      'The technical half: value-based bidding, conversion tracking and attribution, lead-quality measurement, forecasting and pacing, reporting and workflow automation, and data integrity and QA',
+      'The client half: quarterly business reviews, strategic roadmaps, client education and enablement, stakeholder communication, and syncs with Google, Microsoft, and Invoca partner teams',
     ],
     artifact: { kind: 'none' },
   },
@@ -142,9 +145,9 @@ export const stations = [
     code: 'STN 04',
     title: 'Integration',
     proves:
-      'Conversion tracking and bidding architectures designed to optimize toward lead quality rather than raw volume \u2014 then translated into business terms for client leadership.',
+      'Healthcare programs modernized from raw-volume optimization toward qualified outcomes \u2014 conversion-action architecture and value-based bidding built on call-quality signals, then translated into terms client leadership can act on.',
     bullets: [
-      'Structured the signal architecture \u2014 call-quality conversion data, value-based bidding frameworks, and KPI hierarchies \u2014 tied to downstream pipeline and revenue rather than platform-reported volume',
+      'Structured the signal architecture \u2014 Invoca call-quality and spoken-phrase conversion data, value-based bidding frameworks, and revenue-tied KPI hierarchies \u2014 so campaigns optimize toward lead quality rather than platform-reported volume',
       'Strong execution when conditions change fast \u2014 when a client\u2019s priorities or platforms shift on short notice, I re-plan quickly and deliver cleanly without losing measurement continuity',
       'Drive experimentation end to end \u2014 hypothesis, test design, and the measurement that decides whether a new format or automation scales or gets cut',
     ],
@@ -170,21 +173,24 @@ export const stations = [
     artifact: { kind: 'none' },
   },
 
-  // -- STN 06 \u00b7 THE DASHBOARD ----------------------------------------------
-  // Builds ON STN 05 (owner's note): 05 is the reporting/automation machinery,
-  // 06 is the ANALYSIS layer on top \u2014 dashboards that help teams read
-  // performance and decide. Kept general, not over-specific; the reinvestment
-  // is evidence, not the whole story. Diagram stays pulled (kind: 'none').
+  // -- STN 06 \u00b7 THE BRIDGE -------------------------------------------------
+  // The client-leadership station (replaced THE DASHBOARD, Sep 2026 \u2014 the
+  // analysis layer is now implied by 05 and 08, and the stronger story is the
+  // one this site had no slot for: who he faces, how often, and what he
+  // owns end to end). Every figure is the owner's own: seven BUs, 12+
+  // stakeholders, weekly presentations, bi-weekly Google syncs with Microsoft
+  // and Invoca reps in the mix. The launch is the Kelsey-Seybold Clinics SEM
+  // workstream, anonymized here as on the r\u00e9sum\u00e9.
   {
-    id: 'dashboard',
+    id: 'the-bridge',
     code: 'STN 06',
-    title: 'The Dashboard',
+    title: 'The Bridge',
     proves:
-      'Dashboards that turn scattered platform data into the single view a team actually makes decisions from \u2014 the analysis layer on top of the reporting.',
+      'The client relationship is the job \u2014 weekly in front of 12+ stakeholders across seven healthcare business units, running the reviews, the partner syncs, and the launches, and pushing back when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Build dashboards that consolidate performance into one clear view, so client and internal teams spend their time interpreting results rather than assembling them',
-      'Unified paid and organic search into a single full-funnel view and templatized it for reuse across accounts',
-      'Focus each dashboard on the decisions it needs to support \u2014 where budget is working, where it isn\u2019t, and what to do next \u2014 so teams can act on it directly',
+      'Present weekly to 12+ client stakeholders across a Fortune 5 payer\u2019s healthcare portfolio; run quarterly business reviews and strategic roadmaps, and lead syncs with Google, Microsoft, and Invoca partner teams',
+      'Led the SEM workstream for a new healthcare provider program from planning through launch \u2014 strategy, campaign structure, conversion and bidding approach, build QA, and reporting tied to qualified calls and appointments',
+      'Onboarded new retail and healthcare clients and rebuilt alignment on a multi-brand portfolio by educating stakeholders on business-impact measurement and providing informed pushback when a request conflicted with best practice',
     ],
     artifact: { kind: 'none' },
   },
@@ -203,7 +209,7 @@ export const stations = [
     bullets: [
       'Reduced brand cost-per-click progressively through bid-portfolio management rather than cutting reach \u2014 efficiency recovered while volume held',
       'Rebuilt the non-brand program in parallel, nearly doubling its return on ad spend as cost-per-click fell 33%',
-      'Redirected the freed budget into higher-incrementality tactics, turning an efficiency fix into portfolio-level growth',
+      'Redirected the freed budget into higher-incrementality tactics, then led the account\u2019s migration off SA360 to native platform bidding without performance disruption',
     ],
     artifact: { kind: 'none' },
   },
@@ -236,10 +242,10 @@ export const stations = [
     code: 'STN 09',
     title: 'Enablement',
     proves:
-      'I put real time into the people around me \u2014 coaching junior analysts toward account ownership, mentoring new talent, and helping shape how the team approaches lead generation and AI.',
+      'I put real time into the people around me \u2014 leading the analysts on my accounts, developing new talent, and helping shape how the team approaches lead generation and AI.',
     bullets: [
-      'Coached junior analysts across multiple accounts, several of whom have grown into named account ownership',
-      'Mentored a summer intern end to end through a self-authored 13-week curriculum mapped to the firm\u2019s leadership competencies',
+      'Coach and lead two analysts on the healthcare accounts \u2014 sharing context and rationale, creating clearer ownership, and reviewing work so they do more high-quality work independently',
+      'Directly managed a summer intern through a self-authored 13-week curriculum mapped to the firm\u2019s leadership competencies \u2014 development that resulted in a return offer',
       'A go-to resource on lead generation and AI workflows within the team \u2014 authored the trainings, best practices, and playbooks the broader group uses',
     ],
     artifact: { kind: 'none' },
@@ -257,7 +263,7 @@ export const stations = [
     bullets: [
       'University of Wisconsin\u2013Madison \u2014 BBA, double major in Marketing and Risk Management & Insurance (2023)',
       'Platforms & tools: Google Ads \u00b7 Microsoft Advertising \u00b7 SA360 \u00b7 GA4 \u00b7 Adobe Analytics \u00b7 Invoca \u00b7 Tableau \u00b7 Shopify \u00b7 Claude Code \u00b7 Excel \u00b7 ClickUp',
-      'Revenue ops & media: conversion tracking & attribution \u00b7 reporting & workflow automation \u00b7 forecasting & pacing \u00b7 funnel & cohort analysis \u00b7 experiment design \u00b7 value-based bidding',
+      'Client & strategy: quarterly business reviews \u00b7 strategic roadmaps \u00b7 client education & enablement \u00b7 value-based bidding \u00b7 conversion tracking & attribution \u00b7 lead-quality measurement \u00b7 applied AI tooling',
     ],
     artifact: { kind: 'none' },
   },
