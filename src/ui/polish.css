@@ -1404,31 +1404,25 @@ kbd {
   .home { padding-top: max(1.25rem, calc(50vh - 20rem)); padding-bottom: 1.5rem; }
 }
 
-/* ---- the hero ---- (twins: .mc-status/.mc-name/.mc-role/.mc-li/.mc-lede) */
-.home-status {
-  display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem;
-  border: 1px solid rgba(154,220,255,0.22); border-radius: 999px; background: rgba(76,201,240,0.06);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud);
-}
-.home-status-dot {
-  width: 6px; height: 6px; border-radius: 50%; background: #5ef0a8; box-shadow: 0 0 10px #5ef0a8;
-  animation: home-pulse var(--dur-4) ease-in-out infinite;
-}
-@keyframes home-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* ---- the hero ---- (twins: .mc-name/.mc-role/.mc-li/.mc-lede)
+   The name leads the page: no chip above it, and it takes the room the chip
+   left. On phones it breaks onto two lines on purpose — a stacked name reads
+   as a headline at that width where a squeezed single line reads as a label. */
 .home-name {
-  margin-top: 0.875rem;
   font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; font-weight: 700;
-  font-size: clamp(2.25rem, min(6.5vw, 8vh), 4.25rem); line-height: 1.04; letter-spacing: -0.035em;
+  font-size: clamp(2.75rem, min(8vw, 10vh), 5.25rem); line-height: 1; letter-spacing: -0.04em;
+  text-wrap: balance;
   background: linear-gradient(180deg, #ffffff 35%, #9adcff 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 0 28px rgba(76,201,240,0.22));
 }
 .home-role {
-  margin-top: 0.625rem;
+  margin-top: 0.875rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.6875rem; line-height: 1rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--cyan);
 }
+/* A step up from md; phones keep the smaller size, the widest that holds one line at 390. */
+@media (min-width: 768px) { .home-role { font-size: 0.75rem; letter-spacing: 0.24em; } }
 .home-role span { color: rgba(154,220,255,0.45); }
 /* The LinkedIn link: quiet until hovered, so the name stays the headline.
    Twin of .mc-li in index.html — same box, so the swap does not shift. */
@@ -1447,9 +1441,11 @@ kbd {
 .home-li:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 2px; }
 .home-li + .home-intro { margin-top: 0.5rem; }
 .home-intro {
-  max-width: 34rem; margin: 0.625rem auto 0;
-  font-size: 0.875rem; line-height: 1.6; color: var(--dim); text-wrap: balance;
+  max-width: 36rem; margin: 0.625rem auto 0;
+  font-size: 0.9375rem; line-height: 1.6; color: var(--dim); text-wrap: balance;
 }
+/* One line from md up: two would cost the panels a row of height. */
+@media (min-width: 768px) { .home-intro { max-width: 42rem; font-size: 1rem; } }
 /* Twin of .mc-pdf in index.html — same box, so the swap does not shift. */
 .home-pdf {
   display: inline-block; margin-top: 0.875rem; padding: 0.375rem 0.75rem;
@@ -1460,6 +1456,14 @@ kbd {
 
 /* ---- the panels ---- */
 .home-cols { display: grid; gap: 1rem; margin: 1.75rem auto 0; max-width: 32rem; }
+/* Phones: Articles drops to the bottom of the stack and rises last in the
+   .stagger entrance to match. Visual order only — the DOM keeps Articles
+   first, the reading order the side-by-side layout needs. */
+@media (max-width: 767px) {
+  .home-cols > [aria-labelledby="col-articles"] { order: 1; --i: 2; }
+  .home-cols > [aria-labelledby="col-artifacts"] { --i: 0; }
+  .home-cols > [aria-labelledby="col-journey"] { --i: 1; }
+}
 @media (min-width: 768px) {
   .home-cols {
     max-width: none; margin-top: 2rem; gap: 1.125rem;
@@ -1563,13 +1567,12 @@ kbd {
 }
 
 /* Short laptop windows (a 13" screen with a bookmarks bar is ~540px tall):
-   the page must still fit one screen, so the extras step aside — the status
-   chip (twin rule in index.html), the radar's topic chips — and the panels
-   tighten. Only from md up; phones scroll a stacked page anyway. */
+   the page must still fit one screen, so the extras step aside — the
+   radar's topic chips — and the hero and panels tighten (hero twin rule in
+   index.html). Only from md up; phones scroll a stacked page anyway. */
 @media (min-width: 768px) and (max-height: 720px) {
   .home { padding-top: 0.75rem; padding-bottom: 1rem; }
-  .home-status { display: none; }
-  .home-name { margin-top: 0; }
+  .home-name { font-size: clamp(2.25rem, min(6.5vw, 8vh), 4.25rem); }
   .home-role { margin-top: 0.375rem; }
   .home-li { margin-top: 0.375rem; }
   .home-li + .home-intro { margin-top: 0.375rem; }
@@ -2023,7 +2026,7 @@ button.journey-thumb:hover .journey-play { background: rgba(76,201,240,0.18); bo
   .prose-mc a, .hudhome, .journey-paper a, .ring-title a, .ring-title-arrow,
   .journey-thumb img, .journey-play, .sheet-visit, .work-links a,
   .home-card, .launch-btn { transition: none !important; }
-  .home-status-dot, .soon-radar::before, .soon-radar::after { animation: none !important; }
+  .soon-radar::before, .soon-radar::after { animation: none !important; }
   .theater-backdrop, .theater-panel { animation: none !important; }
 }
 

@@ -30,12 +30,8 @@ export function Home({ journey }: { journey: ReactNode }) {
       <GateSky />
       <div className="home-wrap relative z-10">
         {/* Every element here has a twin in index.html's pre-rendered shell
-            (.mc-status/.mc-name/.mc-role/.mc-li/.mc-lede) so first paint is stable. */}
+            (.mc-name/.mc-role/.mc-li/.mc-lede) so first paint is stable. */}
         <header className="home-head">
-          <p className="home-status">
-            <span className="home-status-dot" aria-hidden="true" />
-            Mission Control · All systems go
-          </p>
           <h1 className="home-name">Cameron Carpenter</h1>
           <p className="home-role">
             <span aria-hidden="true">◇</span> Applied AI · Performance Marketing{' '}
