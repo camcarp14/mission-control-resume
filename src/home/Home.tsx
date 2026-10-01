@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { SkLine } from '../ui/primitives';
 import { GateSky } from '../gate/Gate';
-import { IconArticles, IconArtifacts, IconRocket } from './icons';
+import { IconArticles, IconArtifacts, IconLinkedIn, IconRocket } from './icons';
 
 /**
  * The front door, split three ways and side by side: Articles, Artifacts,
@@ -18,6 +18,9 @@ import { IconArticles, IconArtifacts, IconRocket } from './icons';
  * paint), so every class that sets its position or size here has a twin in
  * that file's inline <style>. Change one, change the other.
  */
+/** Same address as the JSON-LD sameAs in index.html. */
+const LINKEDIN = 'https://www.linkedin.com/in/cameroncarpenter1';
+
 const ArticlesPanel = lazy(() => import('./ArticlesPanel'));
 const Artifacts = lazy(() => import('./Artifacts'));
 
@@ -27,7 +30,7 @@ export function Home({ journey }: { journey: ReactNode }) {
       <GateSky />
       <div className="home-wrap relative z-10">
         {/* Every element here has a twin in index.html's pre-rendered shell
-            (.mc-status/.mc-name/.mc-role/.mc-intro) so first paint is stable. */}
+            (.mc-status/.mc-name/.mc-role/.mc-li/.mc-lede) so first paint is stable. */}
         <header className="home-head">
           <p className="home-status">
             <span className="home-status-dot" aria-hidden="true" />
@@ -38,6 +41,20 @@ export function Home({ journey }: { journey: ReactNode }) {
             <span aria-hidden="true">◇</span> Applied AI · Performance Marketing{' '}
             <span aria-hidden="true">◇</span>
           </p>
+          {/* Twin: .mc-li in index.html — same box, same glyph. */}
+          <a
+            className="home-li"
+            href={LINKEDIN}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <IconLinkedIn />
+            LinkedIn
+            <span className="home-li-arrow" aria-hidden="true">
+              ↗
+            </span>
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
           <p className="home-intro">
             Based in Chicago. Writing, the things I’ve built, and a résumé you can pilot.
           </p>

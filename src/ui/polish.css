@@ -1395,16 +1395,16 @@ kbd {
 }
 .home-wrap { width: 100%; max-width: 76rem; margin: 0 auto; }
 .home-head { text-align: center; }
-/* From md up the page is ~38rem tall, so the top padding centres it in the
+/* From md up the page is ~40rem tall, so the top padding centres it in the
    viewport arithmetically (half the leftover height) rather than with flex:
    index.html paints this header before the panels exist, and flex centring
    would put the pre-rendered header in one place and React's in another.
    The same formula lives in the shell's <style>. */
 @media (min-width: 768px) {
-  .home { padding-top: max(1.25rem, calc(50vh - 19.5rem)); padding-bottom: 1.5rem; }
+  .home { padding-top: max(1.25rem, calc(50vh - 20rem)); padding-bottom: 1.5rem; }
 }
 
-/* ---- the hero ---- (twins: .mc-status/.mc-name/.mc-role/.mc-lede) */
+/* ---- the hero ---- (twins: .mc-status/.mc-name/.mc-role/.mc-li/.mc-lede) */
 .home-status {
   display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem;
   border: 1px solid rgba(154,220,255,0.22); border-radius: 999px; background: rgba(76,201,240,0.06);
@@ -1430,6 +1430,22 @@ kbd {
   font-size: 0.6875rem; line-height: 1rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--cyan);
 }
 .home-role span { color: rgba(154,220,255,0.45); }
+/* The LinkedIn link: quiet until hovered, so the name stays the headline.
+   Twin of .mc-li in index.html — same box, so the swap does not shift. */
+.home-li {
+  /* A block of its own (flex, fit-content) rather than inline: an inline box
+     would sit in a line box with the body's taller strut and cost 6px more. */
+  display: flex; width: fit-content; align-items: center; gap: 0.375rem; margin: 0.5rem auto 0;
+  font-size: 0.75rem; line-height: 1rem; color: var(--dim); text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out);
+}
+.home-li svg { color: rgba(154,220,255,0.6); transition: color var(--dur-2) var(--ease-out); }
+.home-li-arrow { font-size: 0.6875rem; opacity: 0.6; transition: transform var(--dur-2) var(--ease-out); }
+.home-li:hover { color: var(--ink); }
+.home-li:hover svg { color: var(--cyan); }
+.home-li:hover .home-li-arrow { transform: translate(1px, -1px); }
+.home-li:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 2px; }
+.home-li + .home-intro { margin-top: 0.5rem; }
 .home-intro {
   max-width: 34rem; margin: 0.625rem auto 0;
   font-size: 0.875rem; line-height: 1.6; color: var(--dim); text-wrap: balance;
@@ -1551,9 +1567,13 @@ kbd {
    chip (twin rule in index.html), the radar's topic chips — and the panels
    tighten. Only from md up; phones scroll a stacked page anyway. */
 @media (min-width: 768px) and (max-height: 720px) {
+  .home { padding-top: 0.75rem; padding-bottom: 1rem; }
   .home-status { display: none; }
   .home-name { margin-top: 0; }
-  .home-cols { margin-top: 1.25rem; }
+  .home-role { margin-top: 0.375rem; }
+  .home-li { margin-top: 0.375rem; }
+  .home-li + .home-intro { margin-top: 0.375rem; }
+  .home-cols { margin-top: 1rem; }
   .col-head { padding-bottom: 0.625rem; margin-bottom: 0.75rem; }
   .soon-radar { width: 4.25rem; height: 4.25rem; }
   .soon-kicker { margin-top: 0.625rem; }

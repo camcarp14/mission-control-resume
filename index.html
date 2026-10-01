@@ -132,7 +132,7 @@
                   padding: clamp(1.5rem, 6vh, 4.5rem) 1.25rem 2.5rem; }
       .mc-shell > div { width: 100%; max-width: 76rem; margin: 0 auto; text-align: center; }
       @media (min-width: 768px) {
-        .mc-shell { padding-top: max(1.25rem, calc(50vh - 19.5rem)); }
+        .mc-shell { padding-top: max(1.25rem, calc(50vh - 20rem)); }
       }
       /* /articles and the article pages are a different layout; painting the
          home header for 200ms before them would be a flash of the wrong page.
@@ -166,11 +166,18 @@
                  letter-spacing: -0.035em; color: #fff; }
       .mc-role { margin: 0.625rem 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                  font-size: 0.6875rem; line-height: 1rem; letter-spacing: 0.22em; text-transform: uppercase; color: #4cc9f0; }
+      .mc-li { display: flex; width: fit-content; align-items: center; gap: 0.375rem; margin: 0.5rem auto 0;
+               font-size: 0.75rem; line-height: 1rem; color: #8b929c; text-decoration: none; }
+      .mc-li svg { color: rgba(154,220,255,0.6); }
+      .mc-li span { font-size: 0.6875rem; opacity: 0.6; }
+      .mc-li + .mc-lede { margin-top: 0.5rem; }
       .mc-lede { max-width: 34rem; margin: 0.625rem auto 0; font-size: 0.875rem; line-height: 1.6;
                  color: #8b929c; text-wrap: balance; }
       @media (min-width: 768px) and (max-height: 720px) {
+        .mc-shell { padding-top: 0.75rem; }
         .mc-status { display: none; }
         .mc-name { margin-top: 0; }
+        .mc-role, .mc-li, .mc-li + .mc-lede { margin-top: 0.375rem; }
       }
       /* Phones only — twin of .home-pdf in polish.css. */
       .mc-pdf { display: inline-block; margin-top: 0.875rem; padding: 0.375rem 0.75rem;
@@ -189,6 +196,7 @@
           <p class="mc-status"><span class="mc-dot"></span>Mission Control · All systems go</p>
           <h1 class="mc-name">Cameron Carpenter</h1>
           <p class="mc-role">◇ Applied AI · Performance Marketing ◇</p>
+          <a class="mc-li" href="https://www.linkedin.com/in/cameroncarpenter1" target="_blank" rel="noopener noreferrer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10.5V16.5M8 7.6v.01M11.75 16.5v-6M11.75 13a2.5 2.5 0 0 1 5 0v3.5"/></svg>LinkedIn<span aria-hidden="true">↗</span></a>
           <p class="mc-lede">Based in Chicago. Writing, the things I’ve built, and a résumé you can pilot.</p>
           <a class="mc-pdf" href="/resume.pdf" download="Cameron-Carpenter-Resume.pdf">Download résumé PDF</a>
         </div>

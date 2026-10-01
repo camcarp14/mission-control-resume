@@ -44,6 +44,16 @@ export function IconArtifacts() {
   );
 }
 
+/** LinkedIn's "in" in a rounded tile, drawn in the family's stroke. */
+export function IconLinkedIn() {
+  return (
+    <Glyph>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M8 10.5V16.5M8 7.6v.01M11.75 16.5v-6M11.75 13a2.5 2.5 0 0 1 5 0v3.5" />
+    </Glyph>
+  );
+}
+
 /** An upright rocket: hull, porthole, fins, flame. */
 export function IconRocket() {
   return (
