@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { HUE_CSS } from './hues';
 import {
   LazyMotion,
   domAnimation,
@@ -98,9 +99,12 @@ function useViewport() {
 export default function Flight({
   initialStation = 0,
   onStationReached,
+  onExit,
 }: {
   initialStation?: number;
   onStationReached?: (index: number, stationCount: number) => void;
+  /** Back to the home hub; the HUD's mark becomes the button for it. */
+  onExit?: () => void;
 }) {
   const reduced = useReducedMotion() ?? false;
   const webgl = useMemo(webglAvailable, []);
@@ -366,7 +370,9 @@ export default function Flight({
 
   return (
     <LazyMotion features={domAnimation} strict>
-      <HUD mode={mode} current={current} onToggleMode={toggleMode} />
+      {/* Per-planet panel colours, as literal rules (see hues.ts for why). */}
+      <style>{HUE_CSS}</style>
+      <HUD mode={mode} current={current} onToggleMode={toggleMode} onExit={onExit} />
       {/* Screen readers hear each docking; sighted users see the panel. */}
       <div ref={announceRef} aria-live="polite" className="sr-only" />
 
@@ -458,7 +464,7 @@ export default function Flight({
             <Rail current={current} visited={visited} onJump={goTo} />
             <button
               type="button"
-              className="btn primary border border-rule-strong bg-raised px-3.5 py-2 text-xs text-ink disabled:cursor-default disabled:opacity-40 sm:min-w-[104px]"
+              className="btn advance-btn px-3.5 py-2 text-xs disabled:cursor-default disabled:opacity-40 sm:min-w-[104px]"
               onClick={advance}
               disabled={current === N - 1}
             >

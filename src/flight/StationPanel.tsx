@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { hueClass } from './hues';
 import { m, useTransform } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { detectTier, readHardwareSignals } from '../flight3d/quality';
@@ -182,7 +183,9 @@ export function StationPanel({
   // `hero` marks the one station that has an identity column floated above
   // it. Only the mobile block in polish.css reads it — on desktop the class
   // matches no rule, so the anchored layout is untouched by construction.
-  const wrap = index === 0 ? 'panelwrap hero' : 'panelwrap';
+  // The station's accent (hues.ts → HUE_CSS): surface, lit edge, scroll cues
+  // and station dot, lit in the colour of the panel's own planet.
+  const wrap = `${index === 0 ? 'panelwrap hero' : 'panelwrap'} ${hueClass(index)}`;
 
   if (flat) {
     return (
@@ -194,7 +197,7 @@ export function StationPanel({
 
   if (axis === 'x' && onAnchor) {
     return (
-      <div className="panelwrap anchored">
+      <div className={`panelwrap anchored ${hueClass(index)}`}>
         <div ref={(el) => onAnchor(index, el)} className="anchorpos">
           <m.div style={{ opacity, scale }} className="w-full max-w-[560px]">
             {body}

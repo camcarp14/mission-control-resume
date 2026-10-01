@@ -81,10 +81,10 @@ async function checkLinkVisible(page, cell) {
  *  future red can tell a genuine hang from a slow poll at a glance. */
 async function railJump(page, n) {
   const t0 = Date.now();
-  await page.click(`nav[aria-label="Stations"] button:nth-child(${n})`);
+  await page.click(`nav[aria-label="Stations"] button:nth-of-type(${n})`);
   await page.waitForFunction(
     (i) => {
-      const dot = document.querySelector(`nav[aria-label="Stations"] button:nth-child(${i})`);
+      const dot = document.querySelector(`nav[aria-label="Stations"] button:nth-of-type(${i})`);
       return !!dot && dot.getAttribute('aria-current') === 'step';
     },
     n,
@@ -129,7 +129,7 @@ try {
     // gate (pre-unlock)
     let cell = `${w}x${h} gate`;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-name');
+    await page.waitForSelector('#begin-flight');
     await sleep(SETTLE); // entrance choreography
     await checkLinkVisible(page, cell);
 

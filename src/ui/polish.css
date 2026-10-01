@@ -37,6 +37,8 @@
   --dur-1: 140ms; --dur-2: 240ms; --dur-3: 420ms;
   /* ambient loops only (idle drift, slow shimmer) — never a state change */
   --dur-4: 3200ms;
+  /* the home page's radar sweep — ambient, like --dur-4 */
+  --dur-5: 4800ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.44, 1);
 
@@ -1376,3 +1378,677 @@ kbd {
   .railmark[data-seated='1'] { transition: none !important; }
   .rail button::before { transition: none !important; }
 }
+
+/* ==== HOME — the three-column front door ===================================
+   Articles | Artifacts | Space Journey over the deep-space sky (Gate.tsx).
+   Each panel is a rounded glass card with its own accent (--hue, an RGB
+   triple): amber for writing, cyan for the builds, ember for the flight.
+   The cards are rounder than the instrument panels inside the flight on
+   purpose — this page is the lobby, not the console. Every transition and
+   loop here is named again in the reduce block at the end of this section. */
+
+/* The page. index.html's .mc-shell mirrors this padding, width and
+   centring so the pre-rendered header paints exactly where React puts it. */
+.home {
+  position: relative; min-height: 100dvh; overflow-x: clip;
+  padding: clamp(1.5rem, 6vh, 4.5rem) 1.25rem calc(2.5rem + env(safe-area-inset-bottom));
+}
+.home-wrap { width: 100%; max-width: 76rem; margin: 0 auto; }
+.home-head { text-align: center; }
+/* From md up the page is ~38rem tall, so the top padding centres it in the
+   viewport arithmetically (half the leftover height) rather than with flex:
+   index.html paints this header before the panels exist, and flex centring
+   would put the pre-rendered header in one place and React's in another.
+   The same formula lives in the shell's <style>. */
+@media (min-width: 768px) {
+  .home { padding-top: max(1.25rem, calc(50vh - 19.5rem)); padding-bottom: 1.5rem; }
+}
+
+/* ---- the hero ---- (twins: .mc-status/.mc-name/.mc-role/.mc-lede) */
+.home-status {
+  display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem;
+  border: 1px solid rgba(154,220,255,0.22); border-radius: 999px; background: rgba(76,201,240,0.06);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud);
+}
+.home-status-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #5ef0a8; box-shadow: 0 0 10px #5ef0a8;
+  animation: home-pulse var(--dur-4) ease-in-out infinite;
+}
+@keyframes home-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.home-name {
+  margin-top: 0.875rem;
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; font-weight: 700;
+  font-size: clamp(2.25rem, min(6.5vw, 8vh), 4.25rem); line-height: 1.04; letter-spacing: -0.035em;
+  background: linear-gradient(180deg, #ffffff 35%, #9adcff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 28px rgba(76,201,240,0.22));
+}
+.home-role {
+  margin-top: 0.625rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem; line-height: 1rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--cyan);
+}
+.home-role span { color: rgba(154,220,255,0.45); }
+.home-intro {
+  max-width: 34rem; margin: 0.625rem auto 0;
+  font-size: 0.875rem; line-height: 1.6; color: var(--dim); text-wrap: balance;
+}
+/* Twin of .mc-pdf in index.html — same box, so the swap does not shift. */
+.home-pdf {
+  display: inline-block; margin-top: 0.875rem; padding: 0.375rem 0.75rem;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-2); background: var(--panel);
+  font-size: 0.6875rem; line-height: 1rem; color: var(--ink); text-decoration: none;
+}
+@media (min-width: 768px) { .home-pdf { display: none; } }
+
+/* ---- the panels ---- */
+.home-cols { display: grid; gap: 1rem; margin: 1.75rem auto 0; max-width: 32rem; }
+@media (min-width: 768px) {
+  .home-cols {
+    max-width: none; margin-top: 2rem; gap: 1.125rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+.hue-amber { --hue: 255,181,71; }
+.hue-cyan { --hue: 76,201,240; }
+.hue-ember { --hue: 255,112,67; }
+.home-card {
+  position: relative; display: flex; flex-direction: column; min-width: 0;
+  padding: 1.125rem 1.25rem 1.375rem; text-align: center;
+  border: 1px solid rgba(var(--hue),0.16); border-radius: 16px;
+  background:
+    radial-gradient(90% 55% at 50% -12%, rgba(var(--hue),0.13), transparent 70%),
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008) 45%),
+    rgba(9,11,15,0.84);
+  box-shadow: 0 40px 90px -45px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.06);
+  /* translate, not transform: the .stagger entrance holds transform with
+     fill-mode both, which would pin a transform-based hover lift at none. */
+  transition: translate var(--dur-2) var(--ease-out), border-color var(--dur-2) ease, box-shadow var(--dur-2) var(--ease-out);
+}
+/* the lit top edge, in the panel's hue */
+.home-card::before {
+  content: ''; position: absolute; top: -1px; left: 14%; right: 14%; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(var(--hue),0.95), transparent);
+}
+.home-card:hover {
+  translate: 0 -3px; border-color: rgba(var(--hue),0.38);
+  box-shadow: 0 40px 90px -40px rgba(0,0,0,0.95), 0 0 50px -14px rgba(var(--hue),0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+@media (min-width: 1200px) { .home-card { padding: 1.25rem 1.5rem 1.5rem; } }
+/* Each expandable panel's corner button, level with the panel's icon row.
+   Positioned off the panel's own padding so the two stay in step. */
+.card-expand {
+  position: absolute; top: 1.375rem; right: 1.25rem; display: grid; place-items: center;
+  width: 1.625rem; height: 1.625rem; border: 1px solid rgba(var(--hue),0.3); border-radius: 8px;
+  background: rgba(var(--hue),0.06); color: rgba(var(--hue),0.9);
+}
+.btn.card-expand:hover:not(:disabled) { background: rgba(var(--hue),0.16); border-color: rgba(var(--hue),0.6); color: #fff; }
+@media (min-width: 1200px) { .card-expand { top: 1.5rem; right: 1.5rem; } }
+/* A panel body that opens its big view on click says so on hover. */
+.col-expandable { flex: 1; cursor: zoom-in; }
+.col-expandable .artrow { cursor: pointer; }
+
+.col-head {
+  display: flex; align-items: center; justify-content: center; gap: 0.625rem;
+  padding-bottom: 0.875rem; margin-bottom: 1.125rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.col-icon {
+  display: grid; place-items: center; flex: none; width: 2.125rem; height: 2.125rem;
+  border: 1px solid rgba(var(--hue),0.35); border-radius: 10px;
+  background: radial-gradient(circle at 50% 30%, rgba(var(--hue),0.24), rgba(var(--hue),0.05));
+  color: rgb(var(--hue)); box-shadow: 0 0 20px -6px rgba(var(--hue),0.6);
+}
+.col-title {
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.0625rem; line-height: 1.375rem; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);
+}
+.col-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.col-body-middle { display: flex; flex-direction: column; justify-content: center; }
+
+/* ---- Articles: coming soon ---- a radar listening for the first one */
+.soon { --hue: 255,181,71; display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.soon-radar {
+  position: relative; width: 6.5rem; height: 6.5rem; overflow: hidden; border-radius: 50%;
+  border: 1px solid rgba(var(--hue),0.35);
+  background:
+    repeating-radial-gradient(circle, rgba(var(--hue),0.2) 0 1px, transparent 1px 16px),
+    radial-gradient(circle, rgba(var(--hue),0.12), transparent 70%);
+  box-shadow: 0 0 40px -12px rgba(var(--hue),0.6);
+}
+.soon-radar::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(var(--hue),0.5), rgba(var(--hue),0) 75deg);
+  animation: soon-sweep var(--dur-5) linear infinite;
+}
+.soon-radar::after {
+  content: ''; position: absolute; left: 66%; top: 30%; width: 5px; height: 5px; border-radius: 50%;
+  background: rgb(var(--hue)); box-shadow: 0 0 10px rgb(var(--hue));
+  animation: soon-blip var(--dur-5) ease-out infinite;
+}
+@keyframes soon-sweep { to { transform: rotate(360deg); } }
+@keyframes soon-blip { 0%, 58% { opacity: 0; } 62% { opacity: 1; } 100% { opacity: 0; } }
+.soon-kicker {
+  margin-top: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.16em; text-transform: uppercase; color: rgb(var(--hue));
+}
+.soon-title {
+  margin-top: 0.375rem;
+  font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.125rem; line-height: 1.4; font-weight: 600; color: var(--ink);
+}
+.soon-text { max-width: 19rem; margin-top: 0.375rem; font-size: 0.8125rem; line-height: 1.55; color: var(--dim); text-wrap: balance; }
+.soon-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.375rem; margin: 0.875rem 0 0; padding: 0; list-style: none; }
+.soon-topics li {
+  padding: 3px 8px; border: 1px solid rgba(var(--hue),0.28); border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.5625rem; line-height: 0.875rem; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(var(--hue),0.9);
+}
+
+/* Short laptop windows (a 13" screen with a bookmarks bar is ~540px tall):
+   the page must still fit one screen, so the extras step aside — the status
+   chip (twin rule in index.html), the radar's topic chips — and the panels
+   tighten. Only from md up; phones scroll a stacked page anyway. */
+@media (min-width: 768px) and (max-height: 720px) {
+  .home-status { display: none; }
+  .home-name { margin-top: 0; }
+  .home-cols { margin-top: 1.25rem; }
+  .col-head { padding-bottom: 0.625rem; margin-bottom: 0.75rem; }
+  .soon-radar { width: 4.25rem; height: 4.25rem; }
+  .soon-kicker { margin-top: 0.625rem; }
+  .soon-topics { display: none; }
+  .journey-thumb { aspect-ratio: 5 / 2; }
+}
+
+/* ---- Space Journey ---- */
+/* The flight's own first frame, 2:1 so it costs the panel as little height as
+   possible. A container-sized box, so --r-3; the play badge is the one round
+   thing here because a circle-with-a-triangle IS the meaning. */
+.journey-hero { position: relative; margin: 0 0 1rem; }
+.journey-thumb {
+  position: relative; display: block; width: 100%; margin: 0; padding: 0;
+  aspect-ratio: 2 / 1; overflow: hidden;
+  border: 1px solid rgba(255,140,90,0.3); border-radius: 12px; background: #000;
+  box-shadow: 0 22px 50px -26px rgba(255,106,61,0.55);
+}
+.journey-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform var(--dur-3) var(--ease-out); }
+button.journey-thumb { cursor: pointer; }
+button.journey-thumb:hover img { transform: scale(1.03); }
+.journey-play {
+  position: absolute; left: 50%; top: 50%; display: grid; place-items: center;
+  width: 2.5rem; height: 2.5rem; margin: -1.25rem 0 0 -1.25rem; padding-left: 2px;
+  border: 1px solid rgba(125,249,255,0.45); border-radius: var(--r-round);
+  background: rgba(8,9,11,0.55); color: var(--cyan-bright);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  transition: background var(--dur-1) ease, border-color var(--dur-1) ease;
+}
+button.journey-thumb:hover .journey-play { background: rgba(76,201,240,0.18); border-color: var(--cyan-bright); }
+
+.journey-intro {
+  position: absolute; left: 1px; right: 1px; bottom: 1px; pointer-events: none;
+  padding: 1.5rem 0.75rem 0.5rem; border-radius: 0 0 11px 11px;
+  background: linear-gradient(to top, rgba(8,9,11,0.88), rgba(8,9,11,0.55) 55%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--hud);
+}
+.journey-paper { margin-top: 1rem; font-size: 0.75rem; color: var(--faint); }
+/* The one loud control on the page: the launch, in the rocket's ember. */
+.launch-btn {
+  width: 100%; padding: 0.8125rem 1rem; border-radius: 12px;
+  border: 1px solid rgba(255,150,100,0.6);
+  background: linear-gradient(135deg, #ff6a3d, #ff9a4d);
+  color: #1a0b05; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.01em;
+  box-shadow: 0 12px 32px -12px rgba(255,106,61,0.75), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.btn.launch-btn:hover:not(:disabled) {
+  translate: 0 -1px; border-color: rgba(255,190,150,0.9);
+  background: linear-gradient(135deg, #ff7a4d, #ffab5e);
+  box-shadow: 0 16px 42px -12px rgba(255,106,61,0.9), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+.launch-btn:disabled { opacity: 0.7; }
+.journey-paper a {
+  color: var(--dim); text-decoration: underline; text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px; transition: color var(--dur-1) ease;
+}
+.journey-paper a:hover { color: var(--ink); }
+
+/* The flight HUD's mark, now a button home. */
+.hudhome {
+  cursor: pointer; border-radius: var(--r-1); transition: opacity var(--dur-1) ease;
+  /* A 44px touch target around a 29x20 mark: padding grows the hit area,
+     the matching negative margin keeps the mark exactly where it was. */
+  padding: 0.75rem 0.5rem; margin: -0.75rem -0.5rem;
+}
+.hudhome:hover { opacity: 0.75; }
+
+/* ---- Articles: the index ---- */
+.artlist { list-style: none; margin: 0; padding: 0; }
+.artlist > li + li { border-top: 1px solid var(--rule); }
+.artrow { display: grid; gap: 0.3125rem; padding: 0.875rem 0; }
+.artlist > li:first-child .artrow { padding-top: 0; }
+.artrow:focus-visible { outline-offset: 4px; }
+.artrow-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.artrow-title {
+  font-size: 1rem; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--ink); text-wrap: balance;
+}
+.artrow-arrow {
+  margin-left: 0.4em; color: var(--faint);
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-1) ease;
+}
+.artrow:hover .artrow-arrow { transform: translateX(3px); color: var(--ink); }
+.artrow-summary { max-width: 60ch; font-size: 0.8125rem; line-height: 1.6; color: var(--dim); }
+.artmore {
+  display: inline-block; margin-top: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+  transition: color var(--dur-1) ease;
+}
+.artmore:hover { color: var(--ink); }
+.artlist-center .artrow { justify-items: center; text-align: center; }
+.artlist-center .artrow-summary { margin: 0 auto; }
+.artrow-draft {
+  margin-left: 0.75em; padding: 1px 5px; border: 1px solid rgba(255,92,55,0.4);
+  border-radius: var(--r-1); color: var(--accent);
+}
+
+/* ---- Articles: the reader ----
+   Larger type than anywhere else on the site on purpose: the rest is a dense
+   instrument, this is the one surface built for reading paragraphs. */
+.reader { min-height: 100dvh; padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
+.reader-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.875rem max(1.25rem, calc((100% - 40rem) / 2));
+  background: rgba(8,9,11,0.88); border-bottom: 1px solid var(--rule);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.reader-back, .reader-home {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase;
+  transition: color var(--dur-1) ease;
+}
+.reader-back { color: var(--dim); }
+.reader-home { color: var(--faint); }
+.reader-back:hover, .reader-home:hover { color: var(--ink); }
+.reader-col { max-width: 42.5rem; margin: 0 auto; padding: 3rem 1.25rem 0; }
+.reader-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.reader-title {
+  margin-top: 0.875rem; font-size: clamp(1.75rem, 4.5vw, 2.5rem); line-height: 1.15;
+  font-weight: 650; letter-spacing: -0.025em; color: var(--ink); text-wrap: balance;
+}
+.reader-dek {
+  margin-top: 1rem; padding-bottom: 2rem; margin-bottom: 2.25rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 1.0625rem; line-height: 1.6; color: var(--dim);
+}
+
+.prose-mc { font-size: 1.0625rem; line-height: 1.75; color: #d9d7d2; overflow-wrap: break-word; }
+.prose-mc > * + * { margin-top: 1.25em; }
+.prose-mc h2 {
+  margin-top: 2.2em; font-size: 1.375rem; line-height: 1.3; font-weight: 600;
+  letter-spacing: -0.015em; color: var(--ink);
+}
+.prose-mc h3 { margin-top: 1.8em; font-size: 1.125rem; line-height: 1.4; font-weight: 600; color: var(--ink); }
+.prose-mc h2 + *, .prose-mc h3 + * { margin-top: 0.6em; }
+.prose-mc a {
+  color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px;
+  text-decoration-color: rgba(76,201,240,0.55); text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-1) ease;
+}
+.prose-mc a:hover { text-decoration-color: var(--cyan-bright); }
+.prose-mc strong { font-weight: 600; color: var(--ink); }
+.prose-mc ul, .prose-mc ol { padding-left: 1.25em; }
+.prose-mc ul { list-style: disc; }
+.prose-mc ol { list-style: decimal; }
+.prose-mc li + li { margin-top: 0.4em; }
+.prose-mc li::marker { color: var(--faint); }
+.prose-mc blockquote {
+  border-left: 2px solid var(--cyan); padding-left: 1.1em;
+  font-size: 1.125rem; color: var(--ink);
+}
+.prose-mc code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em;
+  padding: 0.1em 0.35em; background: var(--raised); border: 1px solid var(--rule); border-radius: var(--r-1);
+}
+.prose-mc pre {
+  overflow-x: auto; padding: 1rem 1.125rem; font-size: 0.875rem; line-height: 1.6;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-3);
+}
+.prose-mc pre code { padding: 0; background: none; border: 0; font-size: inherit; }
+.prose-mc img { max-width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--r-3); }
+.prose-mc hr { margin: 2.5em 0; border: 0; border-top: 1px solid var(--rule); }
+.prose-mc table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.prose-mc th, .prose-mc td { padding: 0.5em 0.75em; border-bottom: 1px solid var(--rule); text-align: left; }
+.prose-mc th { color: var(--ink); font-weight: 600; }
+
+.reader-more { display: grid; gap: 0.75rem; margin-top: 3.5rem; }
+@media (min-width: 640px) { .reader-more { grid-template-columns: 1fr 1fr; } }
+.reader-next {
+  display: grid; gap: 0.375rem; padding: 1rem 1.125rem;
+  border: 1px solid var(--rule); border-radius: var(--r-3); background: var(--panel);
+  transition: border-color var(--dur-1) ease;
+}
+.reader-next:hover { border-color: var(--rule-strong); }
+.reader-next-r { text-align: right; }
+.reader-next-k {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint);
+}
+.reader-next-t { font-size: 0.875rem; font-weight: 500; color: var(--ink); }
+.reader-foot { margin-top: 2rem; }
+
+/* ---- Artifacts: the ring ----
+   The stage holds the perspective; the ring is a zero-size preserve-3d
+   pivot the windows stand around; each window is rotated to its slot and
+   pushed out by the radius. Side windows are dimmed by a veil whose
+   strength the rAF loop writes as --veil, and the stage's edges fade out
+   with a mask so a wide ring never hard-clips against its column. */
+.ring-stage {
+  position: relative; perspective: 900px; perspective-origin: 50% 25%;
+  touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+}
+.ring-stage.single { -webkit-mask-image: none; mask-image: none; }
+/* The compact ring opens the big view on click, so it says so on hover;
+   dragging still turns it (grabbing). The big one turns, so it grabs. */
+.ring-stage:not(.big) { cursor: zoom-in; }
+.ring-stage.big { --bar: 30px; }
+.ring-stage.dragging { cursor: grabbing; }
+/* Not `.ring`: that is a Tailwind utility (a 3px blue box-shadow), and on
+   this 0×0 pivot it painted as a small blue square in the middle of the ring. */
+.ring-pivot { position: absolute; left: 50%; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
+.ring-card { position: absolute; top: 0; left: 0; transform-style: preserve-3d; }
+/* A narrow window has no room for a legible address; a clipped "camc…" is
+   noise, so below 200px the title bar keeps just its three dots. */
+.ring-face { container-type: inline-size; }
+@container (max-width: 200px) { .win-url { visibility: hidden; } }
+.ring-face, .ring-back { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+/* Opaque, and 1px inside the front face: a translucent back let the far
+   window's screenshot bleed through it, mirrored. */
+.ring-back {
+  position: absolute; inset: 0; transform: rotateY(180deg) translateZ(1px); pointer-events: none;
+  background: #0b0d10; border: 1px solid var(--rule); border-radius: var(--r-3);
+}
+.ring-card .win::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: var(--ground); opacity: var(--veil, 0);
+}
+/* Controls ride on the stage: arrows over its faded edges, level with the
+   front window; pause tucked in the bottom-right corner. Positioned with
+   top/left rather than a transform, because .btn's press is a transform. */
+.ring-shell { position: relative; }
+.ring-btn {
+  position: absolute; z-index: 2; display: grid; place-items: center; width: 1.75rem; height: 1.75rem;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-2);
+  background: var(--panel); color: var(--ink); font-size: 0.75rem;
+}
+.ring-prev { left: 0; top: calc(50% - 0.875rem); }
+.ring-next { right: 0; top: calc(50% - 0.875rem); }
+.ring-pause { right: 0; bottom: 0; width: 1.5rem; height: 1.5rem; color: var(--dim); }
+.ringwrap.big .ring-btn { width: 2.25rem; height: 2.25rem; font-size: 0.875rem; }
+.ringwrap.big .ring-prev, .ringwrap.big .ring-next { top: calc(50% - 1.125rem); }
+.ring-caption { margin-top: 0.75rem; }
+.ring-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint);
+}
+.ring-title { margin-top: 0.375rem; font-size: 0.9375rem; line-height: 1.375rem; font-weight: 600; color: var(--ink); }
+.ring-title a { transition: color var(--dur-1) ease; }
+.ring-title a:hover { color: #fff; }
+.ring-title-arrow {
+  display: inline-block; margin-left: 0.3em; color: var(--faint);
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-1) ease;
+}
+.ring-title a:hover .ring-title-arrow { transform: translate(1px, -1px); color: var(--cyan-bright); }
+.ring-blurb {
+  max-width: 26rem; margin: 0.25rem auto 0;
+  font-size: 0.8125rem; line-height: 1.55; color: var(--dim); text-wrap: balance;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+
+.win {
+  position: relative; overflow: hidden; background: var(--panel);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-3);
+  box-shadow: 0 28px 60px -28px rgba(0,0,0,0.85);
+}
+.win-bar {
+  display: flex; align-items: center; gap: 0.625rem; height: var(--bar, 22px); padding: 0 0.5rem;
+  background: var(--raised); border-bottom: 1px solid var(--rule);
+}
+.win-dots, .win-dots-spacer { display: flex; flex: none; gap: 5px; width: 28px; }
+.win-dots i { width: 6px; height: 6px; border-radius: var(--r-round); background: rgba(255,255,255,0.16); }
+.win-url {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+  padding: 0 8px; border: 1px solid var(--rule); border-radius: var(--r-2); background: rgba(255,255,255,0.025);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.625rem; line-height: 0.875rem;
+  color: var(--faint);
+}
+.win-view { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; background: var(--ground); }
+.win-view img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.win-ph {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 1.5rem;
+  background:
+    radial-gradient(70% 60% at 50% 110%, rgba(76,201,240,0.10), transparent 70%),
+    linear-gradient(to right, rgba(255,255,255,0.035) 1px, transparent 1px) 0 0 / 2rem 2rem,
+    linear-gradient(to bottom, rgba(255,255,255,0.035) 1px, transparent 1px) 0 0 / 2rem 2rem;
+}
+.win-ph-title {
+  font-size: clamp(1.125rem, 2.2vw, 1.625rem); line-height: 1.1; font-weight: 600;
+  letter-spacing: -0.02em; text-align: center; color: var(--ink); text-wrap: balance;
+}
+/* ---- the big view (theater) ----
+   A modal panel over a dimmed, blurred page. Same material as the home
+   panels, just larger; the ring inside it is the same component at a
+   bigger size, with a full caption. */
+.theater {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+.theater-backdrop {
+  position: absolute; inset: 0; background: rgba(4,5,7,0.8);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  animation: fadein var(--dur-2) ease both;
+}
+.theater-panel {
+  position: relative; width: min(100%, 68rem); max-height: 100%; overflow-y: auto;
+  padding: 1.125rem 1.5rem 1.75rem; text-align: center;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-3);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 30%), #0d0f13;
+  box-shadow: 0 40px 120px -24px rgba(0,0,0,0.9);
+  animation: theater-in var(--dur-3) var(--ease-out) both;
+}
+@keyframes theater-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.theater-head {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 0.625rem;
+  padding-bottom: 0.875rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--rule);
+}
+.theater-close {
+  position: absolute; right: 0; top: 0; display: grid; place-items: center;
+  width: 1.875rem; height: 1.875rem; border: 1px solid var(--rule-strong); border-radius: var(--r-2);
+  background: var(--panel); color: var(--dim);
+}
+.theater-close:hover { color: var(--ink); }
+/* The expanded view's caption: a spec sheet. Lead on the left, labelled
+   rows on the right, one hairline above the pair; stacked under 768px. */
+.sheet {
+  display: grid; gap: 1.5rem 3rem; max-width: 62rem; margin: 1rem auto 0;
+  padding-top: 1.25rem; border-top: 1px solid var(--rule); text-align: left;
+}
+@media (min-width: 768px) { .sheet { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr); } }
+.sheet-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.08em; color: var(--faint);
+}
+.sheet-title {
+  margin-top: 0.5rem; font-size: 1.625rem; line-height: 1.15; font-weight: 600;
+  letter-spacing: -0.025em; color: var(--ink); text-wrap: balance;
+}
+.sheet-blurb {
+  margin-top: 0.625rem; max-width: 28rem;
+  font-size: 0.9375rem; line-height: 1.55; color: #b9bec6; text-wrap: pretty;
+}
+.sheet-tags { display: flex; flex-wrap: wrap; gap: 0.375rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.sheet-tags li {
+  padding: 3px 7px; border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+}
+.sheet-tags li.is-demo { color: var(--hud); border-color: rgba(154,220,255,0.3); }
+.sheet-visit {
+  display: inline-flex; align-items: center; gap: 0.375rem; margin-top: 1.125rem;
+  font-size: 0.8125rem; font-weight: 500; color: var(--ink);
+  text-decoration: underline; text-decoration-color: rgba(76,201,240,0.5);
+  text-underline-offset: 4px; text-decoration-thickness: 1px;
+  transition: text-decoration-color var(--dur-1) ease, color var(--dur-1) ease;
+}
+.sheet-visit:hover { color: #fff; text-decoration-color: var(--cyan-bright); }
+.sheet-private { margin-top: 1.125rem; font-size: 0.8125rem; color: var(--faint); }
+.sheet-rows { margin: 0; }
+.sheet-rows > div {
+  display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 1.25rem;
+  padding: 0.6875rem 0; border-top: 1px solid var(--rule);
+}
+.sheet-rows > div:first-child { padding-top: 0.125rem; border-top: 0; }
+.sheet-rows dt {
+  padding-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--hud);
+}
+.sheet-rows dd { margin: 0; font-size: 0.875rem; line-height: 1.55; color: #b4bac2; text-wrap: pretty; }
+@media (max-width: 520px) {
+  .sheet-rows > div { grid-template-columns: 1fr; gap: 0.25rem; }
+}
+.ring-stage.big .win-dots i { width: 8px; height: 8px; }
+.ring-stage.big .win-dots, .ring-stage.big .win-dots-spacer { gap: 6px; width: 36px; }
+.ring-stage.big .win-url { font-size: 0.6875rem; line-height: 1.125rem; padding: 1px 10px; }
+.ring-stage.big .win-ph-title { font-size: clamp(1.5rem, 3vw, 2.5rem); }
+
+/* Articles in the big view: left-aligned for reading, at a reading measure. */
+.theater-start { position: absolute; left: 0; top: 0; }
+.theater-back {
+  display: inline-flex; align-items: center; gap: 0.375rem; height: 1.875rem; padding: 0 0.75rem;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-2); background: var(--panel);
+  font-size: 0.75rem; color: var(--dim);
+}
+.theater-back:hover:not(:disabled) { color: var(--ink); }
+.theater-panel:focus { outline: none; }
+.theater-list, .theater-article { max-width: 42rem; margin: 0 auto; text-align: left; }
+.theater-list .artrow-title { font-size: 1.125rem; }
+.theater-list .artrow-summary { font-size: 0.875rem; }
+.theater-article { padding: 0.5rem 0 0.5rem; }
+.theater-article .reader-title { font-size: clamp(1.5rem, 3.5vw, 2.125rem); }
+.theater-article-foot {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+}
+.theater-article-foot .artmore { margin-top: 0; }
+
+/* ==== /work — the proof-of-work page =======================================
+   A reading page, not an experience: one column, the same type and material
+   as the reader. index.html's .mc-work mirrors .workpage + .work-head so the
+   prerendered header paints where React puts it. */
+.workpage {
+  max-width: 46rem; margin: 0 auto; min-height: 100dvh;
+  padding: clamp(2.5rem, 8vh, 5rem) 1.25rem calc(4rem + env(safe-area-inset-bottom));
+}
+.work-group { margin-top: 2.75rem; }
+.work-group-title {
+  display: flex; align-items: baseline; gap: 0.5rem; padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--hud);
+}
+.work-list { margin: 0; padding: 0; list-style: none; }
+.work-item { padding: 1.25rem 0; border-bottom: 1px solid var(--rule); }
+.work-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.625rem; }
+.work-title { font-size: 1.125rem; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.work-chip {
+  padding: 2px 6px; border: 1px solid var(--rule-strong); border-radius: var(--r-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+}
+.work-chip.is-wip, .work-chip.is-demo { color: var(--hud); border-color: rgba(154,220,255,0.3); }
+.work-pillars {
+  margin-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint);
+}
+.work-summary { margin-top: 0.625rem; max-width: 62ch; font-size: 0.9375rem; line-height: 1.6; color: #c3c8cf; }
+.work-key { margin-top: 0.5rem; font-size: 0.875rem; font-weight: 600; color: var(--ink); }
+.work-links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-top: 0.75rem; font-size: 0.8125rem; }
+.work-links a {
+  color: var(--ink); text-decoration: underline; text-decoration-color: rgba(76,201,240,0.5);
+  text-underline-offset: 4px; text-decoration-thickness: 1px;
+  transition: text-decoration-color var(--dur-1) ease, color var(--dur-1) ease;
+}
+.work-links a:hover { color: #fff; text-decoration-color: var(--cyan-bright); }
+.work-note { margin-top: 0.5rem; font-size: 0.75rem; color: var(--faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .artrow-arrow, .artmore, .reader-next, .reader-back, .reader-home,
+  .prose-mc a, .hudhome, .journey-paper a, .ring-title a, .ring-title-arrow,
+  .journey-thumb img, .journey-play, .sheet-visit, .work-links a,
+  .home-card, .launch-btn { transition: none !important; }
+  .home-status-dot, .soon-radar::before, .soon-radar::after { animation: none !important; }
+  .theater-backdrop, .theater-panel { animation: none !important; }
+}
+
+/* ==== FLIGHT ACCENTS — the lobby's pop, carried aboard =====================
+   Each station panel is lit in the colour of the body it docks at (a
+   hue-<kind> class from src/flight/hues.ts), and the rail's current diamond
+   follows the docked station (--hue-now, set on the rail by Rail). Everything here is paint on DOM chrome that already existed —
+   no new layers over the canvas, no backdrop-filter, nothing per-frame — so
+   the 3D budget is untouched. Last in the file on purpose: these restate
+   earlier rules at the same specificity and win on source order. */
+
+/* The surface is rounder; its colour is per planet, written out as literal
+   rules in src/flight/hues.ts (HUE_CSS) — not rgba(var(--hue)) here, because
+   the element it paints is restyled every frame by Framer Motion and var()
+   values are re-parsed on every restyle (measured; see hues.ts). For the
+   same reason there are no pseudo-elements on it: the inset highlight in
+   HUE_CSS is the lit top edge. */
+.panelwrap :has(> .panel) { border-radius: 14px; }
+.panel { border-radius: 14px; }
+
+/* The station name is set in the display face, like the lobby's panel
+   titles. (Its dot's colour is per planet, in HUE_CSS.) */
+.stn-title { font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
+
+/* The rail's "you are here" diamond takes the docked planet's colour. */
+.rail button[aria-current='step'] .dot {
+  border-color: rgb(var(--hue-now, 76,201,240));
+  background: rgb(var(--hue-now, 76,201,240));
+  box-shadow: 0 0 12px rgba(var(--hue-now, 76,201,240), 0.85);
+}
+
+/* Advance is the flight's launch control — the lobby's ember button, small. */
+.advance-btn {
+  border: 1px solid rgba(255, 150, 100, 0.6); border-radius: var(--r-2);
+  background: linear-gradient(135deg, #ff6a3d, #ff9a4d);
+  color: #1a0b05; font-weight: 700;
+  box-shadow: 0 8px 24px -10px rgba(255, 106, 61, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.btn.advance-btn:hover:not(:disabled) {
+  translate: 0 -1px; border-color: rgba(255, 190, 150, 0.9);
+  background: linear-gradient(135deg, #ff7a4d, #ffab5e);
+  box-shadow: 0 12px 30px -10px rgba(255, 106, 61, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advance-btn { transition: none !important; }
+}
+

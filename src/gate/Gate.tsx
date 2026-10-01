@@ -1,202 +1,180 @@
 import { useState } from 'react';
 import { ENV_PRESENT, OFFLINE_DEV } from '../lib/supabase';
-import { prefetchSupabase, beginVisit, type GateFields } from '../lib/gate';
+import { prefetchSupabase, beginVisit } from '../lib/gate';
 import { ErrorState } from '../ui/primitives';
 
 /**
- * The splash — and as of round 23 it is a sign-in, not a gate. Two optional
- * fields (name, company) and one button that always opens: there is no access
- * code, nothing is required, and "Begin the flight" works with the form left
- * blank. The name/company still ride to the logbook so the owner can see who
- * came, but they are a courtesy the visitor may decline, not a toll. The PDF
- * remains a first-class second exit. The Supabase chunk warms while the
- * visitor reads; the flight chunk stays unfetched until they press the
- * button — the same lazy-load ordering, now an optimization rather than a
- * lock.
+ * The Space Journey column of the home page (see home/Home.tsx). As of the
+ * three-column home it asks for nothing: one button that always opens. The
+ * visit is still logged (begin_visit with a blank name and company, which
+ * the RPC has accepted since round 23), so the dashboard's funnel keeps
+ * counting how far people fly — it just no longer knows who they are. The
+ * PDF remains a first-class second exit. The Supabase chunk warms when the
+ * pointer or focus reaches the button; the flight chunk stays unfetched
+ * until it is pressed.
  */
 
 type Status = 'idle' | 'checking' | 'rate_limited' | 'unreachable';
 
-// `focus:outline-none` used to live at the end of this string, leaving keyboard
-// users with a 1px border shift as their only focus feedback on the one form
-// every visitor has to fill in. axe never flagged it (the contrast change
-// technically exists), which is exactly why it survived. The real indicator is
-// in GATE_CSS below, shaped like the systemized :focus-visible rule in
-// polish.css — same 2px, same 2px offset — only brighter, because this form is
-// the site's front door.
-const field =
-  'gate-field w-full rounded border border-rule bg-panel px-3 py-2.5 text-base text-ink ' +
-  'placeholder:text-faint transition-colors focus:border-rule-strong';
-
 /**
- * The gate's backdrop, and the reason it is CSS instead of anything else.
+ * The home page's sky — deep space, drawn entirely in CSS.
  *
- * The entry chunk is deliberately Framer-free, Supabase-free and three.js-free,
- * and the headline is pre-rendered in index.html so first paint never waits for
- * JS (FCP 1222ms, Lighthouse 100). Any hint of what's behind the door therefore
- * has to cost approximately nothing: no image, no font, no dependency, no
- * request, and nothing layered over the headline that could delay or fade it.
- * Four painted layers on one fixed, pointer-events-none element is what's left
- * — a masked hairline grid, a few stars, two horizon arcs and a slow glow off
- * the pad. It should read as an instrument at rest, not as a landing page.
+ * It replaced a hairline grid and two horizon arcs that, behind three dark
+ * boxes, read as bars on a window (owner: "it looks like a prison cell").
+ * Now: two nebula glows, three star layers (small, medium, bright) placed by
+ * a seeded generator so the field is identical on every visit, a slow
+ * twinkle on the bright layer, a shooting star every few seconds, and a
+ * planet's lit limb under the panels with its atmosphere glowing up into
+ * the page.
  *
- * Co-located here rather than in ui/polish.css because it is the only surface
- * in the product that uses it, and the gate is the one screen whose bytes are
- * counted.
+ * Cost discipline is unchanged from the gate it replaced: no image, no font,
+ * no request, nothing over the pre-rendered headline. Stars are box-shadows
+ * on three 1px nodes; everything that moves animates opacity or transform on
+ * its own layer. Reduced motion stops all of it and leaves the composition.
  */
-const GATE_CSS = `
-.gate-sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-.gate-sky > div { position: absolute; inset: 0; }
-
-/* Telemetry grid, masked to a pool around the bottom centre so it reads as a
-   ground plane under the form rather than graph paper behind it. */
-.gate-grid {
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,0.032) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.032) 1px, transparent 1px);
-  background-size: 76px 76px;
-  -webkit-mask-image: radial-gradient(112% 80% at 50% 106%, #000 6%, rgba(0,0,0,0.4) 44%, transparent 76%);
-  mask-image: radial-gradient(112% 80% at 50% 106%, #000 6%, rgba(0,0,0,0.4) 44%, transparent 76%);
-}
-
-/* Stars: 24 box-shadows on a single 1px node, offset in vw/vh so the field
-   re-lays itself at every viewport instead of clumping in one corner. Placed
-   from a jittered grid, not random — random reads as noise, jittered reads as
-   sky. No twinkle: a blinking field on the first screen is decoration. */
-.gate-stars {
-  inset: auto auto auto 0; top: 0; width: 1px; height: 1px; border-radius: 50%;
-  box-shadow:
-    30.2vw 12.2vh 0 0 rgba(232,246,255,0.28),
-    45.5vw 10.3vh 0 0 rgba(232,246,255,0.18),
-    55.3vw 3.0vh 0 0 rgba(232,246,255,0.31),
-    92.0vw 4.6vh 0 0 rgba(232,246,255,0.24),
-    4.9vw 22.0vh 0 0 rgba(232,246,255,0.28),
-    20.7vw 28.2vh 0 0 rgba(232,246,255,0.42),
-    41.1vw 24.0vh 0 0 rgba(232,246,255,0.49),
-    77.5vw 30.6vh 0 0 rgba(232,246,255,0.38),
-    90.1vw 20.5vh 0 0 rgba(232,246,255,0.29),
-    6.6vw 38.7vh 0 0 rgba(232,246,255,0.29),
-    26.4vw 40.7vh 0 0 rgba(232,246,255,0.22),
-    44.2vw 40.3vh 0 0 rgba(232,246,255,0.28),
-    53.9vw 44.6vh 0 0 rgba(232,246,255,0.42),
-    96.7vw 40.6vh 0 0 rgba(232,246,255,0.27),
-    21.2vw 58.2vh 0 0 rgba(232,246,255,0.49),
-    44.7vw 53.6vh 0 0 rgba(232,246,255,0.20),
-    53.6vw 63.6vh 0 0 rgba(232,246,255,0.42),
-    80.6vw 64.1vh 0 0 rgba(232,246,255,0.34),
-    85.9vw 64.6vh 0 0 rgba(232,246,255,0.24),
-    4.4vw 73.6vh 0 0 rgba(232,246,255,0.20),
-    22.3vw 72.0vh 0 0 rgba(232,246,255,0.34),
-    46.6vw 74.5vh 0 0 rgba(232,246,255,0.34),
-    60.5vw 78.0vh 0 0 rgba(232,246,255,0.50),
-    72.4vw 77.2vh 0 0 rgba(232,246,255,0.43);
-}
-
-/* Two elliptical hairlines, centred well below the viewport: the near one
-   grazes the bottom at ~91% height (a planet limb you're standing on), the far
-   one crosses at ~66% (an orbit you haven't flown yet). Drawn as gradient
-   stops rather than a giant bordered circle so the geometry stays
-   viewport-relative and can never introduce a scrollbar.
-   The stop pairs are deliberately ~0.4% and ~0.27% of each ellipse's vertical
-   radius — about 2px of line. The first pass used 2.6% and 1.4%, which
-   rendered as 15px of soft haze: it read as weather, not as an instrument, and
-   the whole point of this backdrop is that it looks drawn rather than smeared.
-   The form's inputs and buttons are opaque, so the arcs pass BEHIND them and
-   only show in the gaps — which is why crossing the CTA is fine. */
-.gate-limb {
-  background:
-    radial-gradient(140% 62% at 50% 133%, transparent 67.75%, rgba(154,220,255,0.34) 67.88%, rgba(154,220,255,0.34) 68.02%, transparent 68.15%),
-    radial-gradient(155% 150% at 50% 190%, transparent 82.57%, rgba(154,220,255,0.13) 82.66%, rgba(154,220,255,0.13) 82.75%, transparent 82.84%);
-}
-
-/* Below Tailwind's sm hinge the field grid collapses to one column and the
-   form fills the viewport top to bottom, so there is no clear band left for
-   the far orbit — at 390x844 it cut straight through the ACCESS CODE label and
-   read as clutter rather than depth. Narrow viewports keep one arc, pushed
-   down to graze the bottom edge behind the paper row. */
-@media (max-width: 640px) {
-  .gate-limb {
-    background:
-      radial-gradient(150% 60% at 50% 140%, transparent 70.66%, rgba(154,220,255,0.30) 70.75%, rgba(154,220,255,0.30) 70.91%, transparent 71%);
+function starLayer(count: number, seed: number, alpha: [number, number], size = 0): string {
+  // mulberry32 — tiny, seeded, good enough to scatter stars.
+  let t = seed >>> 0;
+  const rnd = () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const x = (rnd() * 100).toFixed(2);
+    const y = (rnd() * 100).toFixed(2);
+    const a = (alpha[0] + rnd() * (alpha[1] - alpha[0])).toFixed(2);
+    const tint = rnd() < 0.18 ? '255,214,170' : rnd() < 0.3 ? '170,205,255' : '232,246,255';
+    out.push(`${x}vw ${y}vh 0 ${size}px rgba(${tint},${a})`);
   }
+  return out.join(',');
 }
 
-/* The pad: cold instrument light off the limb with one ember of the rocket
-   accent inside it. The only moving thing on the screen, and it moves on a
-   24s cycle — slow enough that you notice it the second time you look, which
-   is the entire brief. Opacity only, one composited layer, no reflow. */
-.gate-glow {
+const GATE_CSS = `
+.gate-sky {
+  position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
   background:
-    radial-gradient(52% 34% at 50% 100%, rgba(76,201,240,0.13), rgba(76,201,240,0.035) 46%, transparent 72%),
-    radial-gradient(26% 17% at 50% 103%, rgba(255,92,55,0.10), transparent 70%);
-  animation: gate-breathe 24s ease-in-out infinite;
+    radial-gradient(55% 45% at 12% 8%, rgba(76,201,240,0.10), transparent 70%),
+    radial-gradient(45% 40% at 88% 14%, rgba(150,120,255,0.10), transparent 72%),
+    radial-gradient(60% 40% at 70% 60%, rgba(255,92,55,0.045), transparent 70%),
+    #06070a;
 }
-@keyframes gate-breathe { 0%, 100% { opacity: 0.58; } 50% { opacity: 1; } }
+.gate-sky > div { position: absolute; }
 
-/* The focus indicator the entry form was missing. Same geometry as the
-   systemized :focus-visible in polish.css (2px, 2px offset) so nothing about
-   focus looks bespoke here — ink instead of dim only because this is the front
-   door. :focus-visible rather than :focus is deliberate even though it changes
-   nothing for these five elements — per spec a text input matches
-   :focus-visible however it was focused, mouse included, and a caret already
-   tells that user where they are. The selector is chosen so the rule reads the
-   same as every other focus rule in the product, and so it stays correct if a
-   non-text control ever wears this class. */
-.gate-field:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-  border-color: var(--rule-strong);
+/* Three star layers on 1px nodes. Sizes come from the shadow spread. */
+.gate-stars { left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; }
+.gate-stars.s1 { box-shadow: ${starLayer(150, 7, [0.18, 0.5])}; }
+.gate-stars.s2 { box-shadow: ${starLayer(55, 31, [0.35, 0.7], 0.6)}; }
+.gate-stars.s3 { box-shadow: ${starLayer(16, 97, [0.6, 0.95], 1.2)}; animation: gate-twinkle 5.5s ease-in-out infinite; }
+@keyframes gate-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Shooting stars: a thin bright streak that crosses and fades. Two, offset,
+   on long cycles so the sky is mostly still and occasionally alive. */
+.gate-meteor {
+  width: 140px; height: 1px; opacity: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(220,240,255,0.9));
+  transform: rotate(-18deg);
+  animation: gate-meteor 9s ease-in infinite;
+}
+.gate-meteor.m1 { left: 62%; top: 12%; animation-delay: 2.5s; }
+.gate-meteor.m2 { left: 18%; top: 26%; animation-delay: 7.2s; animation-duration: 13s; }
+@keyframes gate-meteor {
+  0% { opacity: 0; transform: rotate(-18deg) translateX(0); }
+  2% { opacity: 1; }
+  7% { opacity: 0; transform: rotate(-18deg) translateX(-320px); }
+  100% { opacity: 0; transform: rotate(-18deg) translateX(-320px); }
 }
 
-/* The mandate, same as polish.css's block: everything above is optional to the
-   user's nervous system. The glow's resting opacity is 1 with the animation
-   off, so killing it leaves the composition intact rather than blank. */
+/* The planet under the panels: a huge disc whose top edge is the lit limb,
+   an atmosphere bloom above it, and the night side below. */
+.gate-planet {
+  left: 50%; bottom: -118vh; width: 240vw; height: 140vh; margin-left: -120vw;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, #04060a 96%, rgba(4,6,10,0) 100%);
+  box-shadow:
+    0 -1px 0 0 rgba(154,220,255,0.55),
+    0 -10px 40px -6px rgba(76,201,240,0.45),
+    0 -40px 120px -20px rgba(76,201,240,0.25),
+    inset 0 18px 60px -30px rgba(120,210,255,0.35);
+}
+.gate-glow {
+  left: 0; right: 0; bottom: 0; height: 45vh;
+  background: radial-gradient(60% 70% at 50% 100%, rgba(76,201,240,0.16), rgba(76,201,240,0.04) 50%, transparent 75%);
+  animation: gate-breathe 18s ease-in-out infinite;
+}
+@keyframes gate-breathe { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .gate-glow { animation: none !important; }
+  .gate-stars.s3, .gate-glow { animation: none !important; }
+  .gate-meteor { display: none; }
 }
 `;
 
-/** Rendered by every pre-flight screen (gate, restore skeleton, unreachable)
- *  so the backdrop is continuous across them and nothing pops in when the
- *  session check resolves. aria-hidden: it is scenery, and scenery that
- *  announces itself is a bug. */
+/** Rendered behind the home page (every state of it). aria-hidden: it is
+ *  scenery, and scenery that announces itself is a bug. */
 export function GateSky() {
   return (
     <>
       <style>{GATE_CSS}</style>
       <div className="gate-sky" aria-hidden="true">
-        <div className="gate-grid" />
-        <div className="gate-stars" />
-        <div className="gate-limb" />
+        <div className="gate-stars s1" />
+        <div className="gate-stars s2" />
+        <div className="gate-stars s3" />
+        <div className="gate-meteor m1" />
+        <div className="gate-meteor m2" />
         <div className="gate-glow" />
+        <div className="gate-planet" />
       </div>
     </>
   );
 }
 
-function Label({ children, htmlFor }: { children: string; htmlFor: string }) {
+/** The Space Journey column's thumbnail and one line of pitch, shared by
+ *  every state of it (button, restore skeleton, resume, unreachable) so the
+ *  column never reflows while the session check resolves.
+ *
+ *  The thumbnail is a real frame of the flight — station 01, Earth with the
+ *  route's planets lined up ahead — captured from the running app with the
+ *  DOM chrome hidden. With `onLaunch` it is a pointer shortcut for the button
+ *  below it (aria-hidden and out of the tab order: the button is the real
+ *  control); without, it is just the picture. */
+export function JourneyIntro({ onLaunch }: { onLaunch?: (() => void) | undefined }) {
+  const img = (
+    <img src="/journey-thumb.jpg" alt="" width={800} height={400} decoding="async" draggable={false} />
+  );
+  // The pitch rides on the picture's lower edge rather than under it: the
+  // home page has to fit a laptop screen, and a separate paragraph cost the
+  // panel ~70px. It stays a real <p>, so screen readers still get it.
   return (
-    <label
-      htmlFor={htmlFor}
-      className="mb-1.5 block text-2xs uppercase tracking-widest text-faint"
-    >
-      {children}
-    </label>
+    <div className="journey-hero">
+      {onLaunch ? (
+        <button type="button" className="journey-thumb" onClick={onLaunch} tabIndex={-1} aria-hidden="true">
+          {img}
+          <span className="journey-play">
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              <path d="M3 1.5v9l7.5-4.5z" fill="currentColor" />
+            </svg>
+          </span>
+        </button>
+      ) : (
+        <div className="journey-thumb" aria-hidden="true">
+          {img}
+        </div>
+      )}
+      <p className="journey-intro">A flight through my career · about four minutes</p>
+    </div>
   );
 }
 
 export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
-  const [f, setF] = useState<GateFields>({ name: '', company: '' });
   const [status, setStatus] = useState<Status>('idle');
 
-  const set = (k: keyof GateFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setF((prev) => ({ ...prev, [k]: e.target.value }));
-
-  const submit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const begin = async () => {
     if (status === 'checking') return;
     setStatus('checking');
-    const res = await beginVisit(f);
+    const res = await beginVisit({ name: '', company: '' });
     if (res.ok) onUnlocked();
     else setStatus(res.reason);
   };
@@ -205,122 +183,110 @@ export function Gate({ onUnlocked }: { onUnlocked: () => void }) {
   // error for the owner, never an open gate for the visitor.
   if (!ENV_PRESENT && !OFFLINE_DEV) {
     return (
-      <Splash>
-        <div className="mt-8">
+      <>
+        <JourneyIntro />
+        <div className="mt-6">
           <ErrorState
             message="Mission Control is not configured — VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are missing from this deploy. The gate stays shut until they exist. See /api/env-check for the server's view."
             onRetry={() => window.location.reload()}
           />
         </div>
         <PaperRow />
-      </Splash>
+      </>
     );
   }
 
   return (
-    <Splash>
-      {OFFLINE_DEV && (
-        <p className="mt-4 inline-block border border-rule-strong px-2.5 py-1 font-mono text-2xs uppercase tracking-widest text-dim">
-          Offline preview — no Supabase configured; any code opens, nothing is logged
-        </p>
-      )}
+    <>
+      <JourneyIntro onLaunch={status === 'checking' ? undefined : () => void begin()} />
 
-      <form className="stagger mt-8" onSubmit={submit} noValidate>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="g-name">Name — optional</Label>
-            <input
-              id="g-name"
-              className={field}
-              autoComplete="name"
-              placeholder="Your name"
-              value={f.name}
-              onChange={set('name')}
-              onFocus={prefetchSupabase}
-            />
-          </div>
-          <div>
-            <Label htmlFor="g-company">Company — optional</Label>
-            <input
-              id="g-company"
-              className={field}
-              autoComplete="organization"
-              placeholder="Your organization"
-              value={f.company}
-              onChange={set('company')}
-              onFocus={prefetchSupabase}
-            />
-          </div>
-        </div>
-
+      <div className="stagger">
         {status === 'rate_limited' && (
-          <p className="mt-4 text-xs leading-relaxed text-accent">
+          <p className="mb-4 text-xs leading-relaxed text-accent">
             Too many launches from this network in the last minute. Please wait about a minute and
             try again, or view the résumé PDF below.
           </p>
         )}
 
         {status === 'unreachable' ? (
-          <div className="mt-5">
-            <ErrorState
-              message="The sign-in service is temporarily unreachable — an issue on this site, not on your end. Please retry in a moment, or view the résumé PDF below."
-              onRetry={() => void submit()}
-            />
-          </div>
+          <ErrorState
+            message="The flight's sign-in service is temporarily unreachable — an issue on this site, not on your end. Please retry in a moment, or view the résumé PDF below."
+            onRetry={() => void begin()}
+          />
         ) : (
           <button
-            type="submit"
-            className="btn primary mt-5 w-full border border-rule-strong bg-raised px-4 py-3 text-sm font-medium text-ink disabled:opacity-60"
+            id="begin-flight"
+            type="button"
+            className="btn launch-btn"
             disabled={status === 'checking'}
+            onClick={() => void begin()}
+            onPointerEnter={prefetchSupabase}
+            onFocus={prefetchSupabase}
           >
             {status === 'checking' ? 'Preparing the flight…' : 'Begin the flight →'}
           </button>
         )}
-      </form>
+      </div>
 
       <PaperRow />
-    </Splash>
-  );
-}
-
-function Splash({ children }: { children: React.ReactNode }) {
-  // No pagefade on the wrapper: this header is ALREADY on screen — index.html
-  // pre-renders the identical markup so first paint never waits for JS (and
-  // never fades from opacity 0, which suppresses FCP entirely). Only the form
-  // below staggers in. GateSky paints behind all of it and is deliberately
-  // NOT part of that choreography — a backdrop that fades in is a backdrop the
-  // pre-rendered headline had to wait for.
-  return (
-    <main className="grid min-h-dvh place-items-center px-5 py-12">
-      <GateSky />
-      <div className="relative z-10 w-full max-w-lg">
-        <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
-        {/* Name-led on purpose: this screen is Cameron Carpenter's, and the
-            headline says so before it says what the thing is. Must match
-            index.html's pre-render byte for byte so first paint is stable. */}
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-          Cameron Carpenter.
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          A résumé in performance marketing and client strategy — piloted, not scrolled, in
-          about four minutes. The two fields are optional; the résumé PDF is below for a quicker read.
+      {OFFLINE_DEV && (
+        <p className="mt-5 font-mono text-2xs uppercase tracking-widest text-faint">
+          Offline preview · nothing is logged
         </p>
-        {children}
-      </div>
-    </main>
+      )}
+    </>
   );
 }
 
-function PaperRow() {
+/** A visitor who already launched in this browser session: no second
+ *  logbook row — straight back to the station they left, or from the top. */
+export function ResumeFlight({
+  station,
+  onResume,
+  onRestart,
+}: {
+  station: number;
+  onResume: () => void;
+  onRestart: () => void;
+}) {
   return (
-    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-4">
-      <a
-        className="btn border border-rule bg-panel px-3.5 py-2 text-xs text-ink"
-        href="/resume.pdf"
-        download="Cameron-Carpenter-Resume.pdf"
-      >
-        Download résumé PDF
+    <>
+      <JourneyIntro onLaunch={onResume} />
+      <div className="stagger">
+        <button
+          type="button"
+          className="btn launch-btn"
+          onClick={onResume}
+        >
+          {station > 0 ? 'Resume the flight →' : 'Begin the flight →'}
+        </button>
+        {station > 0 && (
+          <p className="mt-3 text-xs text-faint">
+            <button
+              type="button"
+              className="underline decoration-rule-strong underline-offset-2 hover:text-dim"
+              onClick={onRestart}
+            >
+              Start again from liftoff
+            </button>
+          </p>
+        )}
+      </div>
+      <PaperRow />
+    </>
+  );
+}
+
+/** The quicker read, offered under every state of the journey column. A
+ *  quiet text link rather than a second boxed button: the flight is the
+ *  call to action here, the PDF is the alternative. */
+export function PaperRow() {
+  return (
+    <p className="journey-paper">
+      or{' '}
+      <a href="/resume.pdf" download="Cameron-Carpenter-Resume.pdf">
+        download the résumé PDF
       </a>
-    </div>
+    </p>
   );
 }

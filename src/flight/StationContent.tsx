@@ -1,8 +1,17 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from 'react';
-import { stations } from '../content/stations.js';
+import { stations, type StationArtifact } from '../content/stations.js';
+import { stationWork } from '../content/workView';
 
 export type Station = (typeof stations)[number];
+
+/** What a station actually shows: a live work.js item pointed at it wins
+ *  (stations never list their work artifacts themselves — work.js is the one
+ *  place), else the station's own artifact (Docking's contact link). */
+function artifactOf(station: Station): { artifact: StationArtifact; inProgress: string[] } {
+  const w = stationWork(station.id);
+  return { artifact: w.artifact ?? station.artifact, inProgress: w.inProgress };
+}
 
 /* ==== THE TOUCH FRAME — the one number, spelled once ======================
  * Where the phone ends, for the purpose of the evidence disclosure below.
@@ -92,7 +101,7 @@ export function StationContent({
    *  than into it. If that file ever opens up, invert this. */
   disclosure?: boolean;
 }) {
-  const a = station.artifact;
+  const { artifact: a, inProgress } = artifactOf(station);
 
   /* The bullets and the artifact — the "meat", and everything the disclosure
      hides. What stays above it is the code, the title and `proves`, which is
@@ -125,6 +134,16 @@ export function StationContent({
         ))}
       </ul>
 
+      {/* Work that exists but is not done yet: named, labelled, never linked. */}
+      {inProgress.map((t) => (
+        <p key={t} className="mt-4 flex max-w-prose items-center gap-2.5 text-xs text-dim">
+          <span className="rounded-sm border border-rule-strong px-1.5 py-0.5 font-mono text-2xs uppercase tracking-widest text-hud">
+            In progress
+          </span>
+          {t}
+        </p>
+      ))}
+
       {a.kind === 'link' && a.href && (
         <a
           className="btn primary mt-5 inline-flex items-center gap-2 rounded border border-rule-strong bg-raised px-3.5 py-2 text-xs text-ink"
@@ -142,7 +161,7 @@ export function StationContent({
       )}
 
       {a.kind === 'image' && a.src && (
-        <ArtifactDiagram src={a.src} alt={a.alt ?? station.title} title={station.title} />
+        <ArtifactDiagram src={a.src} alt={a.alt ?? station.title} title={station.title} caption={a.caption} />
       )}
 
       {a.kind === 'video' && a.videoSrc && (
@@ -166,7 +185,7 @@ export function StationContent({
   return (
     <>
       <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full border border-rule-strong" />
+        <span aria-hidden="true" className="stn-dot h-2 w-2 rounded-full border border-rule-strong" />
         <span className="font-mono text-2xs uppercase tracking-widest text-faint">
           {station.code}
         </span>
@@ -178,7 +197,7 @@ export function StationContent({
         <span aria-hidden="true" className="eyebrow-rule h-px flex-1 bg-rule" />
       </div>
 
-      <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink md:text-2xl">
+      <h2 className="stn-title mt-3 text-xl font-semibold tracking-tight text-ink md:text-2xl">
         {station.title}
       </h2>
 
@@ -249,7 +268,8 @@ function Evidence({ station, children }: { station: Station; children: ReactNode
      uppercase is CSS). It is a plain section header — "Overview" by default,
      plus the artifact's nature when there is one to open. A station can name
      its own section (Docking calls it "Contact"), which then stands alone. */
-  const noun = ARTIFACT_NOUN[station.artifact.kind];
+  const art = artifactOf(station).artifact;
+  const noun = art.noun ?? ARTIFACT_NOUN[art.kind];
   const summary = station.overview ?? `Overview${noun ? ` and ${noun}` : ''}`;
 
   return (
@@ -344,7 +364,18 @@ function Evidence({ station, children }: { station: Station; children: ReactNode
  * 820px the bar is display:none, so it is absent from the layout, from the
  * a11y tree and from the tab order, and the desktop deck is byte-identical.
  */
-function ArtifactDiagram({ src, alt, title }: { src: string; alt: string; title: string }) {
+function ArtifactDiagram({
+  src,
+  alt,
+  title,
+  caption,
+}: {
+  src: string;
+  alt: string;
+  title: string;
+  /** A line under the picture — what it is and, for a demo, that it is one. */
+  caption?: string | undefined;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const openerRef = useRef<HTMLAnchorElement>(null);
   // The viewer's copy of the asset is not mounted until it is first asked for.
@@ -387,6 +418,11 @@ function ArtifactDiagram({ src, alt, title }: { src: string; alt: string; title:
       <figure className="mt-5 max-w-prose overflow-hidden rounded-md border border-rule text-sm">
         {/* lazy: neighbouring panels mount before they're visible */}
         <img src={src} alt={alt} loading="lazy" className="block w-full" />
+        {caption && (
+          <figcaption className="border-t border-rule px-3 py-1.5 font-mono text-2xs uppercase tracking-widest text-faint">
+            {caption}
+          </figcaption>
+        )}
         {/* An <a> with a real href rather than a <button>, and the handler only
             preventDefaults once it has confirmed showModal exists: the viewer
             is the enhancement and the link is the floor. A browser without
@@ -453,6 +489,7 @@ function ArtifactDiagram({ src, alt, title }: { src: string; alt: string; title:
             <div className="min-w-0 flex-1">
               <p className="truncate font-mono text-2xs uppercase tracking-widest text-dim">
                 {title}
+                {caption ? ` — ${caption}` : ''}
               </p>
               <p className="truncate font-mono text-2xs uppercase tracking-widest text-faint">
                 Drag to pan — pinch to zoom

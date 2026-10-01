@@ -1,14 +1,22 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { logStation, restore } from '../lib/gate';
 import { ErrorState, PreflightConsole, SkLine, type PreflightRow } from '../ui/primitives';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
-import { Gate, GateSky } from './Gate';
+import { Home } from '../home/Home';
+import { Gate, JourneyIntro, PaperRow, ResumeFlight } from './Gate';
 
 /**
- * The unlock state machine. The flight module is lazy AND only ever rendered
- * after the server has blessed this session — so the content chunk is not
- * even fetched pre-redemption. URL games and forged sessionStorage both land
- * back at the gate; a dead Supabase lands at a Retry with the PDF in reach.
+ * The Space Journey tab, and the unlock state machine behind it. The flight
+ * module is lazy AND only ever rendered after the server has logged this
+ * visit — so the content chunk is not even fetched before the button. Forged
+ * sessionStorage lands back at the form; a dead Supabase lands at a Retry
+ * with the PDF in reach.
+ *
+ * This state machine renders the Space Journey column of the three-column
+ * home page. A session that has already launched comes back to the home
+ * page with a "Resume the flight" button rather than being dropped straight
+ * into WebGL — the flight is one of three things on the page now. The HUD's
+ * mark leads back here.
  */
 const Flight = lazy(() => import('../flight/Flight'));
 
@@ -16,65 +24,83 @@ type Phase =
   | { s: 'checking' }
   | { s: 'gate' }
   | { s: 'unreachable' }
+  | { s: 'resumable'; furthest: number }
   | { s: 'unlocked'; furthest: number };
 
 export function Experience() {
   const [phase, setPhase] = useState<Phase>({ s: 'checking' });
+  // Where the visitor actually is, so leaving and resuming lands on the
+  // same station rather than the start.
+  const lastStation = useRef(0);
 
   const attemptRestore = useCallback(() => {
     setPhase({ s: 'checking' });
     void restore().then((r) => {
-      if (r.state === 'valid') setPhase({ s: 'unlocked', furthest: r.furthest });
-      else if (r.state === 'unreachable') setPhase({ s: 'unreachable' });
+      if (r.state === 'valid') {
+        lastStation.current = Math.max(lastStation.current, r.furthest);
+        setPhase({ s: 'resumable', furthest: lastStation.current });
+      } else if (r.state === 'unreachable') setPhase({ s: 'unreachable' });
       else setPhase({ s: 'gate' });
     });
   }, []);
 
   useEffect(attemptRestore, [attemptRestore]);
 
-  if (phase.s === 'checking') return <SplashSkeleton />;
+  const onStationReached = useCallback((index: number, count: number) => {
+    lastStation.current = index;
+    logStation(index, count);
+  }, []);
 
-  if (phase.s === 'unreachable') {
+  if (phase.s === 'unlocked') {
+    // The boundary sits OUTSIDE the Suspense on purpose: a lazy chunk that
+    // never arrives rejects the import, and React re-throws that rejection
+    // past the fallback — Suspense can only wait, it cannot recover. Without
+    // this, a dropped download on hotel wifi (or a chunk hash that Netlify
+    // redeployed over while the tab sat open) blanked the page to white.
     return (
-      <main className="grid min-h-dvh place-items-center px-5 py-12">
-        <GateSky />
-        <div className="pagefade relative z-10 w-full max-w-lg">
-          <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
-          <div className="mt-6">
-            <ErrorState
-              message="Your session is on file, but the sign-in service is temporarily unreachable. Please retry in a moment, or view the résumé PDF below."
-              onRetry={attemptRestore}
-            />
-          </div>
-          <a
-            className="btn mt-4 inline-block border border-rule bg-panel px-3.5 py-2 text-xs text-ink"
-            href="/resume.pdf"
-            download="Cameron-Carpenter-Resume.pdf"
-          >
-            Download résumé PDF
-          </a>
-        </div>
-      </main>
+      <ErrorBoundary what="The flight">
+        <Suspense fallback={<PreflightStart />}>
+          <Flight
+            initialStation={phase.furthest}
+            onStationReached={onStationReached}
+            onExit={() => {
+              window.scrollTo(0, 0);
+              setPhase({ s: 'resumable', furthest: lastStation.current });
+            }}
+          />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
-  if (phase.s === 'gate') {
-    return <Gate onUnlocked={() => setPhase({ s: 'unlocked', furthest: 0 })} />;
-  }
+  const journey =
+    phase.s === 'checking' ? (
+      <JourneySkeleton />
+    ) : phase.s === 'unreachable' ? (
+      <>
+        <JourneyIntro />
+        <div className="mt-6">
+          <ErrorState
+            message="Your flight is on file, but the service that resumes it is temporarily unreachable. Please retry in a moment, or view the résumé PDF below."
+            onRetry={attemptRestore}
+          />
+        </div>
+        <PaperRow />
+      </>
+    ) : phase.s === 'gate' ? (
+      <Gate onUnlocked={() => setPhase({ s: 'unlocked', furthest: 0 })} />
+    ) : (
+      <ResumeFlight
+        station={phase.furthest}
+        onResume={() => setPhase({ s: 'unlocked', furthest: phase.furthest })}
+        onRestart={() => {
+          lastStation.current = 0;
+          setPhase({ s: 'unlocked', furthest: 0 });
+        }}
+      />
+    );
 
-  // The boundary sits OUTSIDE the Suspense on purpose: a lazy chunk that never
-  // arrives rejects the import, and React re-throws that rejection past the
-  // fallback — Suspense can only wait, it cannot recover. Without this, a
-  // dropped download on hotel wifi (or a chunk hash that Netlify redeployed
-  // over while the tab sat open) blanked the page to white with the visitor's
-  // code already spent.
-  return (
-    <ErrorBoundary what="The flight">
-      <Suspense fallback={<PreflightStart />}>
-        <Flight initialStation={phase.furthest} onStationReached={logStation} />
-      </Suspense>
-    </ErrorBoundary>
-  );
+  return <Home journey={journey} />;
 }
 
 /**
@@ -124,32 +150,20 @@ function PreflightStart() {
   );
 }
 
-/** Layout-matched skeleton of the splash — never a spinner, gone in well
- *  under the 800ms budget on any sane connection. Keeps the SAME header the
- *  pre-rendered index.html shell painted, so a returning visitor's headline
- *  never blinks out while their pass is re-validated. Deliberately NOT the
- *  pre-flight console: this state resolves to the GATE as often as it
- *  resolves to a flight, and dressing a session check as a launch would
- *  promise a takeoff to someone about to be shown a form. */
-function SplashSkeleton() {
+/** Layout-matched skeleton of the journey tab while a returning session is
+ *  re-validated — never a spinner, and deliberately NOT the pre-flight
+ *  console: this state resolves to the form as often as it resolves to a
+ *  flight, and dressing a session check as a launch would promise a takeoff
+ *  to someone about to be shown a form. */
+function JourneySkeleton() {
   return (
-    <main className="grid min-h-dvh place-items-center px-5 py-12">
-      <GateSky />
-      <div className="relative z-10 w-full max-w-lg">
-        <p className="font-mono text-2xs uppercase tracking-widest text-faint">Mission Control</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-          Cameron Carpenter.
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-          A résumé in performance marketing and client strategy — piloted, not scrolled, in
-          about four minutes. The two fields are optional; the résumé PDF is below for a quicker read.
-        </p>
-        <div className="mt-6">
-          <SkLine w="w80" />
-          <SkLine w="w60" />
-          <SkLine w="w40" />
-        </div>
+    <>
+      <JourneyIntro />
+      <div className="mt-6" aria-hidden="true">
+        <SkLine w="w80" />
+        <SkLine w="w60" />
+        <SkLine w="w40" />
       </div>
-    </main>
+    </>
   );
 }

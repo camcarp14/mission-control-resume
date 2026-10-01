@@ -23,6 +23,7 @@
     "@react-three/postprocessing": "^3.0.4",
     "@supabase/supabase-js": "^2.45.0",
     "framer-motion": "^13.0.0",
+    "marked": "^18.0.14",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^6.26.0",

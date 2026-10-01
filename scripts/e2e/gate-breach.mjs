@@ -39,6 +39,7 @@ import {
   installGateMock,
   makeReporter,
   STUB_HOST,
+  UNLOCK_MS,
 } from './_lib.mjs';
 
 const PORT = 4314;
@@ -84,7 +85,7 @@ try {
     page.on('request', (req) => requests.push(req.url()));
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-name', { timeout: 10000 });
+    await page.waitForSelector('#begin-flight', { timeout: 10000 });
     await sleep(1500); // let any idle-time prefetching happen, then look again
 
     r.ok((await countPanels(page)) === 0, 'fresh load: no section.panel in the DOM');
@@ -105,7 +106,7 @@ try {
     const page = await context.newPage();
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     // The forged token forces a validate_visit round-trip → valid:false → sign-in.
-    await page.waitForSelector('#g-name', { timeout: 10000 });
+    await page.waitForSelector('#begin-flight', { timeout: 10000 });
 
     r.ok(true, 'forged mc.visit: sign-in shown (validate_visit rejected the forgery)');
     r.ok((await countPanels(page)) === 0, 'forged mc.visit: no section.panel rendered');
@@ -131,7 +132,7 @@ try {
     // /#unlocked and /?unlocked=1 → still the sign-in, no panel.
     for (const path of ['/#unlocked', '/?unlocked=1']) {
       await page.goto(`${base}${path}`, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('#g-name', { timeout: 10000 });
+      await page.waitForSelector('#begin-flight', { timeout: 10000 });
       r.ok((await countPanels(page)) === 0, `${path}: still the sign-in, no section.panel`);
     }
 
@@ -161,11 +162,8 @@ try {
     page.on('request', (req) => requests.push(req.url()));
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-name', { timeout: 10000 });
-    await page.fill('#g-name', 'E2E Pilot');
-    await page.fill('#g-company', 'Bar Check Co');
-    await page.click('button[type="submit"]');
-    await page.waitForSelector('section.panel', { timeout: 10000 });
+    await page.click('#begin-flight', { timeout: 10000 });
+    await page.waitForSelector('section.panel', { timeout: UNLOCK_MS });
     await sleep(SETTLE);
 
     r.ok((await countPanels(page)) > 0, 'valid sign-in: station panel appears');
@@ -186,7 +184,7 @@ try {
       sessionStorage.setItem('mc.visit', JSON.stringify(v));
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-name', { timeout: 10000 });
+    await page.waitForSelector('#begin-flight', { timeout: 10000 });
     r.ok((await countPanels(page)) === 0, 'corrupted token + reload: re-gated, no section.panel');
     r.ok(
       (await readVisit(page)) === null,

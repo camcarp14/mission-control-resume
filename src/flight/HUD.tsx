@@ -48,10 +48,12 @@ export function HUD({
   mode,
   current,
   onToggleMode,
+  onExit,
 }: {
   mode: 'flight' | 'static';
   current: number;
   onToggleMode: () => void;
+  onExit?: (() => void) | undefined;
 }) {
   const station = stations[current];
   return (
@@ -67,9 +69,23 @@ export function HUD({
           Inside one items-baseline group the three runs sit on one line, and
           the group then centres as a single object. */}
       <span className="flex shrink-0 items-baseline gap-2.5 whitespace-nowrap">
-        <span className="font-display text-xl font-bold leading-none text-ink">
-          cc<span className="text-cyan">.</span>
-        </span>
+        {/* The mark is the way home: back to the hub's three tabs. Same
+            type and baseline as before — a button only in behaviour. */}
+        {onExit ? (
+          <button
+            type="button"
+            onClick={onExit}
+            aria-label="Leave the flight — back to home"
+            title="Home"
+            className="hudhome font-display text-xl font-bold leading-none text-ink"
+          >
+            cc<span className="text-cyan">.</span>
+          </button>
+        ) : (
+          <span className="font-display text-xl font-bold leading-none text-ink">
+            cc<span className="text-cyan">.</span>
+          </span>
+        )}
         {/* The descriptor is desktop chrome. A phone has 292px of bar to
             spend and this eyebrow alone wanted 105px of it, which is how all
             three labels ended up on two lines each at 390px — the first

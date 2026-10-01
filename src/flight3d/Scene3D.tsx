@@ -1428,6 +1428,7 @@ export function Scene3D({
             getBoost={() => boostRef.current}
             bloomLevels={runtime.bloomLevels}
             extraPasses={runtime.extraPasses}
+            grade={runtime.tier !== 'low'}
           />
           <WarmUp gearRef={gearRef} />
         </Suspense>

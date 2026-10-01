@@ -13,6 +13,14 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# /work has its own prerendered HTML (written by the workPage plugin in
+# vite.config.ts) so a link pasted into LinkedIn or Slack unfurls with the
+# /work title and description instead of the home page's.
+[[redirects]]
+  from = "/work"
+  to = "/work/index.html"
+  status = 200
+
 # SPA fallback must come last — it matches everything.
 [[redirects]]
   from = "/*"
@@ -63,6 +71,11 @@
     Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
 
 [[headers]]
+  for = "/artifacts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+[[headers]]
   for = "/fonts/*"
   [headers.values]
     Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
@@ -73,6 +86,11 @@
 # enough already without an origin header helping them hold a stale one.
 [[headers]]
   for = "/og.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/journey-thumb.jpg"
   [headers.values]
     Cache-Control = "public, max-age=86400"
 

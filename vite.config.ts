@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { WORK_META, WORK_POSITIONING } from './src/work/positioning';
 
 /**
  * The pre-rendered gate shell in index.html is fully inline-styled, so the
@@ -23,8 +24,52 @@ const asyncCss = (): Plugin => ({
   },
 });
 
+/**
+ * /work gets its OWN document. The site is an SPA, so every path is served
+ * index.html — whose title and og/twitter tags describe the home page. A
+ * /work link pasted into LinkedIn or Slack would unfurl as the home page.
+ * This emits work/index.html (served for /work by a netlify.toml rewrite):
+ * the finished index.html with /work's title, description, canonical, og
+ * and twitter tags, and a /work header shell in place of the home one, so
+ * first paint is the page's own header. Every replacement must land — a
+ * miss throws and fails the build rather than shipping the wrong card.
+ */
+const workPage = (): Plugin => ({
+  name: 'work-page',
+  apply: 'build',
+  // order 'post': Vite's own HTML plugin emits index.html in this same hook,
+  // and a normal-order hook runs before it, finding no index.html at all.
+  generateBundle: { order: 'post', handler(_options, bundle) {
+    const index = bundle['index.html'];
+    if (!index || index.type !== 'asset') return;
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const { title, description, url } = WORK_META;
+    const swaps: [RegExp, string][] = [
+      [/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`],
+      [/(name="description"\s+content=")[^"]*(")/, `$1${esc(description)}$2`],
+      [/(rel="canonical" href=")[^"]*(")/, `$1${url}$2`],
+      [/(property="og:url" content=")[^"]*(")/, `$1${url}$2`],
+      [/(property="og:title" content=")[^"]*(")/, `$1${esc(title)}$2`],
+      [/(property="og:description"\s+content=")[^"]*(")/, `$1${esc(description)}$2`],
+      [/(name="twitter:title" content=")[^"]*(")/, `$1${esc(title)}$2`],
+      [/(name="twitter:description"\s+content=")[^"]*(")/, `$1${esc(description)}$2`],
+      [
+        /<main class="mc-shell">[\s\S]*?<\/main>/,
+        `<main class="mc-shell mc-work"><div><p class="mc-eyebrow">Proof of work</p>` +
+          `<h1 class="mc-h1">Cameron Carpenter.</h1><p class="mc-intro">${esc(WORK_POSITIONING)}</p></div></main>`,
+      ],
+    ];
+    let html = String(index.source);
+    for (const [re, to] of swaps) {
+      if (!re.test(html)) throw new Error(`[work-page] index.html no longer matches ${re} — /work would unfurl as the home page`);
+      html = html.replace(re, to);
+    }
+    this.emitFile({ type: 'asset', fileName: 'work/index.html', source: html });
+  } },
+});
+
 export default defineConfig({
-  plugins: [react(), asyncCss()],
+  plugins: [react(), asyncCss(), workPage()],
   build: {
     // Budget discipline for the throttled-3G bar. Vite warns above this so a
     // dependency that blows the budget is caught at build time, not in a trace.

@@ -77,7 +77,7 @@ async function domHealthProfile(browser, base, name, viewport, cpuRate, ltMax) {
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(420);
     }
-    await page.click('nav[aria-label="Stations"] button:nth-child(2)');
+    await page.click('nav[aria-label="Stations"] button:nth-of-type(2)');
     await page.waitForTimeout(420);
     await page.keyboard.press('ArrowLeft');
     await page.waitForTimeout(420);

@@ -9,10 +9,10 @@
          search for "Cameron Carpenter" are all keyed off this string, and "Mission
          Control" alone attributes the page to nobody. Role last, so the tab
          still reads when the title is truncated to ~30 characters. -->
-    <title>Cameron Carpenter — Mission Control | Performance Marketing</title>
+    <title>Cameron Carpenter — Applied AI &amp; Performance Marketing</title>
     <meta
       name="description"
-      content="An interactive flight through Cameron Carpenter's career in performance marketing and client strategy — piloted, not scrolled."
+      content="Cameron Carpenter is an applied AI builder with a performance marketer’s sense of the business — Claude skills, agents, and evals for regulated healthcare, and a résumé you can pilot."
     />
     <!-- ORIGIN — the cutover happened, and here is the evidence trail so
          nobody un-flips this on a stale memory: camcarp.com moved onto Netlify
@@ -28,10 +28,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Mission Control" />
     <meta property="og:url" content="https://camcarp.com/" />
-    <meta property="og:title" content="Cameron Carpenter — a résumé you pilot" />
+    <meta property="og:title" content="Cameron Carpenter — Applied AI &amp; Performance Marketing" />
     <meta
       property="og:description"
-      content="An interactive flight through Cameron Carpenter's career in performance marketing and client strategy — piloted, not scrolled."
+      content="An applied AI builder with a performance marketer’s sense of the business, in regulated healthcare. Writing, the things he has built, and a résumé you can pilot."
     />
     <!-- og.jpg is a real frame of the flight — the Navy Pier finale, posed and
          captured from the running app — with the wordmark composited over the
@@ -48,10 +48,10 @@
       content="Cameron Carpenter — a shuttle landed on Navy Pier under the night Chicago skyline, the final frame of the flight."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Cameron Carpenter — a résumé you pilot" />
+    <meta name="twitter:title" content="Cameron Carpenter — Applied AI &amp; Performance Marketing" />
     <meta
       name="twitter:description"
-      content="An interactive flight through Cameron Carpenter's career in performance marketing and client strategy — piloted, not scrolled."
+      content="An applied AI builder with a performance marketer’s sense of the business, in regulated healthcare. Writing, the things he has built, and a résumé you can pilot."
     />
     <meta name="twitter:image" content="https://camcarp.com/og.jpg?v=5" />
     <meta
@@ -66,6 +66,9 @@
          also what makes that path resolve honestly. None of these three is
          render-blocking: Chrome fetches the tab icon off the critical path and
          desktop browsers never request the touch icon at all. -->
+    <!-- The home hero sets the name in the display face, in the shell as well
+         as in React, so it is preloaded rather than discovered late. -->
+    <link rel="preload" href="/fonts/SpaceGrotesk.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -81,9 +84,10 @@
         "@context": "https://schema.org",
         "@type": "Person",
         "name": "Cameron Carpenter",
-        "jobTitle": "Senior Analyst, Search Engine Marketing",
+        "jobTitle": "Applied AI & Performance Marketing",
+        "description": "Applied AI builder with a performance marketer’s sense of the business, in regulated healthcare: Claude skills, agents, and evaluations, built on several enrollment seasons of call-intelligence work.",
         "worksFor": { "@type": "Organization", "name": "Ovative Group" },
-        "sameAs": ["https://www.linkedin.com/in/CameronCarpenter1"],
+        "sameAs": ["https://www.linkedin.com/in/cameroncarpenter1"],
         "url": "https://camcarp.com/"
       }
     </script>
@@ -121,32 +125,72 @@
          this style block must not wait on a network request — that is the
          whole reason it exists. */
       @media (min-width: 1920px) { html { font-size: clamp(17px, 0.3125vw + 11px, 19px); } }
-      .mc-shell { min-height: 100dvh; display: grid; place-items: center; padding: 3rem 1.25rem; }
-      /* Reserve roughly the rendered gate's height so the headline paints at
-         (nearly) its final position — without this the centered shell sat
-         ~190px lower than the full gate and the headline visibly hopped when
-         React mounted. CLS can't see that hop (removed+new nodes), eyes can. */
-      .mc-shell > div { width: 100%; max-width: 32rem; min-height: min(34rem, calc(100dvh - 6rem)); }
+      /* Mirrors .home / .home-wrap / .home-head in polish.css — same padding,
+         width and centring — so the header paints exactly where React will
+         put it. */
+      .mc-shell { min-height: 100dvh; box-sizing: border-box;
+                  padding: clamp(1.5rem, 6vh, 4.5rem) 1.25rem 2.5rem; }
+      .mc-shell > div { width: 100%; max-width: 76rem; margin: 0 auto; text-align: center; }
+      @media (min-width: 768px) {
+        .mc-shell { padding-top: max(1.25rem, calc(50vh - 19.5rem)); }
+      }
+      /* /articles and the article pages are a different layout; painting the
+         home header for 200ms before them would be a flash of the wrong page.
+         The one-line script below opts those URLs out. */
+      .mc-bare .mc-shell { display: none; }
+      /* /work's prerendered shell (vite.config.ts, workPage): mirrors
+         .workpage + .work-head in polish.css — left-aligned, 46rem column. */
+      .mc-shell.mc-work { padding: clamp(2.5rem, 8vh, 5rem) 1.25rem 4rem; }
+      .mc-shell.mc-work > div { max-width: 46rem; text-align: left; }
+      .mc-work .mc-h1 { margin-top: 0.5rem; }
+      .mc-work .mc-intro { margin: 0.5rem 0 0; max-width: 65ch; }
       .mc-eyebrow { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                     font-size: 0.625rem; line-height: 0.875rem; letter-spacing: 0.06em;
                     text-transform: uppercase; color: #737c88; }
-      .mc-h1 { margin: 0.75rem 0 0; font-size: 1.5rem; line-height: 2rem; font-weight: 600;
+      .mc-h1 { margin: 0.5rem 0 0; font-size: 1.5rem; line-height: 2rem; font-weight: 600;
                letter-spacing: -0.025em; text-wrap: balance; color: #e8e6e1; }
-      .mc-intro { margin: 0.75rem 0 0; max-width: 65ch; font-size: 0.78125rem;
-                  line-height: 1.625; color: #8b929c; }
+      .mc-intro { margin: 0.5rem auto 0; max-width: 34rem; font-size: 0.78125rem;
+                  line-height: 1.625; color: #8b929c; text-wrap: balance; }
       @media (min-width: 768px) { .mc-h1 { font-size: 1.875rem; line-height: 2.25rem; } }
+      /* The home hero — twins of .home-status/.home-name/.home-role/.home-intro
+         in polish.css. Change one, change the other. */
+      @font-face { font-family: 'Space Grotesk'; src: url('/fonts/SpaceGrotesk.woff2') format('woff2');
+                   font-weight: 300 700; font-style: normal; font-display: swap; }
+      .mc-status { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; padding: 0.25rem 0.75rem;
+                   border: 1px solid rgba(154,220,255,0.22); border-radius: 999px; background: rgba(76,201,240,0.06);
+                   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.625rem;
+                   line-height: 0.875rem; letter-spacing: 0.16em; text-transform: uppercase; color: #9adcff; }
+      .mc-dot { width: 6px; height: 6px; border-radius: 50%; background: #5ef0a8; box-shadow: 0 0 10px #5ef0a8; }
+      .mc-name { margin: 0.875rem 0 0; font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+                 font-weight: 700; font-size: clamp(2.25rem, min(6.5vw, 8vh), 4.25rem); line-height: 1.04;
+                 letter-spacing: -0.035em; color: #fff; }
+      .mc-role { margin: 0.625rem 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                 font-size: 0.6875rem; line-height: 1rem; letter-spacing: 0.22em; text-transform: uppercase; color: #4cc9f0; }
+      .mc-lede { max-width: 34rem; margin: 0.625rem auto 0; font-size: 0.875rem; line-height: 1.6;
+                 color: #8b929c; text-wrap: balance; }
+      @media (min-width: 768px) and (max-height: 720px) {
+        .mc-status { display: none; }
+        .mc-name { margin-top: 0; }
+      }
+      /* Phones only — twin of .home-pdf in polish.css. */
+      .mc-pdf { display: inline-block; margin-top: 0.875rem; padding: 0.375rem 0.75rem;
+                border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; background: #0d0f13;
+                font-size: 0.6875rem; line-height: 1rem; color: #e8e6e1; text-decoration: none; }
+      @media (min-width: 768px) { .mc-pdf { display: none; } }
     </style>
+    <script>
+      if (/^\/articles(\/|$)/.test(location.pathname)) document.documentElement.classList.add('mc-bare');
+    </script>
   </head>
   <body>
     <div id="root">
       <main class="mc-shell">
         <div>
-          <p class="mc-eyebrow">Mission Control</p>
-          <h1 class="mc-h1">Cameron Carpenter.</h1>
-          <p class="mc-intro">
-            A résumé in performance marketing and client strategy — piloted, not scrolled, in
-            about four minutes. The two fields are optional; the résumé PDF is below for a quicker read.
-          </p>
+          <p class="mc-status"><span class="mc-dot"></span>Mission Control · All systems go</p>
+          <h1 class="mc-name">Cameron Carpenter</h1>
+          <p class="mc-role">◇ Applied AI · Performance Marketing ◇</p>
+          <p class="mc-lede">Based in Chicago. Writing, the things I’ve built, and a résumé you can pilot.</p>
+          <a class="mc-pdf" href="/resume.pdf" download="Cameron-Carpenter-Resume.pdf">Download résumé PDF</a>
         </div>
       </main>
     </div>

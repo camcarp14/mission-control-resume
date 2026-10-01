@@ -23,7 +23,9 @@ import { join } from 'node:path';
 import { serve, makeReporter } from './_lib.mjs';
 
 const PORT = 4317;
-const CHROME_PATH = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// The container's Chromium by default; E2E_CHROME_PATH points it at another
+// (on a Mac: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome).
+const CHROME_PATH = process.env.E2E_CHROME_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const SCRATCH = '/tmp/claude-0/-home-user-hyperscaler/8bf20831-d166-555c-a464-fdd5a13ea72e/scratchpad';
 const LH_JSON = join(SCRATCH, 'lh.json');
 const EXEC_TIMEOUT_MS = 180000; // lighthouse can take 60–90s; 3-minute ceiling

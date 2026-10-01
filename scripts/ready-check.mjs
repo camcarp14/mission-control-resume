@@ -19,10 +19,13 @@
  * 1 while any of them remain, 0 the moment the site is genuinely sendable.
  * ========================================================================= */
 
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, extname, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -160,6 +163,134 @@ const BRACKET = /\[[^\]\n]{1,60}\]/g;
   );
   // Canonical is a confirm-this, not a fail-this — reported separately below.
   if (canon) results.at(-1).note = `canonical/og:url = ${canon}`;
+}
+
+
+// ---- 7. The résumé leads with the current positioning ----------------------
+/* The PDF's TEXT, not its bytes: a typeset PDF stores glyphs, not strings.
+ * pdftotext (poppler) where it exists; on a Mac without it, PDFKit through a
+ * one-line Swift script. Neither is a dependency of the site. */
+function pdfText(path) {
+  try {
+    return execFileSync('pdftotext', ['-layout', path, '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {}
+  if (process.platform === 'darwin') {
+    const swift = join(tmpdir(), 'mc-ready-pdftext.swift');
+    writeFileSync(swift, 'import PDFKit\nlet d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1]))\nprint(d?.string ?? "")\n');
+    try {
+      return execFileSync('swift', [swift, path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {}
+  }
+  return null;
+}
+const resumeText = exists('public/resume.pdf') ? pdfText(join(root, 'public/resume.pdf')) : null;
+{
+  const problems = [];
+  if (resumeText === null) problems.push('could not read the PDF’s text (install poppler: `brew install poppler`)');
+  // The HEADLINE, not the phrase: the pre-repositioning résumé already said
+  // "Applied AI Tooling" in its skills line and sailed through a bare
+  // includes('Applied AI') (QA, Oct 2026).
+  else if (!/Applied AI\s*\|\s*Performance Marketing/.test(resumeText)) problems.push('public/resume.pdf does not lead with "Applied AI | Performance Marketing" — it is the pre-repositioning version');
+  check(
+    'The résumé PDF carries the Applied AI positioning',
+    problems,
+    'The PDF is the source of truth for every figure on the site. Export the current one-page ' +
+      'résumé over public/resume.pdf before the site is shared.',
+  );
+}
+
+// ---- 8. Work items link honestly ------------------------------------------
+{
+  const { work } = await import(pathToFileURL(join(root, 'src/content/work.js')).href);
+  const problems = [];
+  const fake = /example\.(com|org)|your-?(site|domain)|placeholder|localhost|todo|tbd/i;
+  /** A real link is an https URL with a dotted host and nothing template-ish
+   *  in it — 'TODO', 'https://', '/#' and ' ' all fail here (QA, Oct 2026). */
+  const real = (href) => {
+    try {
+      const u = new URL(href);
+      return u.protocol === 'https:' && /^[^.]+\.[^.]+/.test(u.hostname) && !fake.test(href);
+    } catch {
+      return false;
+    }
+  };
+  for (const w of work) {
+    if (w.status === 'live' && !w.private && w.links.length === 0) problems.push(`${w.id}: live with no link (add one, or mark it private: true)`);
+    for (const l of w.links) if (!real(l.href)) problems.push(`${w.id}: not a real link "${l.href}"`);
+    if (w.status === 'in-progress' && w.links.length > 0) problems.push(`${w.id}: in progress but carries links — links go on when it is live`);
+  }
+  check(
+    'Every proof-of-work link goes somewhere real',
+    problems,
+    'src/content/work.js: a live item needs a real link; an in-progress one shows only a chip, ' +
+      'never a link to something that does not exist yet.',
+  );
+}
+
+// ---- 9. No confidential names, anywhere a visitor could read them ----------
+{
+  // Client and internal names that must never appear, stored as SHA-256 of
+  // the lowercased term so this tracked file does not itself publish them.
+  // Matching is by PREFIX of each word, so a name run together with a
+  // suffix or a brand word is caught too. Extend, never trim. To add a term:
+  //   node -e "console.log(require('crypto').createHash('sha256').update('term'.toLowerCase()).digest('hex'))"
+  const CONFIDENTIAL_SHA256 = new Map([
+    ['40a85d705de4f99101f6463a304a4db17395530d1277043a03c51af3ddda2016', 6],
+    ['c597b09491ac5d093e9be8f68a3d5dc7b31f36587d62c13fab4d9dcb66783e89', 7],
+    ['a7d324a4b53ea3878089c268660a04874f40e805f6f74b28bb448073625ea6f0', 5],
+    ['5e9ceb28244d06451ffa713a7552d8d89519875f3db22c7626d04f5379c30710', 12],
+    ['64db7dd7a60d54d0336f14fa4bf08596e3d30599bd8207824ee28c8cf6f1f029', 3],
+    ['52ce3e73b06ae16d244fbccae1fe5047007b9872e6db81890b4bfbf48de335af', 9],
+  ]);
+  const LENGTHS = [...new Set(CONFIDENTIAL_SHA256.values())];
+  const sha = (t) => createHash('sha256').update(t).digest('hex');
+  /** The confidential prefix a word starts with, or null. */
+  const hit = (text) => {
+    for (const word of text.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+      for (const n of LENGTHS) if (word.length >= n && CONFIDENTIAL_SHA256.has(sha(word.slice(0, n)))) return word;
+    }
+    return null;
+  };
+  const TEXT = new Set(['.js', '.mjs', '.ts', '.tsx', '.jsx', '.css', '.html', '.md', '.json', '.svg', '.txt', '.xml', '.webmanifest', '.map']);
+  const walk = (dir) => {
+    const abs = join(root, dir);
+    if (!existsSync(abs)) return [];
+    const out = [];
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const rel = join(dir, e.name);
+      if (e.isDirectory()) out.push(...walk(rel));
+      else if (TEXT.has(extname(e.name).toLowerCase())) out.push(rel);
+    }
+    return out;
+  };
+  const problems = [];
+  // dist/ is what visitors download, so a scan that skips it — because it is
+  // missing, or stale against the source — has not checked the site at all.
+  const newest = (dir) => {
+    let t = 0;
+    for (const f of walk(dir)) t = Math.max(t, statSync(join(root, f)).mtimeMs);
+    return t;
+  };
+  if (!exists('dist/index.html')) problems.push('dist/ is missing — run `npm run build` first; the built site is part of this scan');
+  else if (statSync(join(root, 'dist/index.html')).mtimeMs < Math.max(newest('src'), statSync(join(root, 'index.html')).mtimeMs)) {
+    problems.push('dist/ is older than the source — run `npm run build` and re-run this check');
+  }
+  for (const f of ['index.html', ...walk('src'), ...walk('public'), ...walk('dist')]) {
+    read(f).split('\n').forEach((line, i) => {
+      const w = hit(line);
+      if (w) problems.push(`${relative(root, join(root, f))}:${i + 1} mentions "${w}"`);
+    });
+  }
+  if (resumeText) {
+    const w = hit(resumeText);
+    if (w) problems.push(`public/resume.pdf mentions "${w}"`);
+  }
+  check(
+    'No confidential client or tool names',
+    problems,
+    'Describe clients ("a Fortune 5 healthcare payer", "a national Medicare marketplace") and ' +
+      'leave internal tools unnamed — in copy AND in code comments. Rebuild dist/ after fixing.',
+  );
 }
 
 // ---- Report ---------------------------------------------------------------

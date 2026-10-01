@@ -48,7 +48,9 @@ import { Vector2 } from 'three';
 import { useFrame } from '@react-three/fiber';
 import {
   Bloom,
+  BrightnessContrast,
   ChromaticAberration,
+  HueSaturation,
   EffectComposer,
   Noise,
   ToneMapping,
@@ -63,7 +65,9 @@ import { BlendFunction, ToneMappingMode, type BloomEffect } from 'postprocessing
 // emissive cones, and the reference look leans on visible glow.)
 const BLOOM_THRESHOLD = 0.85;
 const BLOOM_SMOOTHING = 0.12;
-const BLOOM_BASE = 0.8;
+// 0.8 → 0.95 in the "pop" pass (Oct 2026): the same pass at the same cost,
+// just a little more glow off the sun, the plume and the night skyline.
+const BLOOM_BASE = 0.95;
 // Full sun approach nearly quadruples the glow — the finale should feel hot.
 const BLOOM_BOOST = 1.8;
 const VIGNETTE_DARKNESS = 0.25;
@@ -122,6 +126,17 @@ const CA_MODULATION = 0.75;
 // why it is not worth a custom effect to avoid.)
 const GRAIN_OPACITY = 0.045;
 
+// THE GRADE, mid tier and up. A touch of saturation and contrast — the
+// planets' own colour, a little more confidently — applied in linear light
+// BEFORE the ACES print, so the highlight roll-off still belongs to the tone
+// mapper and a hot sun desaturates toward white the way film does instead of
+// clipping to a flat orange. Both effects are non-convolution, so they merge
+// into the EXISTING vignette/tone-mapping pass: a handful of ALU instructions
+// per pixel, no new fullscreen pass, no new target. Off at low, where the
+// rule is "at or below today".
+const GRADE_SATURATION = 0.14;
+const GRADE_CONTRAST = 0.06;
+
 // MSAA on the composer's render target, high tier only. Note what this
 // actually restores: the Canvas asks for `antialias: true`, but a scene drawn
 // THROUGH an EffectComposer never touches the default framebuffer, so that
@@ -149,6 +164,8 @@ type EffectsProps = {
   /** The other one. Gates MSAA on the composer target plus the two merged
    *  lens/film effects below. */
   extraPasses: boolean;
+  /** The saturation/contrast grade (above). False at the low tier. */
+  grade: boolean;
 };
 
 /* PROPS, NOT useQuality(), AND THAT IS DELIBERATE. Everything else in the 3D
@@ -159,7 +176,7 @@ type EffectsProps = {
  * runtime budget directly. Taking them as props rather than reaching for the
  * context is what keeps that distinction from being undone by a future reader
  * who "tidies up" the one component not using the hook. */
-export function Effects({ getBoost, bloomLevels, extraPasses }: EffectsProps) {
+export function Effects({ getBoost, bloomLevels, extraPasses, grade }: EffectsProps) {
   const bloomRef = useRef<BloomEffect>(null);
 
   // Mutate the effect directly: bloom swell is per-frame continuous state,
@@ -190,6 +207,12 @@ export function Effects({ getBoost, bloomLevels, extraPasses }: EffectsProps) {
           modulationOffset={CA_MODULATION}
           blendFunction={BlendFunction.NORMAL}
         />,
+      ]
+    : [];
+  const grading: JSX.Element[] = grade
+    ? [
+        <HueSaturation key="saturation" saturation={GRADE_SATURATION} />,
+        <BrightnessContrast key="contrast" contrast={GRADE_CONTRAST} />,
       ]
     : [];
   const film: JSX.Element[] = extraPasses
@@ -223,6 +246,7 @@ export function Effects({ getBoost, bloomLevels, extraPasses }: EffectsProps) {
         ...lens,
         <Vignette key="vignette" darkness={VIGNETTE_DARKNESS} offset={VIGNETTE_OFFSET} />,
         ...film,
+        ...grading,
         // Mounting an EffectComposer sets the renderer to NoToneMapping, so
         // without this final pass the whole scene renders in raw linear —
         // washed, flat, and visibly worse than the same scene un-composed

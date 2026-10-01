@@ -103,7 +103,7 @@ try {
 
   // ---- (1) gate --------------------------------------------------------
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#g-name');
+  await page.waitForSelector('#begin-flight');
   await scan(page, 'gate');
 
   // ---- unlock into the flight -------------------------------------------
@@ -285,7 +285,9 @@ try {
   await sleep(SETTLE + 200);
   const afterDot = await focusedDescriptor(page);
   const stillCurrent = await page.$eval(
-    'nav[aria-label="Stations"] button:nth-child(1)',
+    // nth-of-type, not nth-child: the rail's first child is the sliding
+    // .railmark div, so the first BUTTON is the second child.
+    'nav[aria-label="Stations"] button:nth-of-type(1)',
     (b) => b.getAttribute('aria-current') === 'step',
   );
   const panel1Exists = await page.evaluate(

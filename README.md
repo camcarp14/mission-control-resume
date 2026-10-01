@@ -78,6 +78,29 @@ Two tests keep this honest:
 - `src/ui/polish.test.ts` fails if a station literal ever leaks into a
   component.
 
+Every figure must agree with `public/resume.pdf` (the source of truth), and
+no client name may appear anywhere — copy or comments. Retired station ids
+(`the-stack`, `firefight`) are never reused.
+
+## The home page, articles, and proof of work
+
+`/` is a three-panel home page — **Articles**, **Artifacts**, **Space
+Journey** (the flight's sign-in) — and each of the first two expands into a
+full-screen view.
+
+- **Articles** are Markdown files in `src/content/articles/` (front matter:
+  `title`, `date`, `summary`, optional `draft: true`). The filename is the URL:
+  `/articles/<slug>`. `src/content/articles.test.ts` checks them.
+- **Proof of work** lives in **`src/content/work.js`** — one list, three
+  surfaces: the home page's Artifacts ring (live items with a screenshot),
+  the gate-free **`/work`** page (live items, then in-progress ones), and the
+  flight (a live item with `stationId` puts its button or screenshot on that
+  station; an in-progress one shows a chip). `planned` items render nowhere.
+  The file's header comment is the manual; `src/content/work.test.ts` proves
+  the wiring. `/work` is prerendered as `dist/work/index.html` (the
+  `workPage` plugin in `vite.config.ts`) so a pasted link unfurls with its own
+  title and description.
+
 Screenshots go in `public/` (1200×750 works well — see `public/placeholders/`),
 and the walkthrough-video slot takes a `videoSrc` + optional `poster` per
 station. Replace `public/resume.pdf` with your real PDF — the download button is
@@ -126,8 +149,11 @@ the first thing a hiring manager would see.
 `npm run ready` is that second gate. It fails on unfilled bracket slots,
 placeholder links and contact addresses, a stub `resume.pdf`, artifact diagrams
 with unfilled figures, a debug affordance rendering on the visitor-facing gate,
-and a missing share surface (og:image / favicon / a `<title>` carrying your
-name). It is deliberately **not** part of `npm run gate`: it is red until the
+a missing share surface (og:image / favicon / a `<title>` carrying your
+name), a résumé PDF without the "Applied AI" positioning, a live work item
+without a real link (or an in-progress one with links), and any name on the
+`CONFIDENTIAL_TERMS` list anywhere in `src/`, `public/`, `index.html` or
+`dist/`. It is deliberately **not** part of `npm run gate`: it is red until the
 content is written, and a permanently-red CI check is a check everyone learns to
 ignore. Run it in the sixty seconds before the link goes into a DM.
 

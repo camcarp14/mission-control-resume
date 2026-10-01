@@ -31,12 +31,11 @@ panel to remember this candidate.
    into station 11 while the sun fills the frame. Personalization at the exact
    moment they're deciding whether to reply.
 
-5. **A `/preview` route.** ~~An OG/social card~~ — done: `public/og.jpg` is a
-   real posed frame of the Navy Pier finale with the wordmark composited over
-   the night sky, and the tab marks ship alongside it. What is still missing is
-   a *no-code* surface to unfurl into: a public `/preview` page carrying the
-   pitch and the PDF, so a forwarded link lands somewhere rather than on a code
-   prompt.
+5. ~~**A `/preview` route.**~~ — done, superseded by **`/work`**: a gate-free
+   proof-of-work page (no WebGL, no flight chunk) read from
+   `src/content/work.js`, prerendered as `dist/work/index.html` so a pasted
+   link unfurls with its own title and description. It is the link for the
+   résumé and LinkedIn.
 
 6. **Real device pass.** The e2e frame checks run under CPU throttle and
    software rasterization as proxies; the WebGL voyage deserves an hour on an
@@ -79,3 +78,26 @@ panel to remember this candidate.
     renders the same checklist shell the boot overlay does (one instrument
     filling in, not two screens swapping), or let the gate hold its own submit
     state until the flight module resolves.
+
+## As artifacts land
+
+Every planned item already sits in `src/content/work.js` with `status:
+'planned'`, so it renders nowhere. Taking one live is one edit: set `status`
+to `'in-progress'` while you build (its station shows an "In progress" chip,
+`/work` lists it, no links), then to `'live'` with a real `links` entry —
+its station grows the artifact button and `/work` links it. `npm run ready`
+fails a live item without a real link, or an in-progress one with links.
+
+| Work item (`id`) | Attaches to | The edit that takes it live |
+|---|---|---|
+| Invoca MCP server (`invoca-mcp`) | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'GitHub', href: '<repo url>' }]` |
+| Problem-led demo video (`call-agent-demo`) | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'Watch (2 min)', href: '<video url>' }]` — note STN 04 holds one artifact; whichever goes live first takes the button, so retarget the other's `stationId` or list it on `/work` only |
+| Evaluation pilot readout (`eval-pilot-readout`) | STN 05 · Evals & Guardrails (`evals`) | `status: 'live', links: [...]` — STN 05's slot is held by ZTS Operations today; move that item's `stationId` off, or drop this one's |
+| AI trust package and usage guideline (`ai-trust-package`) | STN 05 · Evals & Guardrails (`evals`) | as above |
+| AI enablement playbook (`ai-enablement-playbook`) | STN 07 · Enablement (`force-multiplier`) | `status: 'live', links: [{ label: 'Read the playbook', href: '<url>' }]` |
+| Call-measurement essay (`call-measurement-essay`) | none — `/work` only (or an article in `src/content/articles/`) | `status: 'live', links: [{ label: 'Read', href: 'https://camcarp.com/articles/<slug>' }]` |
+
+The schema test (`src/content/work.test.ts`) enforces one live item per
+station, so a second live item aimed at a taken station fails CI rather than
+silently losing its button.
+

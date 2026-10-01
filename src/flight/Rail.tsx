@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { hueAt } from './hues';
 import type { CSSProperties } from 'react';
 import { stations } from '../content/stations.js';
 
@@ -124,7 +125,15 @@ export function Rail({
   }, [place]);
 
   return (
-    <nav aria-label="Stations" className="rail min-w-0 flex-1">
+    // The docked station's accent lives HERE, on the one element that uses it
+    // (the current diamond). It was briefly set on <html>, and a custom
+    // property on the root restyles the entire document whenever it changes
+    // — measured +75% style recalc per leg, at the moment the ship departs.
+    <nav
+      aria-label="Stations"
+      className="rail min-w-0 flex-1"
+      style={{ '--hue-now': hueAt(current) } as CSSProperties}
+    >
       <div
         ref={trackRef}
         className="railtrack"

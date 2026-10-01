@@ -184,7 +184,7 @@ try {
     // ---- cell: gate -------------------------------------------------------
     let cell = `${w}x${h} gate`;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#g-name');
+    await page.waitForSelector('#begin-flight');
     await sleep(600); // entrance choreography
     await checkNoHorizontalOverflow(page, cell);
     const hasHud = await page.$('header.hud');
@@ -210,7 +210,7 @@ try {
 
     // ---- cell: flight station 6 via rail jump ----------------------------
     cell = `${w}x${h} flight station 6 (rail jump)`;
-    await page.click('nav[aria-label="Stations"] button:nth-child(6)');
+    await page.click('nav[aria-label="Stations"] button:nth-of-type(6)');
     await page.waitForFunction(
       () =>
         Array.from(document.querySelectorAll('[aria-live="polite"]')).some((el) =>
@@ -223,7 +223,7 @@ try {
     await sleep(SETTLE); // let the multi-station transit fully dock
     r.ok(
       await page.$eval(
-        'nav[aria-label="Stations"] button:nth-child(6)',
+        'nav[aria-label="Stations"] button:nth-of-type(6)',
         (b) => b.getAttribute('aria-current') === 'step',
       ),
       `${cell}: rail dot 6 is aria-current="step" after the jump`,

@@ -26,8 +26,7 @@ import {
   unlock,
   ensureBuild,
   makeReporter,
-  E2E_PASSCODE,
-} from './_lib.mjs';
+  E2E_PASSCODE, UNLOCK_MS } from './_lib.mjs';
 
 const PORT = 4315;
 const N = 11;
@@ -157,7 +156,7 @@ async function coreWalkthrough(page, base, name) {
     await page.$eval('.hudbar > button:first-of-type', (b) => b.disabled),
     `${name}: back button disabled at station 1`,
   );
-  await page.click('nav[aria-label="Stations"] button:nth-child(6)');
+  await page.click('nav[aria-label="Stations"] button:nth-of-type(6)');
   await sleep(SETTLE);
   await assertStation(6, 'rail-dot jump -> station 6');
   r.ok(
@@ -253,7 +252,7 @@ async function assertStaticAndPdf(page, name) {
     `${name}: static mode has zero running animations (found: ${staticRunning.join(', ') || 'none'})`,
   );
   await page.click('header.hud button:has-text("Back to the flight")');
-  await page.waitForSelector('section.panel', { timeout: 5000 });
+  await page.waitForSelector('section.panel', { timeout: Math.max(5000, UNLOCK_MS) });
   await sleep(SETTLE);
   const labels = await panelLabels(page);
   r.ok(

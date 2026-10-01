@@ -16,12 +16,22 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Both locations default to the container this suite was built in. Off it
+// (e.g. a Mac), point them elsewhere instead of editing this file:
+//   E2E_PLAYWRIGHT=/path/to/node_modules/playwright-core/index.mjs
+//   PLAYWRIGHT_BROWSERS_PATH=~/Library/Caches/ms-playwright
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= '/opt/pw-browsers';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST = join(ROOT, 'dist-e2e');
 
-export const pw = await import('/opt/node22/lib/node_modules/playwright/index.mjs');
+export const pw = await import(process.env.E2E_PLAYWRIGHT ?? '/opt/node22/lib/node_modules/playwright/index.mjs');
+
+/** How long the flight may take to boot after Begin. 10s on the container
+ *  this suite was tuned on; a machine rendering WebGL in software (headless
+ *  SwiftShader on a laptop) measured 12–25s, so E2E_UNLOCK_MS raises it there.
+ *  A timeout is a harness guard, not a bar — the bars live in the checks. */
+export const UNLOCK_MS = Number(process.env.E2E_UNLOCK_MS ?? 10000);
 
 /** The stub project baked into dist-e2e — never resolves; always intercepted. */
 export const STUB_HOST = 'https://stub-gate.supabase.co';
@@ -139,15 +149,13 @@ export async function installGateMock(target, { validToken = 'tok-e2e', validVis
   });
 }
 
-/** Sign in and fly: the standard way every script gets into the flight. The
- *  gate is open now (round 23) — name/company are optional — but the scripts
- *  fill them anyway so a real begin_visit row is exercised. */
+/** Launch and fly: the standard way every script gets into the flight. The
+ *  home page's Space Journey column has no fields any more — one button that
+ *  still calls begin_visit, so a real (anonymous) visit row is exercised. */
 export async function unlock(page, base) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.fill('#g-name', 'E2E Pilot');
-  await page.fill('#g-company', 'Bar Check Co');
-  await page.click('button[type="submit"]');
-  await page.waitForSelector('.panel', { timeout: 10000 });
+  await page.click('#begin-flight');
+  await page.waitForSelector('.panel', { timeout: UNLOCK_MS });
 }
 
 /** Tiny assertion helper with the repo's loud-failure discipline. */
