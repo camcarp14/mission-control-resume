@@ -11,7 +11,8 @@ import { WorkHeader } from './WorkHeader';
  * Plain on purpose: no gate, no WebGL, no flight chunk, no images — just
  * what was built, what it does, and where to see it, read from work.js like
  * every other surface. Live items first with their links; in-progress items
- * after, chipped and unlinked; planned items never appear (workView.ts).
+ * after under Projects, chipped with their dates and unlinked; planned items
+ * never appear (workView.ts).
  */
 const stationName = new Map(stations.map((s) => [s.id, `${s.code} · ${s.title}`]));
 
@@ -45,7 +46,7 @@ export default function WorkPage() {
       {inProgress.length > 0 && (
         <section aria-labelledby="work-wip" className="work-group">
           <h2 id="work-wip" className="work-group-title">
-            In progress <span className="num text-faint">{inProgress.length}</span>
+            Projects <span className="num text-faint">{inProgress.length}</span>
           </h2>
           <ul className="work-list">
             {inProgress.map((w) => (
@@ -65,7 +66,7 @@ function Item({ w }: { w: WorkItem }) {
     <li className="work-item">
       <div className="work-item-head">
         <h3 className="work-title">{w.title}</h3>
-        {w.status === 'in-progress' && <span className="work-chip is-wip">In progress</span>}
+        {w.status === 'in-progress' && w.dates && <span className="work-chip is-wip num">{w.dates}</span>}
         {w.private && <span className="work-chip">Private build</span>}
         {w.demo && <span className="work-chip is-demo">Demo data</span>}
       </div>

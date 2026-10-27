@@ -5,11 +5,12 @@
  * and three surfaces read it, so there is never a second place to update:
  *
  *   - /work, the public proof-of-work page: every `live` item with its links,
- *     then every `in-progress` item with an "In progress" chip and no links.
+ *     then every `in-progress` item under Projects, chipped with its `dates`
+ *     and never linked.
  *   - the home page's Artifacts ring: every `live` item that has an `image`.
  *   - the flight: a `live` item with `stationId` puts its artifact on that
  *     station (a link button, or its screenshot when it is private); an
- *     `in-progress` item with `stationId` shows only a chip there.
+ *     `in-progress` item with `stationId` shows only its dates and title there.
  *
  * `planned` items never render anywhere. They are here so the plan lives next
  * to the thing it becomes: flip `status` to 'in-progress' while you build,
@@ -29,6 +30,9 @@
  *   stationId — optional id from src/content/stations.js. At most one live
  *               item per station (a station has one artifact slot).
  *   updated   — 'YYYY-MM', when this entry last changed. Never displayed.
+ *   dates     — required on `in-progress` items ('Nov – Dec 2026'): the chip
+ *               they show instead of a status word. Owner's call (Oct 2026):
+ *               no "In progress" label anywhere on the site.
  *   private   — optional; true for a live build that is shown but not linked
  *               (behind a sign-in nobody else can pass). Its window says
  *               "private" and the ready check does not ask it for a link.
@@ -42,8 +46,8 @@
  *               surface then says "Demo data".
  *
  * Honesty rule: describe only what exists. Anything still being built is
- * `in-progress` (chip, no links) or `planned` (invisible) — never a live item
- * with a placeholder link. src/content/work.test.ts and `npm run ready` both
+ * `in-progress` (dated, no links, no results until they are measured) or
+ * `planned` (invisible) — never a live item with a placeholder link. src/content/work.test.ts and `npm run ready` both
  * enforce it.
  * ========================================================================= */
 
@@ -59,6 +63,7 @@
  *  @property {{ label: string, href: string }[]} links
  *  @property {WorkStatus} status
  *  @property {string} [stationId]
+ *  @property {string} [dates]
  *  @property {string} updated
  *  @property {boolean} [private]
  *  @property {string} [image]
@@ -177,25 +182,23 @@ export const work = [
     updated: '2026-09',
   },
 
-  // -- PLANNED (never rendered; flip status to go live) -----------------------
-  // Owner's call (Oct 2026): no "in progress" labels anywhere on the site, so
-  // the projects stay planned — invisible — until they are built, then go
-  // straight to 'live' with real links. Retired ids (never reuse): invoca-mcp
-  // (now call-analytics-mcp, on synthetic call data), eval-pilot-readout
-  // (folded into medicare-eval-pipeline, whose readout is part of the build).
-
-  // The résumé's first project. Take it live with a GitHub or readout link
-  // once the pipeline and its eval readout exist — and only then add its
-  // numbers (calls, requirements, judge-human agreement) here and on the
-  // résumé PDF, which leaves Projects off until then.
+  // -- PROJECTS (shown with their dates; no links or results until they ship) -
+  // The résumé's two projects. Owner's call (Oct 2026): shown now, with their
+  // dates and never an "In progress" label. Descriptions say what each build
+  // does; its numbers (calls, requirements, judge-human agreement) go in only
+  // once measured, here and on the résumé PDF in the same change. Take each
+  // to 'live' with a real link when it ships. Retired ids (never reuse):
+  // invoca-mcp (now call-analytics-mcp, on synthetic call data),
+  // eval-pilot-readout (folded into medicare-eval-pipeline).
   {
     id: 'medicare-eval-pipeline',
     title: 'Medicare call evaluation pipeline',
     pillars: ['Build', 'Measure'],
     summary:
-      'Rebuilding my production call-qualification workflow as a Python pipeline on synthetic Medicare enrollment calls. Each call gets graded against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy) by an LLM judge and rule-based checks calibrated against hand labels, and the results go into a published eval readout.',
+      'A Python pipeline that rebuilds my production call-qualification workflow on synthetic Medicare enrollment calls, grading each call against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against hand labels, ending in a published eval readout.',
     links: [],
-    status: 'planned',
+    status: 'in-progress',
+    dates: 'Nov \u2013 Dec 2026',
     stationId: 'evals',
     updated: '2026-10',
   },
@@ -206,10 +209,15 @@ export const work = [
     summary:
       'An MCP server that lets Claude query call data and grade new calls through the evaluation pipeline, with human approval before results are sent on.',
     links: [],
-    status: 'planned',
+    status: 'in-progress',
+    dates: 'Dec 2026 \u2013 Jan 2027',
     stationId: 'call-agent',
     updated: '2026-10',
   },
+
+  // -- PLANNED (never rendered; flip status to go live) -----------------------
+  // Ideas parked by an earlier pass, with nothing built behind them yet.
+
   {
     id: 'call-agent-demo',
     title: 'Problem-led demo video',

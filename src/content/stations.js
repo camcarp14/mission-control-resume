@@ -151,8 +151,8 @@ export const stations = [
 
   // -- STN 04 · THE AGENT --------------------------------------------------
   // New (Oct 2026). ~1,000 calls a week and 45 -> 5 minutes are the résumé's
-  // call-skill bullet. Planned work items (call analytics MCP server, demo
-  // video) attach here via work.js when they go live.
+  // call-skill bullet. The call analytics MCP server project shows here with
+  // its dates (work.js); the demo video stays planned.
   {
     id: 'call-agent',
     code: 'STN 04',
@@ -171,8 +171,8 @@ export const stations = [
   // New (Oct 2026). No figures. The evaluation layer is the résumé's evals
   // bullet; the human checkpoint is its "human approval step" (Ovative evals
   // bullet and the Zero To Secure line). The ZTS Operations screenshot —
-  // those agents, run on demo data — is attached from work.js. The Medicare
-  // evaluation pipeline (planned in work.js) attaches here once it is built.
+  // those agents, run on demo data — is attached from work.js, and the
+  // Medicare evaluation pipeline project shows here with its dates.
   {
     id: 'evals',
     code: 'STN 05',
@@ -267,9 +267,9 @@ export const stations = [
 
   // -- STN 10 · FOUNDATIONS ------------------------------------------------
   // Absorbs the retired The Stack station (id the-stack). Degree and tool list
-  // match the résumé's Education and Skills sections. No invented certs, and
-  // skills still being learned (Python, SQL) stay off until the projects
-  // that use them are built.
+  // match the résumé's Education and Skills sections. No invented certs.
+  // Python, SQL and webhooks/APIs are on by the owner's call (Oct 2026): he
+  // is comfortable being tested on them.
   {
     id: 'certs-instruments',
     code: 'STN 10',
@@ -279,7 +279,7 @@ export const stations = [
     bullets: [
       'University of Wisconsin–Madison — BBA, double major in Marketing and Risk Management & Insurance (2023)',
       'Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
-      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge, calibration) · human-in-the-loop design · JavaScript · React · Supabase · Netlify · Git and GitHub',
+      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge, calibration) · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
     ],
     artifact: { kind: 'none' },
   },
