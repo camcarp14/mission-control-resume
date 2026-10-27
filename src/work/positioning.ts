@@ -9,6 +9,6 @@ export const WORK_POSITIONING =
 export const WORK_META = {
   title: 'Proof of work — Cameron Carpenter',
   description:
-    'Proof of work from Cameron Carpenter, an applied AI builder in healthcare and Medicare: what each build does, where to see it, and what is still in progress.',
+    'Proof of work from Cameron Carpenter, an applied AI builder in healthcare and Medicare: what each build does and where to see it.',
   url: 'https://camcarp.com/work',
 } as const;

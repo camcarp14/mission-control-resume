@@ -177,12 +177,17 @@ export const work = [
     updated: '2026-09',
   },
 
-  // -- IN PROGRESS (chip only, no links, until it ships) ----------------------
+  // -- PLANNED (never rendered; flip status to go live) -----------------------
+  // Owner's call (Oct 2026): no "in progress" labels anywhere on the site, so
+  // the projects stay planned — invisible — until they are built, then go
+  // straight to 'live' with real links. Retired ids (never reuse): invoca-mcp
+  // (now call-analytics-mcp, on synthetic call data), eval-pilot-readout
+  // (folded into medicare-eval-pipeline, whose readout is part of the build).
 
-  // The résumé's first Projects entry, shown as in progress (it is on the
-  // résumé PDF the same way). Flip to 'live' with a GitHub or readout link
+  // The résumé's first project. Take it live with a GitHub or readout link
   // once the pipeline and its eval readout exist — and only then add its
-  // numbers (calls, requirements, judge-human agreement) here and on the PDF.
+  // numbers (calls, requirements, judge-human agreement) here and on the
+  // résumé PDF, which leaves Projects off until then.
   {
     id: 'medicare-eval-pipeline',
     title: 'Medicare call evaluation pipeline',
@@ -190,16 +195,10 @@ export const work = [
     summary:
       'Rebuilding my production call-qualification workflow as a Python pipeline on synthetic Medicare enrollment calls. Each call gets graded against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy) by an LLM judge and rule-based checks calibrated against hand labels, and the results go into a published eval readout.',
     links: [],
-    status: 'in-progress',
+    status: 'planned',
     stationId: 'evals',
     updated: '2026-10',
   },
-
-  // -- PLANNED (never rendered; flip status to go live) -----------------------
-  // Retired ids (never reuse): invoca-mcp (now call-analytics-mcp, on
-  // synthetic call data), eval-pilot-readout (folded into
-  // medicare-eval-pipeline, whose readout is part of the build).
-
   {
     id: 'call-analytics-mcp',
     title: 'Call analytics MCP server',
