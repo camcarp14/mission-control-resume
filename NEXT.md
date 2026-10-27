@@ -90,9 +90,9 @@ fails a live item without a real link, or an in-progress one with links.
 
 | Work item (`id`) | Attaches to | The edit that takes it live |
 |---|---|---|
-| Invoca MCP server (`invoca-mcp`) | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'GitHub', href: '<repo url>' }]` |
+| Medicare call evaluation pipeline (`medicare-eval-pipeline`) — **in progress now** | STN 05 · Evals & Guardrails (`evals`) | `status: 'live', links: [{ label: 'Read the readout', href: '<url>' }]` — STN 05's slot is held by ZTS Operations today; move that item's `stationId` off first. Add the real numbers (calls, requirements, judge-human agreement) here and on the résumé PDF in the same change |
+| Call analytics MCP server (`call-analytics-mcp`) | STN 04 · The Agent (`call-agent`) | `status: 'in-progress'` when the build starts, then `status: 'live', links: [{ label: 'GitHub', href: '<repo url>' }]` |
 | Problem-led demo video (`call-agent-demo`) | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'Watch (2 min)', href: '<video url>' }]` — note STN 04 holds one artifact; whichever goes live first takes the button, so retarget the other's `stationId` or list it on `/work` only |
-| Evaluation pilot readout (`eval-pilot-readout`) | STN 05 · Evals & Guardrails (`evals`) | `status: 'live', links: [...]` — STN 05's slot is held by ZTS Operations today; move that item's `stationId` off, or drop this one's |
 | AI trust package and usage guideline (`ai-trust-package`) | STN 05 · Evals & Guardrails (`evals`) | as above |
 | AI enablement playbook (`ai-enablement-playbook`) | STN 07 · Enablement (`force-multiplier`) | `status: 'live', links: [{ label: 'Read the playbook', href: '<url>' }]` |
 | Call-measurement essay (`call-measurement-essay`) | none — `/work` only (or an article in `src/content/articles/`) | `status: 'live', links: [{ label: 'Read', href: 'https://camcarp.com/articles/<slug>' }]` |

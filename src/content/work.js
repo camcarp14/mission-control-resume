@@ -177,17 +177,39 @@ export const work = [
     updated: '2026-09',
   },
 
+  // -- IN PROGRESS (chip only, no links, until it ships) ----------------------
+
+  // The résumé's first Projects entry, shown as in progress (it is on the
+  // résumé PDF the same way). Flip to 'live' with a GitHub or readout link
+  // once the pipeline and its eval readout exist — and only then add its
+  // numbers (calls, requirements, judge-human agreement) here and on the PDF.
+  {
+    id: 'medicare-eval-pipeline',
+    title: 'Medicare call evaluation pipeline',
+    pillars: ['Build', 'Measure'],
+    summary:
+      'Rebuilding my production call-qualification workflow as a Python pipeline on synthetic Medicare enrollment calls. Each call gets graded against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy) by an LLM judge and rule-based checks calibrated against hand labels, and the results go into a published eval readout.',
+    links: [],
+    status: 'in-progress',
+    stationId: 'evals',
+    updated: '2026-10',
+  },
+
   // -- PLANNED (never rendered; flip status to go live) -----------------------
+  // Retired ids (never reuse): invoca-mcp (now call-analytics-mcp, on
+  // synthetic call data), eval-pilot-readout (folded into
+  // medicare-eval-pipeline, whose readout is part of the build).
 
   {
-    id: 'invoca-mcp',
-    title: 'Invoca MCP server',
+    id: 'call-analytics-mcp',
+    title: 'Call analytics MCP server',
     pillars: ['Build'],
-    summary: 'An MCP server that gives Claude governed, read-only access to Invoca call data.',
+    summary:
+      'An MCP server that lets Claude query call data and grade new calls through the evaluation pipeline, with human approval before results are sent on.',
     links: [],
     status: 'planned',
     stationId: 'call-agent',
-    updated: '2026-09',
+    updated: '2026-10',
   },
   {
     id: 'call-agent-demo',
@@ -197,16 +219,6 @@ export const work = [
     links: [],
     status: 'planned',
     stationId: 'call-agent',
-    updated: '2026-09',
-  },
-  {
-    id: 'eval-pilot-readout',
-    title: 'Evaluation pilot readout',
-    pillars: ['Measure'],
-    summary: 'How the skill evaluations are built and scored, written up on synthetic data.',
-    links: [],
-    status: 'planned',
-    stationId: 'evals',
     updated: '2026-09',
   },
   {
@@ -223,7 +235,7 @@ export const work = [
     id: 'ai-enablement-playbook',
     title: 'AI enablement playbook',
     pillars: ['Enable'],
-    summary: 'The trainings and patterns that got a marketing team building with AI, made reusable.',
+    summary: 'The guides and patterns that got a marketing team building with AI, made reusable.',
     links: [],
     status: 'planned',
     stationId: 'force-multiplier',
