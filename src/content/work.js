@@ -5,12 +5,11 @@
  * and three surfaces read it, so there is never a second place to update:
  *
  *   - /work, the public proof-of-work page: every `live` item with its links,
- *     then every `in-progress` item under Projects, chipped with its `dates`
- *     and never linked.
+ *     then every `in-progress` item under Projects, never linked.
  *   - the home page's Artifacts ring: every `live` item that has an `image`.
  *   - the flight: a `live` item with `stationId` puts its artifact on that
  *     station (a link button, or its screenshot when it is private); an
- *     `in-progress` item with `stationId` shows only its dates and title there.
+ *     `in-progress` item with `stationId` shows its title and `blurb` there.
  *
  * `planned` items never render anywhere. They are here so the plan lives next
  * to the thing it becomes: flip `status` to 'in-progress' while you build,
@@ -30,9 +29,10 @@
  *   stationId — optional id from src/content/stations.js. At most one live
  *               item per station (a station has one artifact slot).
  *   updated   — 'YYYY-MM', when this entry last changed. Never displayed.
- *   dates     — required on `in-progress` items ('Nov – Dec 2026'): the chip
- *               they show instead of a status word. Owner's call (Oct 2026):
- *               no "In progress" label anywhere on the site.
+ *   blurb     — optional, one line shown after an `in-progress` item's title
+ *               on its station, so the name never sits there unexplained.
+ *   dates     — optional chip text for an `in-progress` item. Owner's call
+ *               (Oct 2026): unused — no status or date labels on the site.
  *   private   — optional; true for a live build that is shown but not linked
  *               (behind a sign-in nobody else can pass). Its window says
  *               "private" and the ready check does not ask it for a link.
@@ -46,7 +46,7 @@
  *               surface then says "Demo data".
  *
  * Honesty rule: describe only what exists. Anything still being built is
- * `in-progress` (dated, no links, no results until they are measured) or
+ * `in-progress` (no links, no results until they are measured) or
  * `planned` (invisible) — never a live item with a placeholder link. src/content/work.test.ts and `npm run ready` both
  * enforce it.
  * ========================================================================= */
@@ -64,6 +64,7 @@
  *  @property {WorkStatus} status
  *  @property {string} [stationId]
  *  @property {string} [dates]
+ *  @property {string} [blurb]
  *  @property {string} updated
  *  @property {boolean} [private]
  *  @property {string} [image]
@@ -182,12 +183,12 @@ export const work = [
     updated: '2026-09',
   },
 
-  // -- PROJECTS (shown with their dates; no links or results until they ship) -
-  // The résumé's two projects. Owner's call (Oct 2026): shown now, with their
-  // dates and never an "In progress" label. Descriptions say what each build
-  // does; its numbers (calls, requirements, judge-human agreement) go in only
-  // once measured, here and on the résumé PDF in the same change. Take each
-  // to 'live' with a real link when it ships. Retired ids (never reuse):
+  // -- PROJECTS (shown; no links or results until they ship) ----------------
+  // The résumé's two projects. Owner's call (Oct 2026): shown now, with no
+  // status or date label of any kind. Descriptions say what each build does;
+  // its numbers (calls, requirements, judge-human agreement) go in only once
+  // measured, here and on the résumé PDF in the same change. Take each to
+  // 'live' with a real link when it ships. Retired ids (never reuse):
   // invoca-mcp (now call-analytics-mcp, on synthetic call data),
   // eval-pilot-readout (folded into medicare-eval-pipeline).
   {
@@ -198,7 +199,7 @@ export const work = [
       'A Python pipeline that rebuilds my production call-qualification workflow on synthetic Medicare enrollment calls, grading each call against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against hand labels, ending in a published eval readout.',
     links: [],
     status: 'in-progress',
-    dates: 'Nov \u2013 Dec 2026',
+    blurb: 'grades synthetic Medicare enrollment calls on compliance checks in Python, with an LLM judge calibrated against hand labels',
     stationId: 'evals',
     updated: '2026-10',
   },
@@ -210,7 +211,7 @@ export const work = [
       'An MCP server that lets Claude query call data and grade new calls through the evaluation pipeline, with human approval before results are sent on.',
     links: [],
     status: 'in-progress',
-    dates: 'Dec 2026 \u2013 Jan 2027',
+    blurb: 'lets Claude query call data and grade new calls through the pipeline, with human approval before results go out',
     stationId: 'call-agent',
     updated: '2026-10',
   },

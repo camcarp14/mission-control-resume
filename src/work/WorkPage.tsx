@@ -11,8 +11,8 @@ import { WorkHeader } from './WorkHeader';
  * Plain on purpose: no gate, no WebGL, no flight chunk, no images — just
  * what was built, what it does, and where to see it, read from work.js like
  * every other surface. Live items first with their links; in-progress items
- * after under Projects, chipped with their dates and unlinked; planned items
- * never appear (workView.ts).
+ * after under Projects, unlabeled and unlinked; planned items never appear
+ * (workView.ts).
  */
 const stationName = new Map(stations.map((s) => [s.id, `${s.code} · ${s.title}`]));
 

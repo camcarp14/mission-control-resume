@@ -93,7 +93,7 @@ const base = {
 };
 const live: WorkItem = { ...base, id: 'a', title: 'Alpha', status: 'live', stationId: 'call-agent', links: [{ label: 'alpha.dev', href: 'https://alpha.dev/' }] };
 const priv: WorkItem = { ...base, id: 'p', title: 'Private', status: 'live', private: true, stationId: 'evals', links: [], image: '/artifacts/zts-operations.jpg', demo: true };
-const wip: WorkItem = { ...base, id: 'b', title: 'Beta', status: 'in-progress', dates: 'Nov \u2013 Dec 2026', stationId: 'call-agent', links: [] };
+const wip: WorkItem = { ...base, id: 'b', title: 'Beta', status: 'in-progress', stationId: 'call-agent', links: [] };
 const planned: WorkItem = { ...base, id: 'c', title: 'Gamma', status: 'planned', stationId: 'pipeline', links: [], image: '/artifacts/river-racer.jpg' };
 
 describe('work → surfaces wiring', () => {
@@ -109,14 +109,14 @@ describe('work → surfaces wiring', () => {
   });
 
   it('flipping the same item from in-progress to live turns the chip into the artifact', () => {
-    expect(stationWork('call-agent', [wip])).toEqual({ artifact: null, inProgress: [{ title: 'Beta', dates: 'Nov \u2013 Dec 2026' }] });
+    expect(stationWork('call-agent', [wip])).toEqual({ artifact: null, inProgress: [{ title: 'Beta' }] });
     expect(stationWork('call-agent', [{ ...wip, status: 'live', links: [{ label: 'beta.dev', href: 'https://beta.dev/' }] }]).artifact).toMatchObject({ kind: 'link' });
   });
 
-  it('an in-progress item shows only its dates and title — no artifact, no links anywhere', () => {
+  it('an in-progress item shows only its title — no artifact, no links anywhere', () => {
     const r = stationWork('call-agent', [wip]);
     expect(r.artifact).toBeNull();
-    expect(r.inProgress).toEqual([{ title: 'Beta', dates: 'Nov \u2013 Dec 2026' }]);
+    expect(r.inProgress).toEqual([{ title: 'Beta' }]);
     expect(workPageGroups([wip]).inProgress).toEqual([wip]);
     expect(ringItems([wip])).toEqual([]);
   });
@@ -134,9 +134,9 @@ describe('work → surfaces wiring', () => {
   it('the real file wires Zero To Secure to Flight Plan and ZTS Operations to Evals', () => {
     expect(stationWork('flight-plan').artifact).toMatchObject({ kind: 'link', href: 'https://zerotosecure.com/' });
     expect(stationWork('evals').artifact).toMatchObject({ kind: 'image', src: '/artifacts/zts-operations.jpg' });
-    // The résumé's two projects show on their stations with their dates.
-    expect(stationWork('evals').inProgress).toEqual([{ title: 'Medicare call evaluation pipeline', dates: 'Nov \u2013 Dec 2026' }]);
-    expect(stationWork('call-agent').inProgress).toEqual([{ title: 'Call analytics MCP server', dates: 'Dec 2026 \u2013 Jan 2027' }]);
+    // The résumé's two projects show on their stations by name alone.
+    expect(stationWork('evals').inProgress).toMatchObject([{ title: 'Medicare call evaluation pipeline', blurb: expect.any(String) }]);
+    expect(stationWork('call-agent').inProgress).toMatchObject([{ title: 'Call analytics MCP server', blurb: expect.any(String) }]);
     for (const s of stations) {
       if (s.id === 'evals' || s.id === 'call-agent') continue;
       // Planned items point at call-agent, evals and force-multiplier; none may leak.
@@ -144,9 +144,9 @@ describe('work → surfaces wiring', () => {
     }
   });
 
-  it('every in-progress item carries dates, so nothing is labeled "In progress" (owner rule)', () => {
+  it('in-progress items carry no status or date label and no links (owner rule)', () => {
     for (const w of work.filter((i) => i.status === 'in-progress')) {
-      expect(w.dates, `${w.id} needs dates`).toMatch(/^[A-Z][a-z]{2}( \d{4})? \u2013 [A-Z][a-z]{2} \d{4}$/);
+      expect(w.dates, `${w.id} must not carry a date label`).toBeUndefined();
       expect(w.links, `${w.id} must not link anything yet`).toHaveLength(0);
     }
   });
