@@ -1,14 +1,14 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { stations, type StationArtifact } from '../content/stations.js';
-import { stationWork } from '../content/workView';
+import { stationWork, type StationProject } from '../content/workView';
 
 export type Station = (typeof stations)[number];
 
 /** What a station actually shows: a live work.js item pointed at it wins
  *  (stations never list their work artifacts themselves — work.js is the one
  *  place), else the station's own artifact (Docking's contact link). */
-function artifactOf(station: Station): { artifact: StationArtifact; inProgress: string[] } {
+function artifactOf(station: Station): { artifact: StationArtifact; inProgress: StationProject[] } {
   const w = stationWork(station.id);
   return { artifact: w.artifact ?? station.artifact, inProgress: w.inProgress };
 }
@@ -134,13 +134,16 @@ export function StationContent({
         ))}
       </ul>
 
-      {/* Work that exists but is not done yet: named, labelled, never linked. */}
-      {inProgress.map((t) => (
-        <p key={t} className="mt-4 flex max-w-prose items-center gap-2.5 text-xs text-dim">
-          <span className="rounded-sm border border-rule-strong px-1.5 py-0.5 font-mono text-2xs uppercase tracking-widest text-hud">
-            In progress
-          </span>
-          {t}
+      {/* A project that has not shipped yet: named with its dates, never
+          linked. Owner's call: dates, never an "In progress" label. */}
+      {inProgress.map((p) => (
+        <p key={p.title} className="mt-4 flex max-w-prose items-center gap-2.5 text-xs text-dim">
+          {p.dates && (
+            <span className="shrink-0 rounded-sm border border-rule-strong px-1.5 py-0.5 font-mono text-2xs uppercase tracking-widest text-hud">
+              {p.dates}
+            </span>
+          )}
+          {p.title}
         </p>
       ))}
 

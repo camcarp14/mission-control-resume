@@ -30,16 +30,20 @@ export function workPageGroups(items: WorkItem[] = work): {
   };
 }
 
+/** An unshipped project as a station shows it: its title and its dates. */
+export type StationProject = { title: string; dates?: string };
+
 /** What a station shows from work.js: at most one artifact (from its live
- *  item) and an "In progress" chip per in-progress item pointed at it. */
+ *  item) and, per in-progress item pointed at it, its dates and title (owner's
+ *  call: dates, never an "In progress" label). */
 export function stationWork(
   stationId: string,
   items: WorkItem[] = work,
-): { artifact: StationArtifact | null; inProgress: string[] } {
+): { artifact: StationArtifact | null; inProgress: StationProject[] } {
   const live = items.find((i) => i.status === 'live' && i.stationId === stationId);
   const inProgress = items
     .filter((i) => i.status === 'in-progress' && i.stationId === stationId)
-    .map((i) => i.title);
+    .map((i): StationProject => (i.dates ? { title: i.title, dates: i.dates } : { title: i.title }));
   return { artifact: live ? toArtifact(live) : null, inProgress };
 }
 
