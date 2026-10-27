@@ -134,16 +134,17 @@ export function StationContent({
         ))}
       </ul>
 
-      {/* A project that has not shipped yet: named with its dates, never
-          linked. Owner's call: dates, never an "In progress" label. */}
+      {/* A project that has not shipped yet: named, never linked, and by the
+          owner's call never given a status or date label. */}
       {inProgress.map((p) => (
-        <p key={p.title} className="mt-4 flex max-w-prose items-center gap-2.5 text-xs text-dim">
+        <p key={p.title} className="mt-4 max-w-prose text-xs leading-relaxed text-dim">
           {p.dates && (
-            <span className="shrink-0 rounded-sm border border-rule-strong px-1.5 py-0.5 font-mono text-2xs uppercase tracking-widest text-hud">
+            <span className="mr-2.5 rounded-sm border border-rule-strong px-1.5 py-0.5 font-mono text-2xs uppercase tracking-widest text-hud">
               {p.dates}
             </span>
           )}
-          {p.title}
+          <span className="text-ink">{p.title}</span>
+          {p.blurb && <> — {p.blurb}</>}
         </p>
       ))}
 
