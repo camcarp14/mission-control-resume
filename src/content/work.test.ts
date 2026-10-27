@@ -134,12 +134,9 @@ describe('work → surfaces wiring', () => {
   it('the real file wires Zero To Secure to Flight Plan and ZTS Operations to Evals', () => {
     expect(stationWork('flight-plan').artifact).toMatchObject({ kind: 'link', href: 'https://zerotosecure.com/' });
     expect(stationWork('evals').artifact).toMatchObject({ kind: 'image', src: '/artifacts/zts-operations.jpg' });
-    // The one in-progress build (the résumé's Medicare evaluation pipeline)
-    // shows as a chip on Evals, beside the live ZTS screenshot.
-    expect(stationWork('evals').inProgress).toEqual(['Medicare call evaluation pipeline']);
     for (const s of stations) {
-      if (s.id === 'evals') continue;
-      // Planned items point at call-agent, evals and force-multiplier; none may leak.
+      // Planned items point at call-agent, evals and force-multiplier; none may
+      // leak, and by the owner's call nothing shows an "in progress" chip.
       expect(stationWork(s.id).inProgress).toEqual([]);
     }
   });

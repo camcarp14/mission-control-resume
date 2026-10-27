@@ -171,8 +171,8 @@ export const stations = [
   // New (Oct 2026). No figures. The evaluation layer is the résumé's evals
   // bullet; the human checkpoint is its "human approval step" (Ovative evals
   // bullet and the Zero To Secure line). The ZTS Operations screenshot —
-  // those agents, run on demo data — is attached from work.js, and the
-  // in-progress Medicare evaluation pipeline shows here as a chip.
+  // those agents, run on demo data — is attached from work.js. The Medicare
+  // evaluation pipeline (planned in work.js) attaches here once it is built.
   {
     id: 'evals',
     code: 'STN 05',
@@ -268,8 +268,8 @@ export const stations = [
   // -- STN 10 · FOUNDATIONS ------------------------------------------------
   // Absorbs the retired The Stack station (id the-stack). Degree and tool list
   // match the résumé's Education and Skills sections. No invented certs, and
-  // skills still being learned (Python, SQL) show up only through the
-  // in-progress evaluation pipeline on /work, never as finished skills.
+  // skills still being learned (Python, SQL) stay off until the projects
+  // that use them are built.
   {
     id: 'certs-instruments',
     code: 'STN 10',
