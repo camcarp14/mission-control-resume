@@ -91,6 +91,9 @@ export const pilot = {
 /** @type {Station[]} */
 export const stations = [
   // -- STN 01 · LIFTOFF ---------------------------------------------------
+  // The call-qualification skills run for one client; the 5-analyst / 10+
+  // account rollout was the reporting, pacing and forecasting automations
+  // (owner correction, Oct 2026) — keep the two apart in every line.
   // The thesis, re-aligned (Oct 2026) to the résumé's summary: an applied AI
   // builder who designs, evaluates and deploys LLM workflows, plus the client
   // lead and Medicare context that make the work deployable. ~1,000 calls,
@@ -104,7 +107,7 @@ export const stations = [
     proves:
       'An applied AI builder who designs, evaluates, and deploys LLM workflows on real conversation data — and the day-to-day client lead who gets them adopted, with deep Medicare payer context and $75M+ in media managed since 2023.',
     bullets: [
-      'Built production Claude skills that qualify ~1,000 calls a week, backed by golden datasets, LLM-as-judge scoring, and human review, and rolled them out to 5 analysts across 10+ accounts',
+      'Built production Claude skills that qualify ~1,000 calls a week for one client, backed by golden datasets, LLM-as-judge scoring, and human review, and led the rollout of AI automations to 5 analysts across 10+ accounts',
       'Channel lead and day-to-day client contact for nine accounts, including seven healthcare business units under a Fortune 5 payer',
       'Hands-on Invoca practitioner: call-quality signals drive the bidding, and AI on the call data shows which campaigns produce qualified prospects',
     ],
@@ -160,7 +163,7 @@ export const stations = [
     proves:
       'AI that reads the calls so analysts don’t have to — Claude skills that qualify about 1,000 Invoca calls a week and tie them to the campaigns behind them, cutting each run from 45 minutes to 5.',
     bullets: [
-      'Qualify about 1,000 Invoca call records a week, segment them, and tie qualified calls to the specific paid campaigns that drove them',
+      'Qualify about 1,000 Invoca call records a week for one client, segment them, and tie qualified calls to the specific paid campaigns that drove them',
       'Draft near client-ready insights from the results, cutting each run from 45 minutes to 5 and freeing analyst time for deeper optimization',
       'Built inside a locked-down enterprise stack with no API access, using MCP connectors and scheduled exports',
     ],
