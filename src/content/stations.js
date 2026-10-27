@@ -83,7 +83,7 @@ export const pilot = {
   // Two words on purpose: Hero.tsx stacks each word of the name on its own
   // line, so the full name holds the same width the short handle used to.
   name: 'CAMERON CARPENTER',
-  role: 'APPLIED AI \u00b7 PERFORMANCE MARKETING',
+  role: 'APPLIED AI \u00b7 HEALTHCARE & MEDICARE',
   status: 'ALL SYSTEMS GO',
   callsign: 'CC-01',
 };
@@ -91,29 +91,30 @@ export const pilot = {
 /** @type {Station[]} */
 export const stations = [
   // -- STN 01 · LIFTOFF ---------------------------------------------------
-  // The thesis, repositioned (Oct 2026) from client leadership to applied AI:
-  // the AI work is the lead and the media ownership is why it matters. $75M+,
-  // the seven business units and the Fortune 5 payer are all on the résumé
-  // (summary + first Ovative bullet). The no-API detail is the résumé's
-  // "locked-down enterprise stack" bullet.
+  // The thesis, re-aligned (Oct 2026) to the résumé's summary: an applied AI
+  // builder who designs, evaluates and deploys LLM workflows, plus the client
+  // lead and Medicare context that make the work deployable. ~1,000 calls,
+  // 5 analysts, 10+ accounts, nine accounts, seven business units, the
+  // Fortune 5 payer and $75M+ are all on the résumé (summary + Ovative
+  // bullets).
   {
     id: 'liftoff',
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'An applied AI builder with a performance marketer’s sense of the business — $75M+ in media managed since 2023, and AI systems I designed, measured, and got a team using, built inside locked-down enterprise tools.',
+      'An applied AI builder who designs, evaluates, and deploys LLM workflows on real conversation data — and the day-to-day client lead who gets them adopted, with deep Medicare payer context and $75M+ in media managed since 2023.',
     bullets: [
-      'Managed $75M+ in media investment since 2023 across healthcare, retail, and logistics as channel lead with manager-level ownership, including seven business units under a Fortune 5 healthcare payer',
-      'Design, evaluate, and ship Claude skills and agents that turn raw call and campaign data into client-ready decisions, built on connectors and scheduled exports with no API access',
+      'Built production Claude skills that qualify ~1,000 calls a week, backed by golden datasets, LLM-as-judge scoring, and human review, and rolled them out to 5 analysts across 10+ accounts',
+      'Channel lead and day-to-day client contact for nine accounts, including seven healthcare business units under a Fortune 5 payer',
       'Hands-on Invoca practitioner: call-quality signals drive the bidding, and AI on the call data shows which campaigns produce qualified prospects',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 02 · FLIGHT PLAN -----------------------------------------------
-  // Progression, not a job-hop reel: scope outpacing the title. 12+, 175%,
-  // AEP and $63B are on the résumé. Zero To Secure's live site is attached
-  // from work.js (stationId 'flight-plan'), not here.
+  // Progression, not a job-hop reel: scope outpacing the title. Nine
+  // accounts, 12+, 175%, AEP and $63B are on the résumé. Zero To Secure's
+  // live site is attached from work.js (stationId 'flight-plan'), not here.
   {
     id: 'flight-plan',
     code: 'STN 02',
@@ -121,7 +122,7 @@ export const stations = [
     proves:
       'Scope that’s outpaced the title since 2023 — channel lead on enterprise accounts, the team’s go-to on AI, and a company of my own on the side.',
     bullets: [
-      'Ovative Group — Senior Analyst, SEM (2023–present): channel lead across a $75M+ portfolio, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
+      'Ovative Group — Senior Analyst, SEM (2023–present): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
       'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand run solo (Shopify build, SEO, and go-to-market), with AI agents for organic growth and creator outreach',
       'AbbVie — Strategic Initiatives Analyst (2022–23): reporting that gave leadership of the $63B Allergan integration visibility into workstream status and risk',
     ],
@@ -130,26 +131,28 @@ export const stations = [
 
   // -- STN 03 · CALL INTELLIGENCE ------------------------------------------
   // Was "Integration" (id kept — ids never change). The buyer's side of the
-  // problem call-intelligence companies solve. 175%, $5M and $30M+ are the
-  // résumé's AEP bullet; the architecture and KPI lines are its Invoca bullet.
+  // problem call-intelligence companies solve. 175%, the AEP forecast, $5M
+  // and $35M are the résumé's AEP bullet; Value-Based Bidding and the
+  // CMS-approved copy are its bidding bullet (the KPI detail is from the
+  // master résumé).
   {
     id: 'integration',
     code: 'STN 03',
     title: 'Call Intelligence',
     proves:
-      'Healthcare programs moved from raw call volume to qualified outcomes — conversion architecture and Value-Based Bidding built on Invoca call-quality signals, translated into KPIs client leadership acts on.',
+      'Healthcare programs moved from raw call volume to qualified outcomes — Value-Based Bidding built on Invoca call-quality signals, kept inside CMS rules, and translated into KPIs client leadership acts on.',
     bullets: [
       'Designed conversion-action architecture and Value-Based Bidding around Invoca call-quality and spoken-phrase signals, so campaigns optimize toward qualified prospects rather than raw call volume',
-      'Drove a 175% year-over-year increase in enrollments for a national Medicare marketplace during AEP, earning $5M in incremental client investment on $30M+ in AEP spend',
-      'Translated the design into revenue-tied KPI hierarchies that non-technical client leadership can act on',
+      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period and built the full AEP forecast and budget plan; the results earned $5M in incremental investment, bringing AEP spend to $35M',
+      'Kept AEP campaigns compliant with CMS-approved copy, and turned the bidding design into revenue-tied KPIs that non-technical client leaders can act on',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 04 · THE AGENT --------------------------------------------------
   // New (Oct 2026). ~1,000 calls a week and 45 -> 5 minutes are the résumé's
-  // call-skill bullet. Planned work items (Invoca MCP server, demo video)
-  // attach here via work.js when they go live.
+  // call-skill bullet. Planned work items (call analytics MCP server, demo
+  // video) attach here via work.js when they go live.
   {
     id: 'call-agent',
     code: 'STN 04',
@@ -168,7 +171,8 @@ export const stations = [
   // New (Oct 2026). No figures. The evaluation layer is the résumé's evals
   // bullet; the human checkpoint is its "human approval step" (Ovative evals
   // bullet and the Zero To Secure line). The ZTS Operations screenshot —
-  // those agents, run on demo data — is attached from work.js.
+  // those agents, run on demo data — is attached from work.js, and the
+  // in-progress Medicare evaluation pipeline shows here as a chip.
   {
     id: 'evals',
     code: 'STN 05',
@@ -185,17 +189,18 @@ export const stations = [
 
   // -- STN 06 · PIPELINE ---------------------------------------------------
   // Absorbs the retired Diagnostics station (id firefight): its catches are
-  // now the "checks that catch broken tracking" clause. 5 analysts, 10
-  // accounts, 300+ hours, hours -> ~30 minutes and up to 50% are all on the
+  // now the "checks that catch broken tracking" clause. 5 analysts, 10+
+  // accounts, 300+ hours and hours -> ~30 minutes are on the résumé; up to
+  // 50% is owner-confirmed, predates the repositioning, and is on the master
   // résumé. The workflow builder stays unnamed, by owner rule.
   {
     id: 'pipeline',
     code: 'STN 06',
     title: 'Pipeline',
     proves:
-      'Systems that compound — reporting, pacing, and forecasting built with AI tooling, used by five analysts across ten client accounts and returning 300+ hours a quarter.',
+      'Systems that compound — reporting, pacing, and forecasting automations rolled out to five analysts across 10+ accounts, returning 300+ hours a quarter.',
     bullets: [
-      'Automated reporting, pacing, and forecasting systems used by 5 analysts across 10 client accounts, saving 300+ hours per quarter, with checks that catch broken tracking before clients see it',
+      'Led the rollout of AI automations for reporting, pacing, and forecasting to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
       'Built a visual workflow builder that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from hours to about 30 minutes',
       'Account diagnostic agents built on it cut the time spent diagnosing performance shifts by up to 50%',
     ],
@@ -203,38 +208,41 @@ export const stations = [
   },
 
   // -- STN 07 · ENABLEMENT -------------------------------------------------
-  // AI adoption as a people problem. Two analysts, the junior analyst's first
-  // Claude tool, the 13-week curriculum and the AI trainings are the résumé's
-  // coaching bullet; the forecasting inputs are owner detail from the brief.
+  // AI adoption as a people problem. Two analysts, the 13-week curriculum and
+  // the team guides are the résumé's coaching bullet; the junior analyst's
+  // first Claude tool and its forecasting inputs are owner detail (master
+  // résumé). No formal AI trainings are claimed: he shares what he learns
+  // with the team, he did not author trainings (owner correction, Oct 2026).
   {
     id: 'force-multiplier',
     code: 'STN 07',
     title: 'Enablement',
     proves:
-      'AI adoption is a people problem, so I teach it — the team’s AI trainings, two analysts coached, and a junior analyst who now builds with AI on his own.',
+      'AI adoption is a people problem, so I teach it — two analysts coached, a junior analyst who now builds with AI on his own, and what I learn shared with the wider team.',
     bullets: [
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Coach and lead two analysts on the healthcare accounts, and author the team’s AI trainings, best practices, and playbooks',
+      'Coach two analysts on the healthcare accounts, write the team’s guides on running analyses and building reports, and share AI learnings with the broader team',
       'Directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
     ],
     artifact: { kind: 'none' },
   },
 
   // -- STN 08 · THE BRIDGE -------------------------------------------------
-  // The client-leadership station, copy unchanged in the repositioning. Seven
-  // business units and 12+ stakeholders are on the résumé; the launch is the
-  // SEM workstream for a new healthcare provider program (anonymized, as on
-  // the résumé).
+  // The client-leadership station, re-aligned (Oct 2026) to the résumé's
+  // client bullets: discovery, objections, incremental budget, experiments
+  // with partner reps, and tracking. Seven business units and 12+
+  // stakeholders are on the résumé; the launch is the SEM workstream for a
+  // new healthcare provider program (anonymized, as on the résumé).
   {
     id: 'the-bridge',
     code: 'STN 08',
     title: 'The Bridge',
     proves:
-      'The client relationship is the job — weekly in front of 12+ stakeholders across seven healthcare business units, running the reviews, the partner syncs, and the launches, and pushing back when a request would trade lead quality for a prettier metric.',
+      'The client relationship is the job — discovery on new accounts, weekly in front of 12+ stakeholders across seven healthcare business units, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Present weekly to 12+ client stakeholders across a Fortune 5 payer’s healthcare portfolio; run quarterly business reviews and strategic roadmaps, and lead syncs with Google, Microsoft, and Invoca partner teams',
+      'Present weekly to 12+ client stakeholders across a Fortune 5 payer’s healthcare portfolio and run quarterly business reviews; led discovery for new accounts, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
       'Led the SEM workstream for a new healthcare provider program from planning through launch — strategy, campaign structure, conversion and bidding approach, build QA, and reporting tied to qualified calls and appointments',
-      'Onboarded new retail and healthcare clients and rebuilt alignment on a multi-brand portfolio by educating stakeholders on business-impact measurement and providing informed pushback when a request conflicted with best practice',
+      'Ran experiments and Google beta pilots alongside Google, Microsoft, and Invoca reps; partnered with data, SEO, and client teams on tracking implementation, catching site and budget issues before they reached clients',
     ],
     artifact: { kind: 'none' },
   },
@@ -259,17 +267,19 @@ export const stations = [
 
   // -- STN 10 · FOUNDATIONS ------------------------------------------------
   // Absorbs the retired The Stack station (id the-stack). Degree and tool list
-  // match the résumé's Education and Skills sections. No invented certs.
+  // match the résumé's Education and Skills sections. No invented certs, and
+  // skills still being learned (Python, SQL) show up only through the
+  // in-progress evaluation pipeline on /work, never as finished skills.
   {
     id: 'certs-instruments',
     code: 'STN 10',
     title: 'Foundations',
     proves:
-      'The toolkit behind the work — a business degree with a risk-management core, the ad and analytics stack I use daily, and the AI stack I build with.',
+      'The toolkit behind the work — a business degree with a risk-management core, the ad and analytics stack I use daily, and the AI and web stack I build with.',
     bullets: [
       'University of Wisconsin–Madison — BBA, double major in Marketing and Risk Management & Insurance (2023)',
-      'Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Invoca · Tableau · Shopify · Excel',
-      'AI & agents: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, rubrics, LLM-as-judge) · human-in-the-loop design · prompt and context engineering · workflow automation',
+      'Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
+      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge, calibration) · human-in-the-loop design · JavaScript · React · Supabase · Netlify · Git and GitHub',
     ],
     artifact: { kind: 'none' },
   },

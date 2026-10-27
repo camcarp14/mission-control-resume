@@ -189,8 +189,9 @@ const resumeText = exists('public/resume.pdf') ? pdfText(join(root, 'public/resu
   if (resumeText === null) problems.push('could not read the PDF’s text (install poppler: `brew install poppler`)');
   // The HEADLINE, not the phrase: the pre-repositioning résumé already said
   // "Applied AI Tooling" in its skills line and sailed through a bare
-  // includes('Applied AI') (QA, Oct 2026).
-  else if (!/Applied AI\s*\|\s*Performance Marketing/.test(resumeText)) problems.push('public/resume.pdf does not lead with "Applied AI | Performance Marketing" — it is the pre-repositioning version');
+  // includes('Applied AI') (QA, Oct 2026). Late Oct 2026 the headline moved
+  // to "Applied AI | AI Evaluation and Deployment | Healthcare and Medicare".
+  else if (!/Applied AI\s*\|\s*AI Evaluation and Deployment/.test(resumeText)) problems.push('public/resume.pdf does not lead with "Applied AI | AI Evaluation and Deployment" — it is an older version');
   check(
     'The résumé PDF carries the Applied AI positioning',
     problems,

@@ -78,8 +78,8 @@ function ComingSoon() {
       </p>
       <ul className="soon-topics" aria-label="Topics">
         <li>Applied AI</li>
+        <li>Evals</li>
         <li>Call intelligence</li>
-        <li>Performance marketing</li>
       </ul>
     </div>
   );
