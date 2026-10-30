@@ -186,7 +186,7 @@ export const work = [
   // -- PROJECTS (shown; no links or results until they ship) ----------------
   // The résumé's two projects. Owner's call (Oct 2026): shown now, with no
   // status or date label of any kind. Descriptions say what each build does;
-  // its numbers (calls, requirements, judge-human agreement) go in only once
+  // its numbers (calls, requirements, agreement with the answer key) go in only once
   // measured, here and on the résumé PDF in the same change. Take each to
   // 'live' with a real link when it ships. Retired ids (never reuse):
   // invoca-mcp (now call-analytics-mcp, on synthetic call data),
@@ -196,10 +196,10 @@ export const work = [
     title: 'Medicare call evaluation pipeline',
     pillars: ['Build', 'Measure'],
     summary:
-      'A Python pipeline that rebuilds my production call-qualification workflow on synthetic Medicare enrollment calls, grading each call against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against hand labels, ending in a published eval readout.',
+      'A Python pipeline that rebuilds my production call-qualification workflow on synthetic Medicare enrollment calls, grading each call against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against a blind-labeled, reviewed answer key and audited against planted answers, ending in a published eval readout.',
     links: [],
     status: 'in-progress',
-    blurb: 'grades synthetic Medicare enrollment calls on compliance checks in Python, with an LLM judge calibrated against hand labels',
+    blurb: 'grades synthetic Medicare enrollment calls on compliance checks in Python, with an LLM judge calibrated against a blind-labeled, reviewed answer key',
     stationId: 'evals',
     updated: '2026-10',
   },

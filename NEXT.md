@@ -90,7 +90,7 @@ fails a live item without a real link, or an in-progress one with links.
 
 | Work item (`id`) | Attaches to | The edit that takes it live |
 |---|---|---|
-| Medicare call evaluation pipeline (`medicare-eval-pipeline`) — shown now, with no status or date label (owner's call) | STN 05 · Evals & Guardrails (`evals`) | `status: 'live', links: [{ label: 'Read the readout', href: '<url>' }]` — STN 05's slot is held by ZTS Operations today; move that item's `stationId` off first. Add the measured numbers (calls, requirements, judge-human agreement) here and on the résumé PDF in the same change |
+| Medicare call evaluation pipeline (`medicare-eval-pipeline`) — shown now, with no status or date label (owner's call) | STN 05 · Evals & Guardrails (`evals`) | `status: 'live', links: [{ label: 'Read the readout', href: '<url>' }]` — STN 05's slot is held by ZTS Operations today; move that item's `stationId` off first. Add the measured numbers (calls, requirements, agreement with the answer key) here and on the résumé PDF in the same change |
 | Call analytics MCP server (`call-analytics-mcp`) — shown now, with no status or date label | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'GitHub', href: '<repo url>' }]` when it is built |
 | Problem-led demo video (`call-agent-demo`) | STN 04 · The Agent (`call-agent`) | `status: 'live', links: [{ label: 'Watch (2 min)', href: '<video url>' }]` — note STN 04 holds one artifact; whichever goes live first takes the button, so retarget the other's `stationId` or list it on `/work` only |
 | AI trust package and usage guideline (`ai-trust-package`) | STN 05 · Evals & Guardrails (`evals`) | as above |
