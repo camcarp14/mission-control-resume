@@ -1,0 +1,107 @@
+# The résumé, as data. Edit this file, then run:  python resume/build.py
+# It writes resume/Cameron-Carpenter-Resume.docx and public/resume.pdf.
+# **double asterisks** make text bold.
+
+name: Cameron Carpenter
+tagline: Applied AI | AI Evaluation and Deployment | Healthcare and Medicare
+contact:
+  - {text: "Chicago, IL"}
+  - {text: "cam.carp14@gmail.com", link: "mailto:cam.carp14@gmail.com"}
+  - {text: "(608) 239-5304"}
+  - {text: "camcarp.com/work", link: "https://camcarp.com/work"}
+  - {text: "linkedin.com/in/cameroncarpenter1", link: "https://www.linkedin.com/in/cameroncarpenter1"}
+
+summary: >-
+  Applied AI builder who designs, evaluates and deploys LLM workflows on real conversation data.
+  Built production Claude skills that qualify ~1,000 calls a week for one client, backed by golden
+  datasets, LLM-as-judge scoring and human review, and led the rollout of AI automations to 5 analysts
+  across 10+ accounts. Day-to-day client lead with deep Medicare payer context and $75M+ in media
+  managed since 2023.
+
+experience:
+  - org: Ovative Group
+    role: Senior Analyst, Search Engine Marketing
+    where: Chicago, IL
+    when: Jun 2023 – Present
+    bullets:
+      - >-
+        Built Claude skills that qualify ~1,000 inbound calls a week for one client, tie them to the
+        campaigns that drove them and draft client-ready insights, cutting each run from 45 minutes to 5,
+        inside a locked-down stack using MCP connectors and call exports.
+      - >-
+        Built the evaluation layer behind them: golden datasets, rubrics and LLM-as-judge scoring that
+        test every version before client delivery, with human approval on any agent that takes action.
+      - >-
+        Led the rollout of AI automations for reporting, pacing and forecasting to 5 analysts across 10+
+        accounts, saving 300+ hours a quarter; built a visual workflow builder that cut skill build time
+        from hours to ~30 minutes.
+      - >-
+        Built a Claude insight tool designed to coach, not write: a direct report and three analysts draft
+        each insight from account data pulled through MCP connectors, then it critiques the reasoning and
+        corrects it. Used weekly, it cut review time 50% and made client recommendations more impactful;
+        also ran a 13-week intern curriculum that earned a return offer.
+      - >-
+        Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
+        Enrollment Period (AEP) and built the full AEP forecast and budget plan; results earned $5M in
+        incremental investment, bringing AEP spend to $35M.
+      - >-
+        Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
+        volume to qualified outcomes; kept AEP campaigns compliant with CMS-approved copy.
+      - >-
+        Channel lead and day-to-day client contact for nine accounts, including seven healthcare business
+        units under a Fortune 5 payer, presenting weekly to 12+ client stakeholders; led discovery for new
+        accounts, handled objections with data-backed rebuttals and pitched incremental budget to
+        decision-makers.
+      - >-
+        Ran experiments and piloted Google beta features, working directly with Google, Microsoft and
+        Invoca reps; partnered with data, SEO and client teams on tracking implementation, catching site,
+        tracking and budget issues before they reached clients.
+      - >-
+        Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
+        5% and ROAS 20%, then led its migration off SA360 without disruption.
+  - org: Zero To Secure
+    role: Founder
+    where: Chicago, IL
+    when: Jul 2025 – Present
+    bullets:
+      - >-
+        Founded and run a bootstrapped DTC brand solo, owning Shopify development, SEO content and
+        go-to-market, with AI agents for organic growth and creator outreach behind a human approval step.
+  - org: AbbVie
+    role: Strategic Initiatives Analyst
+    where: North Chicago, IL
+    when: Mar 2022 – May 2023
+    bullets:
+      - >-
+        Supported the $63B AbbVie-Allergan integration, resolving cross-functional bottlenecks and building
+        reporting tools that gave leadership visibility into workstream status and risk.
+
+projects:
+  - name: Medicare Enrollment Call Evaluation Pipeline
+    note: Personal project, synthetic data
+    bullets:
+      - >-
+        Python pipeline that rebuilds a production call-qualification workflow on synthetic Medicare calls,
+        grading each against binary requirements (TPMO disclaimer, scope of appointment, eligibility, plan
+        accuracy).
+      - >-
+        LLM-as-judge and rule-based checks calibrated against a blind-labeled, reviewed answer key and
+        audited against planted answers, ending in a published eval readout.
+  - name: Call Analytics MCP Server
+    note: Personal project, synthetic data
+    bullets:
+      - >-
+        MCP server that lets Claude query graded calls, grade new ones through the pipeline and draft
+        offline-conversion batches; releasing a batch requires human approval, enforced in code rather than
+        the prompt.
+
+education:
+  - school: University of Wisconsin-Madison
+    degree: BBA, Marketing and Risk Management & Insurance
+    when: May 2023
+
+skills:
+  - "**AI and Evaluation:** Claude (Enterprise, Code), Agent Skills, MCP, Evals (Golden Datasets, LLM-as-Judge, Calibration), Human-in-the-Loop Design"
+  - "**Technical:** Python, SQL, JavaScript, React, Supabase, Netlify, Git and GitHub, Webhooks and APIs"
+  - "**Contact Center:** Invoca, call qualification, AHT, FCR, containment, QA scoring"
+  - "**Platforms:** Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, Google Tag Manager, Offline Conversion Imports, Looker Studio, BigQuery, Tableau, Shopify"

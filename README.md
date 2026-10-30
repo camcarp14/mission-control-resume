@@ -103,8 +103,9 @@ full-screen view.
 
 Screenshots go in `public/` (1200×750 works well — see `public/placeholders/`),
 and the walkthrough-video slot takes a `videoSrc` + optional `poster` per
-station. Replace `public/resume.pdf` with your real PDF — the download button is
-wired to that path from the gate, every station, and the static page.
+station. `public/resume.pdf` is built from `resume/resume.yaml` by `python resume/build.py`
+(see `resume/README.md`) — the download button is wired to that path from the
+gate, every station, and the static page.
 
 ## Deploying to Netlify
 

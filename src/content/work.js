@@ -208,10 +208,10 @@ export const work = [
     title: 'Call analytics MCP server',
     pillars: ['Build'],
     summary:
-      'An MCP server that lets Claude query call data and grade new calls through the evaluation pipeline, with human approval before results are sent on.',
+      'An MCP server that lets Claude query graded calls, grade new ones through the evaluation pipeline and draft offline-conversion batches; releasing a batch requires human approval, enforced in code rather than the prompt.',
     links: [],
     status: 'in-progress',
-    blurb: 'lets Claude query call data and grade new calls through the pipeline, with human approval before results go out',
+    blurb: 'lets Claude query graded calls, grade new ones and draft conversion batches, with human approval enforced in code',
     stationId: 'call-agent',
     updated: '2026-10',
   },

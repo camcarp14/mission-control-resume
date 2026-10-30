@@ -211,21 +211,23 @@ export const stations = [
   },
 
   // -- STN 07 · ENABLEMENT -------------------------------------------------
-  // AI adoption as a people problem. Two analysts, the 13-week curriculum and
-  // the team guides are the résumé's coaching bullet; the junior analyst's
-  // first Claude tool and its forecasting inputs are owner detail (master
-  // résumé). No formal AI trainings are claimed: he shares what he learns
-  // with the team, he did not author trainings (owner correction, Oct 2026).
+  // AI adoption as a people problem. The insight tool (a direct report and
+  // three analysts, weekly use, review time down 50%) and the 13-week
+  // curriculum are the résumé's coaching bullet (owner-stated, Oct 2026); the
+  // team guides and the junior analyst's first Claude tool and its
+  // forecasting inputs are owner detail (master résumé). No formal AI
+  // trainings are claimed: he shares what he learns with the team, he did
+  // not author trainings (owner correction, Oct 2026).
   {
     id: 'force-multiplier',
     code: 'STN 07',
     title: 'Enablement',
     proves:
-      'AI adoption is a people problem, so I teach it — two analysts coached, a junior analyst who now builds with AI on his own, and what I learn shared with the wider team.',
+      'AI adoption is a people problem, so I build for it — an insight tool that coaches my analysts instead of writing for them, a junior analyst who now builds with AI on his own, and what I learn shared with the wider team.',
     bullets: [
+      'Built a Claude insight tool designed to coach, not write: a direct report and three analysts draft each insight from account data pulled through MCP connectors, then it critiques the reasoning and corrects it; used weekly, it cut my review time 50% and made client recommendations more impactful',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Coach two analysts on the healthcare accounts, write the team’s guides on running analyses and building reports, and share AI learnings with the broader team',
-      'Directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
+      'Lead a direct report and three analysts on my accounts, write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
     ],
     artifact: { kind: 'none' },
   },
