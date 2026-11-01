@@ -155,18 +155,21 @@ export const stations = [
 
   // -- STN 04 · THE AGENT --------------------------------------------------
   // New (Oct 2026). ~1,000 calls a week and 45 -> 5 minutes are the résumé's
-  // call-skill bullet. The call analytics MCP server project shows here with
-  // its dates (work.js); the demo video stays planned.
+  // call-skill bullet. The bullets follow the owner's account (Nov 2026):
+  // Invoca spoken phrase, its exports and tracking data, paired with Google
+  // and Microsoft Ads data over MCP. The call analytics MCP server project
+  // shows here (work.js) but is personal work, not a rebuild of this; the
+  // demo video stays planned.
   {
     id: 'call-agent',
     code: 'STN 04',
     title: 'The Agent',
     proves:
-      'AI that reads the calls so analysts don’t have to — Claude skills that qualify about 1,000 Invoca calls a week and tie them to the campaigns behind them, cutting each run from 45 minutes to 5.',
+      'Manual call categorization turned into a Claude workflow — Invoca, tracking and ad-platform data paired for about 1,000 calls a week, cutting each run from 45 minutes to 5.',
     bullets: [
-      'Qualify about 1,000 Invoca call records a week for one client, segment them, and tie qualified calls to the specific paid campaigns that drove them',
+      'Set up Invoca spoken-phrase tracking, then built Claude skills that pair its exports and tracking data with Google Ads and Microsoft Ads data through MCP connectors, inside a locked-down enterprise stack with no API access',
+      'Categorize about 1,000 calls a week for one client and tie qualified calls to the paid campaigns behind them, work that used to be manual and slow because Invoca data wasn’t a clean 1:1 match',
       'Draft near client-ready insights from the results, cutting each run from 45 minutes to 5 and freeing analyst time for deeper optimization',
-      'Built inside a locked-down enterprise stack with no API access, using MCP connectors and scheduled exports',
     ],
     artifact: { kind: 'none' },
   },

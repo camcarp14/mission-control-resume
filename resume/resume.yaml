@@ -25,9 +25,10 @@ experience:
     when: Jun 2023 – Present
     bullets:
       - >-
-        Built Claude skills that qualify ~1,000 inbound calls a week for one client, tie them to the
-        campaigns that drove them and draft client-ready insights, cutting each run from 45 minutes to 5,
-        inside a locked-down stack using MCP connectors and call exports.
+        Set up Invoca spoken-phrase tracking and built Claude skills that pair its exports and tracking
+        data with Google Ads and Microsoft Ads data via MCP, categorizing ~1,000 calls a week for one client
+        and drafting client-ready insights. Replaced manual work slowed by Invoca data that wasn't 1:1
+        clean, cutting each run from 45 minutes to 5, inside a locked-down stack.
       - >-
         Built the evaluation layer behind them: golden datasets, rubrics and LLM-as-judge scoring that
         test every version before client delivery, with human approval on any agent that takes action.
@@ -81,9 +82,8 @@ projects:
     note: Personal project, synthetic data
     bullets:
       - >-
-        Python pipeline that rebuilds a production call-qualification workflow on synthetic Medicare calls,
-        grading each against binary requirements (TPMO disclaimer, scope of appointment, eligibility, plan
-        accuracy).
+        Python pipeline grading synthetic Medicare calls on TPMO disclaimer, scope of appointment,
+        eligibility and plan accuracy.
       - >-
         LLM-as-judge and rule-based checks calibrated against a blind-labeled, reviewed answer key and
         audited against planted answers, ending in a published eval readout.

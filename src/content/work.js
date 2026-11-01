@@ -191,12 +191,14 @@ export const work = [
   // 'live' with a real link when it ships. Retired ids (never reuse):
   // invoca-mcp (now call-analytics-mcp, on synthetic call data),
   // eval-pilot-readout (folded into medicare-eval-pipeline).
+  // Owner correction (Nov 2026): these are personal projects, separate from
+  // the Ovative call work, not a rebuild of it. Never say they are.
   {
     id: 'medicare-eval-pipeline',
     title: 'Medicare call evaluation pipeline',
     pillars: ['Build', 'Measure'],
     summary:
-      'A Python pipeline that rebuilds my production call-qualification workflow on synthetic Medicare enrollment calls, grading each call against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against a blind-labeled, reviewed answer key and audited against planted answers, ending in a published eval readout.',
+      'A personal Python pipeline, separate from my client work, that grades synthetic Medicare enrollment calls against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against a blind-labeled, reviewed answer key and audited against planted answers, ending in a published eval readout.',
     links: [],
     status: 'in-progress',
     blurb: 'grades synthetic Medicare enrollment calls on compliance checks in Python, with an LLM judge calibrated against a blind-labeled, reviewed answer key',
