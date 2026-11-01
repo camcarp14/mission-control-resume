@@ -46,24 +46,29 @@ experience:
           - >-
             Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
-      - label: AI systems and enablement
+      - label: AI systems
         bullets:
           - >-
             Reduced call analysis time from 45 minutes to 5 per run across ~1,000 weekly calls for one client by
             building Claude skills that consolidate call, tracking and ad platform data into client-ready insights.
           - >-
-            Built the evaluation layer behind those skills. Golden datasets, rubrics and LLM-as-judge scoring
-            test every version before client delivery, and any agent that takes action needs human approval.
+            Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics
+            and LLM-as-judge scoring.
+          - >-
+            Built a visual workflow tool that cut skill build time from hours to ~30 minutes.
+      - label: Team leadership and enablement
+        bullets:
+          - >-
+            Led a direct report and three analysts, cutting review time 50% with a Claude tool that critiques
+            their draft reasoning.
           - >-
             Saved 300+ hours a quarter by rolling out AI reporting, pacing and forecasting automations to 5
             analysts across 10+ accounts.
           - >-
-            Built a visual workflow tool that cut skill build time from hours to ~30 minutes.
+            Wrote the team's guides on analysis and reporting, and helped a junior analyst build a first Claude
+            tool for budget forecasting.
           - >-
-            Cut review time 50% with a Claude tool that critiques and corrects reasoning on drafts by a direct
-            report and three analysts.
-          - >-
-            Ran a 13-week intern curriculum that earned a return offer.
+            Managed a summer intern through a self-authored 13-week curriculum that earned a return offer.
   - org: Zero To Secure
     role: Founder
     where: Chicago, IL
