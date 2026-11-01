@@ -123,7 +123,7 @@ export const stations = [
     code: 'STN 02',
     title: 'Flight Plan',
     proves:
-      'Scope that’s outpaced the title since 2023 — channel lead on enterprise accounts, an AI leader on the team, and a company of my own on the side.',
+      'Scope that’s outpaced the title since 2023 — channel lead across 20 accounts, an AI leader on the team, and a company of my own on the side.',
     bullets: [
       'Ovative Group — Senior Analyst, SEM (2023–present): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
       'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand run solo (Shopify build, SEO, and go-to-market), with AI agents for organic growth and creator outreach',
