@@ -172,7 +172,9 @@ export const stations = [
   },
 
   // -- STN 05 · THE TURNAROUND ---------------------------------------------
-  // The retail story, copy unchanged. 5% revenue, 20% ROAS and 13% spend are
+  // The retail story, copy unchanged. A past account (owner, Nov 2026), so keep
+  // it in the past tense; the nine current accounts are seven healthcare
+  // business units and two logistics accounts. 5% revenue, 20% ROAS and 13% spend are
   // the résumé's retail bullet; the 33% CPC drop is owner-confirmed and
   // predates the repositioning.
   {
