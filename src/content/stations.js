@@ -97,14 +97,15 @@ export const stations = [
   // The thesis, re-aligned (Nov 2026) to the résumé's summary: a client-facing
   // consultant who leads discovery and builds the technical solution. ~1,000
   // calls, 5 analysts, 10+ accounts, nine accounts, seven business units, 12+
-  // stakeholders, the Fortune 5 payer and $75M+ are all on the résumé. The $75M+
-  // is career-to-date, so don't tie it to the nine current accounts.
+  // stakeholders, the Fortune 5 payer, 20 accounts and $75M+ are all on the
+  // résumé. The 20 accounts (owner, Nov 2026) and $75M+ are career-to-date, so
+  // don't tie them to the nine current accounts.
   {
     id: 'liftoff',
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'A client-facing consultant who leads discovery, answers objections, and builds the technical solution, with $75M+ in media managed since 2023.',
+      'A client-facing consultant who leads discovery, answers objections, and builds the technical solution, across 20 accounts and $75M+ in media since 2023.',
     bullets: [
       'Channel lead and day-to-day client contact for nine accounts, including seven healthcare business units under a Fortune 5 payer, presenting weekly to 12+ client stakeholders',
       'Built production Claude skills that categorize ~1,000 calls a week for one client, backed by golden datasets, LLM-as-judge scoring, and human review',
