@@ -3,7 +3,7 @@
 # **double asterisks** make text bold.
 
 name: Cameron Carpenter
-tagline: Applied AI | AI Evaluation and Deployment | Healthcare and Medicare
+tagline: Client Strategy | Applied AI | AI Evaluation and Deployment | Healthcare and Medicare
 contact:
   - {text: "Chicago, IL"}
   - {text: "cam.carp14@gmail.com", link: "mailto:cam.carp14@gmail.com"}
@@ -12,11 +12,11 @@ contact:
   - {text: "linkedin.com/in/cameroncarpenter1", link: "https://www.linkedin.com/in/cameroncarpenter1"}
 
 summary: >-
-  Applied AI builder who designs, evaluates and deploys LLM workflows on real conversation data.
-  Built production Claude skills that qualify ~1,000 calls a week for one client, backed by golden
-  datasets, LLM-as-judge scoring and human review, and led the rollout of AI automations to 5 analysts
-  across 10+ accounts. Day-to-day client lead with deep Medicare payer context and $75M+ in media
-  managed since 2023.
+  Day-to-day client lead with $75M+ in media managed since 2023, now running nine accounts, including
+  seven healthcare business units under a Fortune 5 payer. Presents weekly to client stakeholders, runs
+  quarterly business reviews, leads discovery and pitches incremental budget to decision-makers. Also
+  builds the LLM workflows behind the work, including production Claude skills that qualify ~1,000
+  calls a week for one client, backed by golden datasets, LLM-as-judge scoring and human review.
 
 experience:
   - org: Ovative Group
@@ -24,9 +24,31 @@ experience:
     where: Chicago, IL
     when: Jun 2023 – Present
     scope: >-
-      Channel lead for nine accounts, including seven healthcare units of a Fortune 5 payer, presenting
-      weekly to 12+ stakeholders.
+      Channel lead for a Fortune 5 payer's seven healthcare business units, a national retail brand and a
+      global logistics provider.
     groups:
+      - label: Client leadership and results
+        bullets:
+          - >-
+            Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
+            Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
+            Owned the full forecast and budget plan in other AEPs.
+          - >-
+            Present weekly to 12+ client stakeholders and run quarterly business reviews across a Fortune 5
+            payer's healthcare portfolio.
+          - >-
+            Led new-account discovery, handled objections with data-backed rebuttals, pitched incremental
+            budget to decision-makers.
+          - >-
+            Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
+            volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders. Kept AEP
+            campaigns compliant with CMS-approved copy.
+          - >-
+            Led the SEM launch for a new healthcare provider, from strategy to reporting on qualified calls
+            and appointments.
+          - >-
+            Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
+            5% and ROAS 20%, then led its migration off SA360 without disruption.
       - label: AI systems and enablement
         bullets:
           - >-
@@ -43,29 +65,10 @@ experience:
           - >-
             Built a visual workflow builder that cut skill build time from hours to ~30 minutes.
           - >-
-            Cut review time 50% with a Claude insight tool that critiques and corrects analysts' reasoning on
-            their own drafts, using account data from MCP connectors. A direct report and three analysts use
-            it weekly.
+            Cut review time 50% with a Claude tool that critiques and corrects reasoning on drafts by a direct
+            report and three analysts.
           - >-
             Ran a 13-week intern curriculum that earned a return offer.
-      - label: Client strategy and results
-        bullets:
-          - >-
-            Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
-            Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
-            Owned the full forecast and budget plan in other AEPs.
-          - >-
-            Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
-            volume to qualified outcomes, and kept AEP campaigns compliant with CMS-approved copy.
-          - >-
-            Led discovery for new accounts, handled objections with data and pitched incremental budget to
-            decision-makers.
-          - >-
-            Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
-            5% and ROAS 20%, then led its migration off SA360 without disruption.
-          - >-
-            Piloted Google betas with platform reps and partnered with data, SEO and client teams to catch
-            tracking issues early.
   - org: Zero To Secure
     role: Founder
     where: Chicago, IL
