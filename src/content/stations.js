@@ -151,9 +151,9 @@ export const stations = [
     artifact: { kind: 'none' },
   },
 
-  // -- STN 04 · CALL INTELLIGENCE ------------------------------------------
-  // Was "Integration" (id kept — ids never change). The buyer's side of the
-  // problem call-intelligence companies solve. 175%, $5M, $35M and the
+  // -- STN 04 · CLIENT RESULTS ------------------------------------------
+  // Was "Integration", then "Call Intelligence" (id kept — ids never change).
+  // Renamed for any solutions role, to match the résumé. 175%, $5M, $35M and the
   // forecast line are the résumé's AEP bullet; the forecast was a different
   // AEP from the 175% year, so never join them. Value-Based Bidding and the
   // CMS-approved copy are its bidding bullet (the KPI detail is from the
@@ -161,9 +161,9 @@ export const stations = [
   {
     id: 'integration',
     code: 'STN 04',
-    title: 'Call Intelligence',
+    title: 'Client Results',
     proves:
-      'Healthcare programs moved from raw call volume to qualified outcomes, with bidding built on call-quality signals, kept inside CMS rules, and translated into KPIs client leaders act on.',
+      'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M. Owned the full forecast and budget plan in other AEPs',
       'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders',

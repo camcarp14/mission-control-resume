@@ -77,9 +77,9 @@ function ComingSoon() {
         Field notes on client work and building with AI, drawn from real projects.
       </p>
       <ul className="soon-topics" aria-label="Topics">
+        <li>Client work</li>
         <li>Applied AI</li>
         <li>Evals</li>
-        <li>Call intelligence</li>
       </ul>
     </div>
   );
