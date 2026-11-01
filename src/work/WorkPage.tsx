@@ -10,9 +10,9 @@ import { WorkHeader } from './WorkHeader';
  *
  * Plain on purpose: no gate, no WebGL, no flight chunk, no images — just
  * what was built, what it does, and where to see it, read from work.js like
- * every other surface. Live items first with their links; in-progress items
- * after under Projects, unlabeled and unlinked; planned items never appear
- * (workView.ts).
+ * every other surface. The résumé's two projects lead, unlabeled and
+ * unlinked, because they're the strongest proof for a solutions role; live
+ * builds follow with their links; planned items never appear (workView.ts).
  */
 const stationName = new Map(stations.map((s) => [s.id, `${s.code} · ${s.title}`]));
 
@@ -32,17 +32,6 @@ export default function WorkPage() {
     <main className="workpage">
       <WorkHeader />
 
-      <section aria-labelledby="work-live" className="work-group">
-        <h2 id="work-live" className="work-group-title">
-          Live <span className="num text-faint">{live.length}</span>
-        </h2>
-        <ul className="work-list">
-          {live.map((w) => (
-            <Item key={w.id} w={w} />
-          ))}
-        </ul>
-      </section>
-
       {inProgress.length > 0 && (
         <section aria-labelledby="work-wip" className="work-group">
           <h2 id="work-wip" className="work-group-title">
@@ -55,6 +44,17 @@ export default function WorkPage() {
           </ul>
         </section>
       )}
+
+      <section aria-labelledby="work-live" className="work-group">
+        <h2 id="work-live" className="work-group-title">
+          Live builds <span className="num text-faint">{live.length}</span>
+        </h2>
+        <ul className="work-list">
+          {live.map((w) => (
+            <Item key={w.id} w={w} />
+          ))}
+        </ul>
+      </section>
     </main>
   );
 }

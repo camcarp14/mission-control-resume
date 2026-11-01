@@ -5,7 +5,7 @@
  * and three surfaces read it, so there is never a second place to update:
  *
  *   - /work, the public proof-of-work page: every `live` item with its links,
- *     then every `in-progress` item under Projects, never linked.
+ *     after every `in-progress` item under Projects, never linked.
  *   - the home page's Artifacts ring: every `live` item that has an `image`.
  *   - the flight: a `live` item with `stationId` puts its artifact on that
  *     station (a link button, or its screenshot when it is private); an
@@ -98,7 +98,7 @@ export const work = [
     ],
   },
 
-  // The agents behind Zero To Secure, attached to STN 05 (Evals &
+  // The agents behind Zero To Secure, attached to STN 07 (Evals &
   // Guardrails) because the screenshot IS the approval queue. It is the ZTS
   // module of The Pentagon, run locally from its public repo against a fake
   // backend — invented creators, Shorts, runs and AI calls, every request to
@@ -128,8 +128,7 @@ export const work = [
   // The daily command center. Owner's screenshot (live Brief, 2026-09-30),
   // cropped past the browser chrome and the sidebar (which carries his
   // email), with calendar entries, notes and other people's names blurred.
-  // Off the flight on purpose: one line of proof for an AI-enablement
-  // recruiter, not a station.
+  // Off the flight on purpose: one line of proof, not a station.
   {
     id: 'board-room',
     title: 'Board Room',
@@ -198,7 +197,7 @@ export const work = [
     title: 'Medicare call evaluation pipeline',
     pillars: ['Build', 'Measure'],
     summary:
-      'A personal Python pipeline, separate from my client work, that grades synthetic Medicare enrollment calls against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against a blind-labeled, reviewed answer key and audited against planted answers, ending in a published eval readout.',
+      'A personal Python pipeline, separate from my client work, that grades synthetic Medicare enrollment calls against binary, transcript-verifiable requirements (TPMO disclaimer, scope of appointment, eligibility, plan accuracy). An LLM judge and rule-based checks are calibrated against a blind-labeled, reviewed answer key and audited against planted answers, ending in a written eval readout.',
     links: [],
     status: 'in-progress',
     blurb: 'grades synthetic Medicare enrollment calls on compliance checks in Python, with an LLM judge calibrated against a blind-labeled, reviewed answer key',
@@ -210,7 +209,7 @@ export const work = [
     title: 'Call analytics MCP server',
     pillars: ['Build'],
     summary:
-      'An MCP server that lets Claude query graded calls, grade new ones through the evaluation pipeline and draft offline-conversion batches; releasing a batch requires human approval, enforced in code rather than the prompt.',
+      'An MCP server that lets Claude query graded calls, grade new ones through the evaluation pipeline and draft offline-conversion batches. Releasing a batch requires human approval, enforced in code rather than the prompt.',
     links: [],
     status: 'in-progress',
     blurb: 'lets Claude query graded calls, grade new ones and draft conversion batches, with human approval enforced in code',

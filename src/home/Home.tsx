@@ -34,7 +34,7 @@ export function Home({ journey }: { journey: ReactNode }) {
         <header className="home-head">
           <h1 className="home-name">Cameron Carpenter</h1>
           <p className="home-role">
-            <span aria-hidden="true">◇</span> Applied AI · Healthcare &amp; Medicare{' '}
+            <span aria-hidden="true">◇</span> Solutions Consultant · Applied AI{' '}
             <span aria-hidden="true">◇</span>
           </p>
           {/* Twin: .mc-li in index.html — same box, same glyph. */}
@@ -52,7 +52,7 @@ export function Home({ journey }: { journey: ReactNode }) {
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
           <p className="home-intro">
-            I design, evaluate, and deploy AI on real conversation data. Based in Chicago.
+            I lead client discovery and build the technical solution. Based in Chicago.
           </p>
           {/* Phones only: the stacked panels put the Space Journey's PDF link
               below the fold, and the PDF must be reachable at the front door

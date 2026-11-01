@@ -190,10 +190,11 @@ const resumeText = exists('public/resume.pdf') ? pdfText(join(root, 'public/resu
   // The HEADLINE, not the phrase: the pre-repositioning résumé already said
   // "Applied AI Tooling" in its skills line and sailed through a bare
   // includes('Applied AI') (QA, Oct 2026). Late Oct 2026 the headline moved
-  // to "Applied AI | AI Evaluation and Deployment | Healthcare and Medicare".
-  else if (!/Applied AI\s*\|\s*AI Evaluation and Deployment/.test(resumeText)) problems.push('public/resume.pdf does not lead with "Applied AI | AI Evaluation and Deployment" — it is an older version');
+  // to "Applied AI | AI Evaluation and Deployment | Healthcare and Medicare";
+  // Nov 2026 to "Solutions Consultant | Applied AI | ...".
+  else if (!/Solutions Consultant\s*\|\s*Applied AI/.test(resumeText)) problems.push('public/resume.pdf does not lead with "Solutions Consultant | Applied AI" — it is an older version');
   check(
-    'The résumé PDF carries the Applied AI positioning',
+    'The résumé PDF carries the Solutions Consultant positioning',
     problems,
     'The PDF is the source of truth for every figure on the site. Export the current one-page ' +
       'résumé over public/resume.pdf before the site is shared.',

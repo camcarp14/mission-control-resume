@@ -74,7 +74,7 @@ function ComingSoon() {
       <p className="soon-kicker">Coming soon</p>
       <h3 className="soon-title">First articles are on the way</h3>
       <p className="soon-text">
-        Field notes on building with AI inside real marketing teams — written from the work, not about it.
+        Field notes on client work and building with AI, drawn from real projects.
       </p>
       <ul className="soon-topics" aria-label="Topics">
         <li>Applied AI</li>
