@@ -110,6 +110,13 @@ def bullet(doc, text):
     rich(p, text)
 
 
+def subhead(doc, text):
+    """A small label over a group of bullets inside one job."""
+    p = para(doc, before=Pt(1.6), after=Pt(0.4))
+    p.paragraph_format.keep_with_next = True
+    run(p, text, bold=True, color=NAVY)
+
+
 def row(doc, left_bold, left_rest, right, before=Pt(3.0)):
     """'Org | Role' on the left, place and dates flush right."""
     p = para(doc, before=before, after=Pt(1))
@@ -155,8 +162,13 @@ def build(data):
     for i, job in enumerate(data["experience"]):
         row(doc, f"{job['org']} | {job['role']}", "", f"{job['where']} | {job['when']}",
             before=Pt(0.8) if i == 0 else Pt(3.0))
-        for b in job["bullets"]:
-            bullet(doc, b)
+        if job.get("scope"):
+            rich(para(doc, after=GAP_BULLET), job["scope"])
+        for group in job.get("groups", [job]):
+            if group.get("label"):
+                subhead(doc, group["label"])
+            for b in group["bullets"]:
+                bullet(doc, b)
 
     heading(doc, "Projects")
     for i, proj in enumerate(data["projects"]):

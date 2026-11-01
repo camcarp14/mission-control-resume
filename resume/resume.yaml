@@ -23,43 +23,49 @@ experience:
     role: Senior Analyst, Search Engine Marketing
     where: Chicago, IL
     when: Jun 2023 – Present
-    bullets:
-      - >-
-        Set up Invoca spoken-phrase tracking and built Claude skills that pair its exports and tracking
-        data with Google Ads and Microsoft Ads data via MCP, categorizing ~1,000 calls a week for one client
-        and drafting client-ready insights. Replaced manual work slowed by Invoca data that wasn't 1:1
-        clean, cutting each run from 45 minutes to 5, inside a locked-down stack.
-      - >-
-        Built the evaluation layer behind them: golden datasets, rubrics and LLM-as-judge scoring that
-        test every version before client delivery, with human approval on any agent that takes action.
-      - >-
-        Led the rollout of AI automations for reporting, pacing and forecasting to 5 analysts across 10+
-        accounts, saving 300+ hours a quarter; built a visual workflow builder that cut skill build time
-        from hours to ~30 minutes.
-      - >-
-        Built a Claude insight tool designed to coach, not write: a direct report and three analysts draft
-        each insight from account data pulled through MCP connectors, then it critiques the reasoning and
-        corrects it. Used weekly, it cut review time 50% and made client recommendations more impactful;
-        also ran a 13-week intern curriculum that earned a return offer.
-      - >-
-        Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
-        Enrollment Period (AEP); results earned $5M in incremental investment, bringing AEP spend to $35M.
-        Owned the full forecast and budget plan in other AEPs.
-      - >-
-        Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
-        volume to qualified outcomes; kept AEP campaigns compliant with CMS-approved copy.
-      - >-
-        Channel lead and day-to-day client contact for nine accounts, including seven healthcare business
-        units under a Fortune 5 payer, presenting weekly to 12+ client stakeholders; led discovery for new
-        accounts, handled objections with data-backed rebuttals and pitched incremental budget to
-        decision-makers.
-      - >-
-        Ran experiments and piloted Google beta features, working directly with Google, Microsoft and
-        Invoca reps; partnered with data, SEO and client teams on tracking implementation, catching site,
-        tracking and budget issues before they reached clients.
-      - >-
-        Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
-        5% and ROAS 20%, then led its migration off SA360 without disruption.
+    scope: >-
+      Channel lead for nine accounts, including seven healthcare units of a Fortune 5 payer, presenting
+      weekly to 12+ stakeholders.
+    groups:
+      - label: AI systems and enablement
+        bullets:
+          - >-
+            Cut call analysis from 45 minutes to 5 per run across ~1,000 calls a week for one client. Set up
+            Invoca spoken phrase and built Claude skills that pair its exports and tracking data with Google
+            Ads and Microsoft Ads data over MCP to categorize calls and draft client-ready insights inside a
+            locked-down stack. This was manual work because Invoca data wasn't 1:1 clean.
+          - >-
+            Built the evaluation layer behind those skills. Golden datasets, rubrics and LLM-as-judge scoring
+            test every version before client delivery, and any agent that takes action needs human approval.
+          - >-
+            Saved 300+ hours a quarter by rolling out AI reporting, pacing and forecasting automations to 5
+            analysts across 10+ accounts.
+          - >-
+            Built a visual workflow builder that cut skill build time from hours to ~30 minutes.
+          - >-
+            Cut review time 50% with a Claude insight tool that critiques and corrects analysts' reasoning on
+            their own drafts, using account data from MCP connectors. A direct report and three analysts use
+            it weekly.
+          - >-
+            Ran a 13-week intern curriculum that earned a return offer.
+      - label: Client strategy and results
+        bullets:
+          - >-
+            Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
+            Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
+            Owned the full forecast and budget plan in other AEPs.
+          - >-
+            Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
+            volume to qualified outcomes, and kept AEP campaigns compliant with CMS-approved copy.
+          - >-
+            Led discovery for new accounts, handled objections with data and pitched incremental budget to
+            decision-makers.
+          - >-
+            Reversed declining efficiency on a national retail brand, cutting spend 13% while growing revenue
+            5% and ROAS 20%, then led its migration off SA360 without disruption.
+          - >-
+            Piloted Google betas with platform reps and partnered with data, SEO and client teams to catch
+            tracking issues early.
   - org: Zero To Secure
     role: Founder
     where: Chicago, IL

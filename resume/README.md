@@ -3,7 +3,8 @@
 `public/resume.pdf` is built from this folder. Don't edit the PDF by hand.
 
 1. Edit **`resume.yaml`**. It's plain text: one entry per job, project and bullet.
-   `**double asterisks**` make text bold.
+   `**double asterisks**` make text bold. A job can use `bullets`, or a `scope` line
+   plus `groups` of labeled bullets.
 2. Run `python resume/build.py` from the repo root. It writes:
    - `resume/Cameron-Carpenter-Resume.docx`, which opens in Word or Google Docs
    - `public/resume.pdf`, the file every download button on the site serves
