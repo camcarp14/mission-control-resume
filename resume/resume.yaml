@@ -12,10 +12,10 @@ contact:
   - {text: "linkedin.com/in/cameroncarpenter1", link: "https://www.linkedin.com/in/cameroncarpenter1"}
 
 summary: >-
-  Client-facing consultant who leads discovery, answers objections and builds the technical solution.
+  Client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution.
   Day-to-day client lead across 20 accounts and $75M+ in media since 2023, now running nine.
-  Builds production LLM workflows, including Claude skills that categorize ~1,000 calls a week for one
-  client, backed by golden datasets, LLM-as-judge scoring and human review.
+  Builds production conversation-intelligence workflows: Claude skills that categorize ~1,000 calls a
+  week for one client, backed by golden datasets, LLM-as-judge scoring and human review.
 
 experience:
   - org: Ovative Group
@@ -47,26 +47,27 @@ experience:
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
           - >-
-            Partnered with data, SEO and client teams on tracking implementation, and piloted Google betas with
-            platform reps.
+            Implemented Invoca spoken-phrase tracking with data, SEO and client teams, and piloted Google betas
+            alongside Google, Microsoft and Invoca reps.
       - label: AI Systems
         bullets:
           - >-
-            Reduced call analysis time from 45 minutes to 5 per run across ~1,000 weekly calls for one client by
-            building Claude skills that consolidate call, tracking and ad platform data into client-ready insights.
+            Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client with Claude
+            skills that join call, tracking and ad data through MCP connectors into client-ready insights.
           - >-
             Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics
             and LLM-as-judge scoring.
           - >-
-            Built a visual workflow tool that cut skill build time from hours to ~30 minutes.
+            Built a low-code workflow tool that turns flowcharts into Claude skills, cutting build time from
+            hours to ~30 minutes.
       - label: Team Leadership and Enablement
         bullets:
           - >-
             Led a direct report and three analysts, cutting review time 50% with a Claude tool that critiques
             their draft reasoning.
           - >-
-            Saved 300+ hours a quarter by rolling out AI reporting, pacing and forecasting automations to 5
-            analysts across 10+ accounts.
+            Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
+            300+ hours a quarter.
           - >-
             Wrote the team's guides on analysis and reporting, and helped a junior analyst build a first Claude
             tool for budget forecasting.
