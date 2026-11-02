@@ -144,9 +144,9 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set client roadmaps and ran their execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Implemented Invoca spoken-phrase tracking with Invoca’s engineers, and separately piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Implemented Invoca spoken-phrase tracking with Invoca engineers, and separately piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
