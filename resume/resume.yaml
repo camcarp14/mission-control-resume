@@ -63,8 +63,8 @@ experience:
       - label: Team Leadership and Enablement
         bullets:
           - >-
-            Personally coach a direct report and three analysts to sharpen their analysis; a Claude draft critic
-            I built halved my review time.
+            Coach a direct report and three analysts, giving ongoing feedback and guidance that develops them as
+            analysts. Built a Claude draft critic that halved my review time.
           - >-
             Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
@@ -104,8 +104,8 @@ projects:
     note: Personal project, synthetic data
     bullets:
       - >-
-        MCP server that lets Claude query graded calls, grade new ones through the pipeline and draft
-        offline-conversion batches, with a human approval gate built into the server before any batch is released.
+        MCP server that lets Claude query and grade calls and draft offline-conversion batches, gated by human
+        approval in the server.
 
 education:
   - school: University of Wisconsin-Madison
