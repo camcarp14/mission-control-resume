@@ -30,6 +30,9 @@ experience:
       - label: Client Leadership and Results
         bullets:
           - >-
+            Set strategic direction and roadmaps for clients and owned the outcomes, including a new healthcare
+            provider's SEM launch.
+          - >-
             Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
             Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
             Owned the full forecast and budget plan in other AEPs.
@@ -41,11 +44,11 @@ experience:
             volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders. Kept AEP
             campaigns compliant with CMS-approved copy.
           - >-
-            Led the SEM launch for a new healthcare provider, from strategy to reporting on qualified calls
-            and appointments.
-          - >-
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
+          - >-
+            Partnered with data, SEO and client teams on tracking implementation, and piloted Google betas with
+            platform reps.
       - label: AI Systems
         bullets:
           - >-
@@ -94,8 +97,8 @@ projects:
         Python pipeline that grades synthetic Medicare sales calls on compliance, eligibility and plan
         accuracy.
       - >-
-        LLM-as-judge and rule-based checks calibrated against a blind-labeled, reviewed answer key and
-        audited against planted answers, ending in a written eval readout.
+        LLM-as-judge and rule-based checks calibrated against a blind-labeled answer key, with a written
+        eval readout.
   - name: Call Analytics MCP Server
     note: Personal project, synthetic data
     bullets:
@@ -111,6 +114,6 @@ education:
 
 skills:
   - "**Client:** Discovery, Objection Handling, QBRs, Stakeholder Communication, Strategic Roadmaps, Client Enablement"
-  - "**AI and Evaluation:** Claude (Enterprise, Code), Agent Skills, MCP, Evals (Golden Datasets, LLM-as-Judge, Calibration), Human-in-the-Loop Design"
+  - "**AI and Evaluation:** Claude (Enterprise, Code), Agent Skills, MCP, Evals (Golden Datasets, LLM-as-Judge), Human-in-the-Loop Design"
   - "**Technical:** Python, SQL, JavaScript, React, Supabase, Netlify, Git and GitHub, Webhooks and APIs"
   - "**Platforms:** Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, Google Tag Manager, Offline Conversion Imports, Looker Studio, BigQuery, Tableau, Invoca, Shopify"

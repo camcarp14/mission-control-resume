@@ -134,9 +134,9 @@ export const stations = [
 
   // -- STN 03 · THE BRIDGE -------------------------------------------------
   // The client-leadership station, moved up (Nov 2026) so the flight follows
-  // the résumé: client work first, then the AI systems. Weekly stakeholders,
-  // QBRs, discovery, objections, incremental budget and the provider launch
-  // are all on the résumé (anonymized there too).
+  // the résumé: client work first, then the AI systems. Strategy and roadmaps,
+  // weekly stakeholders, QBRs, discovery, objections, incremental budget, the
+  // provider launch, and the tracking and beta work are all on the résumé.
   {
     id: 'the-bridge',
     code: 'STN 03',
@@ -144,9 +144,9 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Present weekly to 12+ client stakeholders and run quarterly business reviews',
-      'Led new-account discovery, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Led the SEM launch for a new healthcare provider, from strategy and campaign structure through build QA and reporting on qualified calls and appointments',
+      'Set strategic direction and roadmaps for clients and owned the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Led new-account discovery, ran quarterly business reviews, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
+      'Partnered with data, SEO, and client teams on tracking implementation, and piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
@@ -289,7 +289,7 @@ export const stations = [
     bullets: [
       'University of Wisconsin–Madison — BBA, double major in Marketing and Risk Management & Insurance (2023)',
       'Client: discovery · objection handling · QBRs · stakeholder communication · strategic roadmaps · client enablement. Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
-      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge, calibration) · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
+      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge) · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
     ],
     artifact: { kind: 'none' },
   },
