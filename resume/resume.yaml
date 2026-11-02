@@ -19,7 +19,7 @@ summary: >-
 
 experience:
   - org: Ovative Group
-    role: Senior Analyst, Search Engine Marketing
+    role: Senior Analyst, Search Engine Marketing (promoted Apr 2025)
     where: Chicago, IL
     when: Jun 2023 – Present
     scope: >-
@@ -47,8 +47,8 @@ experience:
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
           - >-
-            Implemented Invoca spoken-phrase tracking with its engineers. Piloted Google betas
-            with Google, Microsoft and Invoca reps.
+            Implemented Invoca spoken-phrase tracking for call-level signals. Piloted Google betas with Google,
+            Microsoft and Invoca reps.
       - label: AI Systems
         bullets:
           - >-
@@ -63,8 +63,8 @@ experience:
       - label: Team Leadership and Enablement
         bullets:
           - >-
-            Led a direct report and three analysts, cutting review time 50% with a Claude tool that critiques
-            their draft reasoning.
+            Coach a direct report and three analysts with a Claude tool I built that critiques their draft
+            reasoning, cutting my review time 50%.
           - >-
             Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
@@ -105,8 +105,7 @@ projects:
     bullets:
       - >-
         MCP server that lets Claude query graded calls, grade new ones through the pipeline and draft
-        offline-conversion batches. Releasing a batch requires human approval, enforced in code rather than
-        the prompt.
+        offline-conversion batches, with a human approval gate built into the server before any batch is released.
 
 education:
   - school: University of Wisconsin-Madison

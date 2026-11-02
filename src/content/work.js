@@ -209,10 +209,10 @@ export const work = [
     title: 'Call analytics MCP server',
     pillars: ['Build'],
     summary:
-      'A personal MCP server that lets Claude query graded synthetic calls, grade new ones through the evaluation pipeline and draft offline-conversion batches. Releasing a batch requires human approval, enforced in code rather than the prompt.',
+      'A personal MCP server that lets Claude query graded synthetic calls, grade new ones through the evaluation pipeline and draft offline-conversion batches, with a human approval gate built into the server before any batch is released.',
     links: [],
     status: 'in-progress',
-    blurb: 'a personal project that lets Claude query graded synthetic calls, grade new ones and draft conversion batches, with human approval enforced in code',
+    blurb: 'a personal project that lets Claude query graded synthetic calls, grade new ones and draft conversion batches, with a human approval gate built into the server',
     stationId: 'call-agent',
     updated: '2026-10',
   },

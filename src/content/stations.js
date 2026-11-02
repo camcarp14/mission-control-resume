@@ -125,7 +125,7 @@ export const stations = [
     proves:
       'Scope that’s outpaced the title since 2023 — channel lead across 20 accounts, an AI leader on the team, and a company of my own on the side.',
     bullets: [
-      'Ovative Group — Senior Analyst, SEM (2023–present): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
+      'Ovative Group — Analyst, then Senior Analyst, SEM (2023–present, promoted 2025): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
       'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand run solo (Shopify build, SEO, and go-to-market), with AI agents for organic growth and creator outreach',
       'AbbVie — Strategic Initiatives Analyst (2022–23): reporting that gave leadership of the $63B Allergan integration visibility into workstream status and risk',
     ],
@@ -146,7 +146,7 @@ export const stations = [
     bullets: [
       'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Implemented Invoca spoken-phrase tracking with its engineers. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Implemented Invoca spoken-phrase tracking for call-level signals. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
@@ -270,7 +270,7 @@ export const stations = [
     bullets: [
       'Built a Claude tool that critiques and corrects reasoning on drafts by a direct report and three analysts, using account data pulled through MCP connectors; used weekly, it cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Lead a direct report and three analysts on my accounts, write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
+      'Coach a direct report and three analysts on my accounts, write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
     ],
     artifact: { kind: 'none' },
   },
