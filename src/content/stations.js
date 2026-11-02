@@ -146,7 +146,7 @@ export const stations = [
     bullets: [
       'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Implemented Invoca spoken-phrase tracking for call-level signals. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Set up Invoca for clients with its reps, added spoken-phrase tracking, and piloted Google betas alongside Google and Microsoft reps',
     ],
     artifact: { kind: 'none' },
   },
@@ -270,7 +270,7 @@ export const stations = [
     bullets: [
       'Built a Claude tool that critiques and corrects reasoning on drafts by a direct report and three analysts, using account data pulled through MCP connectors; used weekly, it cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Coach a direct report and three analysts on my accounts, write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
+      'Personally coach a direct report and three analysts on my accounts to sharpen their analysis, write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
     ],
     artifact: { kind: 'none' },
   },
