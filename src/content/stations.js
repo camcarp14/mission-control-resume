@@ -146,7 +146,7 @@ export const stations = [
     bullets: [
       'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Implemented Invoca spoken-phrase tracking with Invoca engineers. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Implemented Invoca spoken-phrase tracking with its engineers. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
