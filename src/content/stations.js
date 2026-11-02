@@ -95,7 +95,7 @@ export const stations = [
   // account rollout was the reporting, pacing and forecasting automations
   // (owner correction, Oct 2026) — keep the two apart in every line.
   // The thesis, re-aligned (Nov 2026) to the résumé's summary: a client-facing
-  // consultant who leads discovery and builds the technical solution. ~1,000
+  // consultant who leads discovery, then builds and deploys the technical solution. ~1,000
   // calls, 5 analysts, 10+ accounts, nine accounts, seven business units, 12+
   // stakeholders, the Fortune 5 payer, 20 accounts and $75M+ are all on the
   // résumé. The 20 accounts (owner, Nov 2026) and $75M+ are career-to-date, so
@@ -146,7 +146,7 @@ export const stations = [
     bullets: [
       'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Implemented Invoca spoken-phrase tracking with Invoca engineers, and separately piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Implemented Invoca spoken-phrase tracking with Invoca engineers. Piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
@@ -289,7 +289,7 @@ export const stations = [
     bullets: [
       'University of Wisconsin–Madison — BBA, double major in Marketing and Risk Management & Insurance (2023)',
       'Client: discovery · objection handling · QBRs · roadmap execution · project management · client enablement. Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
-      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge) · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
+      'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge) · RAG · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
     ],
     artifact: { kind: 'none' },
   },

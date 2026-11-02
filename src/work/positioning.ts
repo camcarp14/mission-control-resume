@@ -4,7 +4,7 @@
  * shell and the page can never say different things.
  */
 export const WORK_POSITIONING =
-  'Client-facing solutions consultant who leads discovery with enterprise stakeholders and builds the technical solution behind the recommendation.';
+  'Client-facing solutions consultant who leads discovery with enterprise stakeholders then builds and deploys the technical solution behind the recommendation.';
 
 export const WORK_META = {
   title: 'Proof of work — Cameron Carpenter',
