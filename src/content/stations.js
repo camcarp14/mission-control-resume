@@ -144,9 +144,9 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set strategic direction and roadmaps for clients and owned the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
-      'Led new-account discovery, ran quarterly business reviews, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Partnered with data, SEO, and client teams on tracking implementation, and piloted Google betas alongside Google, Microsoft, and Invoca reps',
+      'Set client roadmaps and ran their execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
+      'Implemented Invoca spoken-phrase tracking with Invoca’s engineers and our data and SEO teams, and piloted Google betas alongside Google, Microsoft, and Invoca reps',
     ],
     artifact: { kind: 'none' },
   },
@@ -288,7 +288,7 @@ export const stations = [
       'The toolkit behind the work: a business degree with a risk-management core, the client skills and platforms I use daily, and the AI and web stack I build with.',
     bullets: [
       'University of Wisconsin–Madison — BBA, double major in Marketing and Risk Management & Insurance (2023)',
-      'Client: discovery · objection handling · QBRs · stakeholder communication · strategic roadmaps · client enablement. Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
+      'Client: discovery · objection handling · QBRs · roadmap execution · project management · client enablement. Platforms: Google Ads · Microsoft Advertising · SA360 · GA4 · Adobe Analytics · Google Tag Manager · Offline Conversion Imports · Looker Studio · BigQuery · Tableau · Invoca · Shopify',
       'AI & build: Claude (Enterprise, Code) · agent skills · MCP · evals (golden datasets, LLM-as-judge) · human-in-the-loop design · Python · SQL · JavaScript · React · Supabase · Netlify · Git and GitHub · webhooks and APIs',
     ],
     artifact: { kind: 'none' },

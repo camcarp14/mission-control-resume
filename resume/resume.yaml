@@ -25,13 +25,13 @@ experience:
     scope: >-
       Channel lead and day-to-day client contact for nine accounts: a Fortune 5 payer's seven healthcare
       business units and two logistics accounts. Present weekly to 12+ client
-      stakeholders and run quarterly business reviews.
+      stakeholders and run QBRs and lunch-and-learns that build program buy-in.
     groups:
       - label: Client Leadership and Results
         bullets:
           - >-
-            Set strategic direction and roadmaps for clients and owned the outcomes, including a new healthcare
-            provider's SEM launch.
+            Set client roadmaps and ran their execution, delegating across analysts and owning outcomes, including
+            a new healthcare provider's SEM launch.
           - >-
             Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
             Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
@@ -47,8 +47,8 @@ experience:
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
           - >-
-            Implemented Invoca spoken-phrase tracking with data, SEO and client teams, and piloted Google betas
-            alongside Google, Microsoft and Invoca reps.
+            Implemented Invoca spoken-phrase tracking with Invoca's engineers and our data and SEO teams, and
+            piloted Google betas with Google, Microsoft and Invoca reps.
       - label: AI Systems
         bullets:
           - >-
@@ -114,7 +114,7 @@ education:
     when: May 2023
 
 skills:
-  - "**Client:** Discovery, Objection Handling, QBRs, Stakeholder Communication, Strategic Roadmaps, Client Enablement"
+  - "**Client:** Discovery, Objection Handling, QBRs, Roadmap Execution, Project Management, Client Enablement"
   - "**AI:** Claude (Enterprise, Code), Agent Skills, MCP, Evals (Golden Datasets, LLM-as-Judge), Human-in-the-Loop Design"
   - "**Technical:** Python, SQL, JavaScript, React, Supabase, Netlify, Git and GitHub, Webhooks and APIs"
   - "**Platforms:** Google Ads, Microsoft Advertising, SA360, GA4, Adobe Analytics, Google Tag Manager, Offline Conversion Imports, Looker Studio, BigQuery, Tableau, Invoca, Shopify"
