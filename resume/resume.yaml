@@ -13,8 +13,8 @@ contact:
 
 summary: >-
   Client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution.
-  Day-to-day client lead across 20 accounts and $75M+ in media since 2023.
-  Owns strategy, forecasting and budgets for healthcare, retail and logistics clients, turning performance
+  Day-to-day lead for 20 client accounts and $75M+ in media since 2023.
+  Owns strategy, forecasting and budgets for healthcare, retail and logistics brands, turning performance
   data into clear recommendations for senior stakeholders.
   Builds AI tools and Claude skills for conversation intelligence and drives their adoption across analysts
   and clients.
@@ -25,25 +25,25 @@ experience:
     where: Chicago, IL
     when: Jun 2023 – Present
     scope: >-
-      Channel lead and day-to-day client contact for nine accounts: a Fortune 5 payer's seven healthcare
-      business units and two logistics accounts. Present weekly to 12+ client
-      stakeholders and run QBRs and enablement sessions that build program buy-in.
+      Channel lead and day-to-day client contact for nine accounts: seven healthcare business units under a
+      Fortune 5 payer and two logistics brands. Present weekly to 12+ client stakeholders; run QBRs and
+      enablement sessions that build program buy-in.
     groups:
       - label: Client Leadership and Results
         bullets:
           - >-
             Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
-            Enrollment Period (AEP), which shifted how the client valued paid search and earned $5M in
+            Enrollment Period (AEP), a result that shifted how the client valued paid search and earned $5M in
             incremental investment, bringing AEP spend to $35M.
           - >-
             Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
-            volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders.
+            volume to qualified outcomes, measured by revenue-tied KPIs built for non-technical client leaders.
           - >-
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
           - >-
-            Set client roadmaps and win buy-in on strategy and test proposals, then run execution across a team
-            of analysts, including a new healthcare provider's SEM launch.
+            Set client roadmaps and win buy-in on strategy and test proposals; lead execution across a team of
+            analysts, including the SEM launch for a new healthcare provider.
           - >-
             Lead new-account discovery, handle objections with data-backed rebuttals and pitch incremental
             budget to decision-makers.
@@ -53,8 +53,9 @@ experience:
       - label: AI Systems
         bullets:
           - >-
-            Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client with Claude
-            skills that join Invoca call, tracking and ad data through MCP connectors into client-ready insights.
+            Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client, using Claude
+            skills that join Invoca call, tracking and ad data through MCP connectors and turn it into
+            client-ready insights.
           - >-
             Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics
             and LLM-as-judge scoring.
@@ -67,9 +68,9 @@ experience:
             Mentored a summer intern through a 13-week curriculum I designed; now a full-time analyst and my
             direct report.
           - >-
-            Coach three analysts on shared accounts with regular feedback and guidance, using AI review tools I
-            built to keep feedback consistent, help them explain the why behind the numbers and cut my review
-            time 50%.
+            Coach three analysts on shared accounts with regular feedback and guidance. AI review tools I built
+            keep that feedback consistent, help them explain the why behind the numbers and cut my review time
+            50%.
           - >-
             Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
@@ -83,7 +84,8 @@ experience:
     bullets:
       - >-
         Founded and run a bootstrapped DTC brand solo, owning Shopify development, SEO content and
-        go-to-market, with AI agents for organic growth and creator outreach behind a human approval step.
+        go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval
+        step.
   - org: AbbVie
     role: Strategic Initiatives Analyst
     where: North Chicago, IL
@@ -91,7 +93,7 @@ experience:
     bullets:
       - >-
         Built reporting tools that gave leadership visibility into workstream status and risk across the $63B
-        AbbVie-Allergan integration, and resolved cross-functional bottlenecks between workstreams.
+        AbbVie-Allergan integration, and resolved cross-functional bottlenecks.
 
 projects:
   - name: Medicare Enrollment Call Evaluation Pipeline
@@ -101,8 +103,8 @@ projects:
         Python pipeline that grades synthetic Medicare sales calls on compliance, eligibility and plan
         accuracy.
       - >-
-        LLM-as-judge and rule-based checks calibrated against a blind-labeled answer key, with a written
-        eval readout.
+        LLM-as-judge and rule-based checks calibrated against a blind-labeled answer key, with an eval readout
+        on results and limits.
   - name: Call Analytics MCP Server
     note: Personal project, synthetic data
     bullets:
