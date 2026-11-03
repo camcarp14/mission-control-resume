@@ -144,7 +144,7 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set client roadmaps and win buy-in on strategy and test proposals; lead execution across a team of analysts, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Set client roadmaps, including the SEM launch for a new healthcare provider, and win buy-in on strategy and test proposals; lead execution across a team of analysts. The launch ran from strategy through build QA to reporting on qualified calls and appointments',
       'Lead new-account discovery, run quarterly business reviews and enablement sessions that build program buy-in, handle objections with data-backed rebuttals, and pitch incremental budget to decision-makers',
       'Partner with Invoca developers to integrate call tracking into client sites; pilot ad platform betas with Google and Microsoft',
     ],
@@ -165,7 +165,7 @@ export const stations = [
     proves:
       'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
-      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP), a result that shifted how the client valued paid search and earned $5M in incremental investment, bringing AEP spend to $35M',
+      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP), a result that shifted how the client valued paid search, and earned $5M in incremental investment, bringing AEP spend to $35M',
       'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes, measured by revenue-tied KPIs built for non-technical client leaders',
     ],
     artifact: { kind: 'none' },
