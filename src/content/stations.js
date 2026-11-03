@@ -272,7 +272,7 @@ export const stations = [
     bullets: [
       'Built Claude review tools that critique my analysts’ draft reasoning, keep feedback consistent, and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Turned a summer intern into a full-time analyst and direct report with a self-authored 13-week curriculum that earned a return offer, coach three more analysts on shared accounts with ongoing feedback and guidance, and authored the analysis and reporting playbooks my account team works from',
+      'Mentored a summer intern through a 13-week curriculum I designed (now a full-time analyst and my direct report), coach three analysts on shared accounts with regular feedback and guidance, and wrote the analysis and reporting playbooks my account team uses',
     ],
     artifact: { kind: 'none' },
   },

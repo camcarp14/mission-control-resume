@@ -64,18 +64,18 @@ experience:
       - label: Team Leadership and Enablement
         bullets:
           - >-
-            Turned an intern into a full-time analyst and direct report with a self-authored 13-week curriculum
-            that earned a return offer.
+            Mentored a summer intern through a 13-week curriculum I designed; now a full-time analyst and my
+            direct report.
           - >-
-            Coach three more analysts on shared accounts with ongoing feedback and guidance, backed by self-built
-            AI review tools that keep feedback consistent, push them to explain the why behind the numbers and cut
-            my review time 50%.
+            Coach three analysts on shared accounts with regular feedback and guidance, using AI review tools I
+            built to keep feedback consistent, help them explain the why behind the numbers and cut my review
+            time 50%.
           - >-
             Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
           - >-
-            Authored the analysis and reporting playbooks my account team works from; helped a junior analyst
-            build his first Claude tool.
+            Wrote the analysis and reporting playbooks my account team uses, and helped a junior analyst build
+            his first Claude tool.
   - org: Zero To Secure
     role: Founder
     where: Chicago, IL
@@ -107,8 +107,8 @@ projects:
     note: Personal project, synthetic data
     bullets:
       - >-
-        MCP server that lets Claude query and grade calls and draft offline-conversion batches, gated by human
-        approval in the server.
+        MCP server giving Claude tools to query, grade and batch calls for offline conversions; no batch ships
+        without human approval.
 
 education:
   - school: University of Wisconsin-Madison
