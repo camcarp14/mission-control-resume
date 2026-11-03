@@ -108,7 +108,7 @@ export const stations = [
       'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, across 20 accounts and $75M+ in media since 2023.',
     bullets: [
       'Channel lead and day-to-day client contact for nine accounts, including seven healthcare business units under a Fortune 5 payer, presenting weekly to 12+ client stakeholders',
-      'Built production conversation-intelligence workflows: Claude skills that categorize ~1,000 calls a week for one client, backed by golden datasets, LLM-as-judge scoring, and human review',
+      'Builds AI tools, Claude skills, and conversation-intelligence workflows, like skills that categorize ~1,000 calls a week for one client, backed by golden datasets, LLM-as-judge scoring, and human review',
       'Deployed AI automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter',
     ],
     artifact: { kind: 'none' },
