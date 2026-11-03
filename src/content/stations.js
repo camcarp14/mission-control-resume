@@ -144,7 +144,7 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set client roadmaps, including the SEM launch for a new healthcare provider, and win buy-in on strategy and test proposals; lead execution across a team of analysts. The launch ran from strategy through build QA to reporting on qualified calls and appointments',
+      'Set client roadmaps, including the SEM launch for a new healthcare provider, winning buy-in on strategy and test proposals and leading a team of analysts through execution. The launch ran from strategy through build QA to reporting on qualified calls and appointments',
       'Lead new-account discovery, run quarterly business reviews and enablement sessions that build program buy-in, handle objections with data-backed rebuttals, and pitch incremental budget to decision-makers',
       'Partner with Invoca developers to integrate call tracking into client sites; pilot ad platform betas with Google and Microsoft',
     ],
@@ -186,7 +186,7 @@ export const stations = [
     bullets: [
       'Reduced brand cost-per-click progressively through bid-portfolio management rather than cutting reach — efficiency recovered while volume held',
       'Rebuilt the non-brand program in parallel, nearly doubling its return on ad spend as cost-per-click fell 33%',
-      'Redirected the freed budget into higher-incrementality tactics, then led the account’s migration off SA360 to native platform bidding without performance disruption',
+      'Redirected the freed budget into higher-incrementality tactics, then led the account’s migration off SA360 to native platform bidding without a performance disruption',
     ],
     artifact: { kind: 'none' },
   },
