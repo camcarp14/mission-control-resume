@@ -107,9 +107,9 @@ export const stations = [
     proves:
       'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, across 20 accounts and $75M+ in media since 2023.',
     bullets: [
-      'Channel lead and day-to-day client contact for nine accounts, including seven healthcare business units under a Fortune 5 payer, presenting weekly to 12+ client stakeholders',
-      'Built Claude skills that categorize ~1,000 calls a week for one client, cutting each run from 45 minutes to 5',
-      'Deployed AI automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter',
+      'Channel lead and day-to-day client contact for nine accounts: seven healthcare business units under a Fortune 5 payer and two logistics brands. Present weekly to 12+ client stakeholders',
+      'Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client, using Claude skills I built',
+      'Deployed AI reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter',
     ],
     artifact: { kind: 'none' },
   },
@@ -126,8 +126,8 @@ export const stations = [
       'Scope that’s outpaced the title since 2023 — channel lead across 20 accounts, an AI leader on the team, and a company of my own on the side.',
     bullets: [
       'Ovative Group — Analyst, then Senior Analyst, SEM (2023–present, promoted 2025): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
-      'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand run solo (Shopify build, SEO, and go-to-market), with AI agents for organic growth and creator outreach',
-      'AbbVie — Strategic Initiatives Analyst (2022–23): reporting that gave leadership of the $63B Allergan integration visibility into workstream status and risk',
+      'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand I run solo, owning the Shopify build, SEO content, and go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval step',
+      'AbbVie — Strategic Initiatives Analyst (2022–23): built reporting tools that gave leadership visibility into workstream status and risk across the $63B AbbVie-Allergan integration, and resolved cross-functional bottlenecks',
     ],
     artifact: { kind: 'none' },
   },
@@ -144,9 +144,9 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set client roadmaps, walk clients through strategy and test proposals to win buy-in, then run execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Set client roadmaps and win buy-in on strategy and test proposals; lead execution across a team of analysts, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
       'Lead new-account discovery, run quarterly business reviews and enablement sessions that build program buy-in, handle objections with data-backed rebuttals, and pitch incremental budget to decision-makers',
-      'Partner with Invoca developers to integrate call tracking into client site code and add spoken-phrase tracking; pilot ad platform betas with Google and Microsoft',
+      'Partner with Invoca developers to integrate call tracking into client sites; pilot ad platform betas with Google and Microsoft',
     ],
     artifact: { kind: 'none' },
   },
@@ -155,9 +155,9 @@ export const stations = [
   // Was "Integration", then "Call Intelligence" (id kept — ids never change).
   // Renamed for any solutions role, to match the résumé. 175%, $5M, $35M and the
   // forecast line are the résumé's AEP bullet; the forecast was a different
-  // AEP from the 175% year, so never join them. Value-Based Bidding and the
-  // CMS-approved copy are its bidding bullet (the KPI detail is from the
-  // master résumé).
+  // AEP from the 175% year, so never join them. Value-Based Bidding is its
+  // bidding bullet (the KPI detail is from the master résumé). The CMS-copy
+  // line was dropped in v25 (owner, Nov 2026): it read as an add-on.
   {
     id: 'integration',
     code: 'STN 04',
@@ -165,9 +165,8 @@ export const stations = [
     proves:
       'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
-      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M',
-      'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders',
-      'Keep AEP campaigns compliant with CMS-approved copy',
+      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP), a result that shifted how the client valued paid search and earned $5M in incremental investment, bringing AEP spend to $35M',
+      'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes, measured by revenue-tied KPIs built for non-technical client leaders',
     ],
     artifact: { kind: 'none' },
   },
@@ -226,7 +225,7 @@ export const stations = [
     proves:
       'Every skill version is tested against golden datasets before it touches client work, and any agent that takes action needs human approval.',
     bullets: [
-      'Built an evaluation layer of golden datasets, grading rubrics, and LLM-as-judge scoring that tests each skill version and catches errors before client delivery',
+      'Built the evaluation layer behind my Claude skills, testing every version with golden datasets, grading rubrics, and LLM-as-judge scoring to catch errors before client delivery',
       'Design approval into agents that act: the creator-outreach agent drafts but never sends without sign-off, and the organic-growth agent is checked for tone and action correctness before anything ships',
       'Client and health data stay inside approved tools and public work uses synthetic data — a degree in risk management and integration-risk reporting at AbbVie shape how I build',
     ],
@@ -246,8 +245,8 @@ export const stations = [
     proves:
       'Reporting, pacing, and forecasting automations rolled out to 5 analysts across 10+ accounts, saving 300+ hours a quarter.',
     bullets: [
-      'Led the rollout of AI automations for reporting, pacing, and forecasting to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
-      'Built a visual workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from hours to about 30 minutes',
+      'Deployed AI reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
+      'Created a low-code workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from hours to about 30 minutes',
       'Account diagnostic agents built on it cut the time spent diagnosing performance shifts by up to 50%',
     ],
     artifact: { kind: 'none' },
@@ -268,11 +267,11 @@ export const stations = [
     code: 'STN 09',
     title: 'Enablement',
     proves:
-      'AI adoption is a people problem, so I build for it: a tool that critiques my analysts’ reasoning, a junior analyst who now builds with AI on his own, and what I learn shared with the wider team.',
+      'AI adoption is a people problem, so I start with the people: hands-on coaching for the analysts I work with, review tools that keep my feedback consistent, and a junior analyst who now builds with AI on his own.',
     bullets: [
-      'Built Claude review tools that critique my analysts’ draft reasoning, keep feedback consistent, and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
-      'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Mentored a summer intern through a 13-week curriculum I designed (now a full-time analyst and my direct report), coach three analysts on shared accounts with regular feedback and guidance, and wrote the analysis and reporting playbooks my account team uses',
+      'Mentored a summer intern through a 13-week curriculum I designed; now a full-time analyst and my direct report',
+      'Coach three analysts on shared accounts with regular feedback and guidance. Claude review tools I built keep that feedback consistent and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
+      'Wrote the analysis and reporting playbooks my account team uses, and helped a junior analyst build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
     ],
     artifact: { kind: 'none' },
   },
