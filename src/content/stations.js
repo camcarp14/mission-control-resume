@@ -99,7 +99,10 @@ export const stations = [
   // calls, 5 analysts, 10+ accounts, nine accounts, seven business units, 12+
   // stakeholders, the Fortune 5 payer, 20 accounts and $75M+ are all on the
   // résumé. The 20 accounts (owner, Nov 2026) and $75M+ are career-to-date, so
-  // don't tie them to the nine current accounts.
+  // don't tie them to the nine current accounts. The bullets are a highlight
+  // reel (owner, Nov 2026): the AEP result (175%, $5M, $35M from the résumé's
+  // AEP bullet), the Fortune 5 scope, and the AI work, with the one-client call
+  // skills and the 5-analyst automations kept in separate clauses.
   {
     id: 'liftoff',
     code: 'STN 01',
@@ -107,9 +110,9 @@ export const stations = [
     proves:
       'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, across 20 accounts and $75M+ in media since 2023.',
     bullets: [
-      'Channel lead and day-to-day client contact for nine accounts: seven healthcare business units under a Fortune 5 payer and two logistics brands. Present weekly to 12+ client stakeholders',
-      'Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client, using Claude skills I built',
-      'Deployed AI reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter',
+      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace, a result that earned $5M in incremental investment and brought AEP spend to $35M',
+      'Channel lead and day-to-day client contact for seven healthcare business units under a Fortune 5 payer and two logistics brands, presenting weekly to 12+ client stakeholders',
+      'Built Claude skills that cut call analysis from 45 minutes to 5 across ~1,000 weekly calls for one client, and deployed AI automations that save 5 analysts 300+ hours a quarter',
     ],
     artifact: { kind: 'none' },
   },
