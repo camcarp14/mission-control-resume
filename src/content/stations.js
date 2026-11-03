@@ -144,8 +144,8 @@ export const stations = [
     proves:
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
-      'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
-      'Led new-account discovery, ran quarterly business reviews and enablement sessions that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
+      'Set client roadmaps, walk clients through strategy and test proposals to win buy-in, then run execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
+      'Lead new-account discovery, run quarterly business reviews and enablement sessions that build program buy-in, handle objections with data-backed rebuttals, and pitch incremental budget to decision-makers',
       'Partnered with Invoca developers to integrate call tracking into client site code, then added spoken-phrase tracking; piloted ad platform betas with Google and Microsoft',
     ],
     artifact: { kind: 'none' },
@@ -167,7 +167,7 @@ export const stations = [
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M',
       'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders',
-      'Kept AEP campaigns compliant with CMS-approved copy',
+      'Keep AEP campaigns compliant with CMS-approved copy',
     ],
     artifact: { kind: 'none' },
   },
