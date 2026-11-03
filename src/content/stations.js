@@ -127,7 +127,7 @@ export const stations = [
     bullets: [
       'Ovative Group — Analyst, then Senior Analyst, SEM (2023–present, promoted 2025): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
       'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand I run solo, owning the Shopify build, SEO content, and go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval step',
-      'AbbVie — Strategic Initiatives Analyst (2022–23): ran the project management platform behind the $63B AbbVie-Allergan integration, built reporting tools that gave leadership visibility into workstream status and risk, and resolved cross-functional bottlenecks',
+      'AbbVie — Strategic Initiatives Analyst (2022–23): managed the project management platform behind the $63B AbbVie-Allergan integration, built reporting tools that gave leadership visibility into workstream status and risk, and resolved cross-functional bottlenecks',
     ],
     artifact: { kind: 'none' },
   },
