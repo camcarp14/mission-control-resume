@@ -145,8 +145,8 @@ export const stations = [
       'The client relationship is the job: discovery on new accounts, weekly time with 12+ stakeholders, and data-backed pushback when a request would trade lead quality for a prettier metric.',
     bullets: [
       'Set client roadmaps, walked clients through strategy and test proposals to win buy-in, then ran execution, delegating across analysts and owning the outcomes, including the SEM launch for a new healthcare provider, from strategy through build QA and reporting on qualified calls and appointments',
-      'Led new-account discovery, ran quarterly business reviews and lunch-and-learns that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
-      'Partnered with Invoca developers to integrate call tracking into client site code, then added spoken-phrase tracking; piloted Google betas alongside Google and Microsoft reps',
+      'Led new-account discovery, ran quarterly business reviews and enablement sessions that build program buy-in, handled objections with data-backed rebuttals, and pitched incremental budget to decision-makers',
+      'Partnered with Invoca developers to integrate call tracking into client site code, then added spoken-phrase tracking; piloted ad platform betas with Google and Microsoft',
     ],
     artifact: { kind: 'none' },
   },
@@ -272,7 +272,7 @@ export const stations = [
     bullets: [
       'Built Claude review tools that critique my analysts’ draft reasoning, keep feedback consistent, and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Turned a summer intern into a full-time analyst and direct report with a self-authored 13-week curriculum that earned a return offer, coach three more analysts on shared accounts with ongoing feedback and guidance, and write my account team’s guides on running analyses and building reports',
+      'Turned a summer intern into a full-time analyst and direct report with a self-authored 13-week curriculum that earned a return offer, coach three more analysts on shared accounts with ongoing feedback and guidance, and authored the analysis and reporting playbooks my account team works from',
     ],
     artifact: { kind: 'none' },
   },

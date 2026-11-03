@@ -27,7 +27,7 @@ experience:
     scope: >-
       Channel lead and day-to-day client contact for nine accounts: a Fortune 5 payer's seven healthcare
       business units and two logistics accounts. Present weekly to 12+ client
-      stakeholders and run QBRs and lunch-and-learns that build program buy-in.
+      stakeholders and run QBRs and enablement sessions that build program buy-in.
     groups:
       - label: Client Leadership and Results
         bullets:
@@ -48,8 +48,8 @@ experience:
             Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
             5% and ROAS 20%, then led its migration off SA360 without disruption.
           - >-
-            Partnered with Invoca developers to integrate call tracking into client sites; piloted Google
-            betas with Google and Microsoft reps.
+            Partnered with Invoca developers to integrate call tracking into client sites; piloted ad platform
+            betas with Google and Microsoft.
       - label: AI Systems
         bullets:
           - >-
@@ -74,8 +74,8 @@ experience:
             Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
           - >-
-            Wrote my account team's analysis and reporting guides, and helped a junior analyst build his first
-            Claude forecasting tool.
+            Authored the analysis and reporting playbooks my account team works from; helped a junior analyst
+            build his first Claude tool.
   - org: Zero To Secure
     role: Founder
     where: Chicago, IL
