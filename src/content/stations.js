@@ -165,7 +165,7 @@ export const stations = [
     proves:
       'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
-      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M. Owned the full forecast and budget plan in other AEPs',
+      'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M',
       'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals, moving healthcare programs from raw call volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders',
       'Kept AEP campaigns compliant with CMS-approved copy',
     ],
@@ -272,7 +272,7 @@ export const stations = [
     bullets: [
       'Built Claude review tools that critique my analysts’ draft reasoning and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Turned a summer intern into a full-time analyst and direct report with a self-authored 13-week curriculum that earned a return offer, coach three more analysts on shared accounts with ongoing feedback and guidance, and write the team’s guides on running analyses and building reports',
+      'Turned a summer intern into a full-time analyst and direct report with a self-authored 13-week curriculum that earned a return offer, coach three more analysts on shared accounts with ongoing feedback and guidance, and write my account team’s guides on running analyses and building reports',
     ],
     artifact: { kind: 'none' },
   },
