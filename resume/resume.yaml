@@ -97,7 +97,7 @@ experience:
 
 projects:
   - name: Medicare Enrollment Call Evaluation Pipeline
-    note: Personal project, synthetic data
+    note: Personal Project, Synthetic Data
     bullets:
       - >-
         Python pipeline that grades synthetic Medicare sales calls on compliance, eligibility and plan
@@ -106,7 +106,7 @@ projects:
         LLM-as-judge and rule-based checks calibrated against a blind-labeled answer key, with an eval readout
         on results and limits.
   - name: Call Analytics MCP Server
-    note: Personal project, synthetic data
+    note: Personal Project, Synthetic Data
     bullets:
       - >-
         MCP server giving Claude tools to query, grade and batch calls for offline conversions; no batch ships
