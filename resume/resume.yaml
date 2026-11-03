@@ -32,24 +32,24 @@ experience:
       - label: Client Leadership and Results
         bullets:
           - >-
-            Set client roadmaps, walk clients through strategy and test proposals to win buy-in, then run
-            execution, delegating across analysts and owning outcomes, including a new provider's SEM launch.
+            Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
+            Enrollment Period (AEP), earning $5M in incremental investment (AEP spend to $35M) while keeping
+            campaigns compliant with CMS-approved copy.
+          - >-
+            Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
+            volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders.
+          - >-
+            Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
+            5% and ROAS 20%, then led its migration off SA360 without disruption.
+          - >-
+            Set client roadmaps and win buy-in on strategy and test proposals, then run execution across a team
+            of analysts, including a new healthcare provider's SEM launch.
           - >-
             Lead new-account discovery, handle objections with data-backed rebuttals and pitch incremental
             budget to decision-makers.
           - >-
             Partner with Invoca developers to integrate call tracking into client sites; pilot ad platform betas
             with Google and Microsoft.
-          - >-
-            Drove a 175% YoY enrollment increase for a national Medicare marketplace during the Annual
-            Enrollment Period (AEP). Results earned $5M in incremental investment, bringing AEP spend to $35M.
-          - >-
-            Designed Value-Based Bidding around call-quality signals, moving healthcare programs from raw call
-            volume to qualified outcomes with revenue-tied KPIs for non-technical client leaders. Keep AEP
-            campaigns compliant with CMS-approved copy.
-          - >-
-            Reversed declining efficiency for a national retail brand, cutting spend 13% while growing revenue
-            5% and ROAS 20%, then led its migration off SA360 without disruption.
       - label: AI Systems
         bullets:
           - >-
@@ -59,7 +59,7 @@ experience:
             Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics
             and LLM-as-judge scoring.
           - >-
-            Built a low-code workflow tool that turns flowcharts into Claude skills, cutting build time from
+            Created a low-code workflow tool that turns flowcharts into Claude skills, cutting build time from
             hours to ~30 minutes.
       - label: Team Leadership and Enablement
         bullets:
@@ -90,8 +90,8 @@ experience:
     when: Mar 2022 – May 2023
     bullets:
       - >-
-        Supported the $63B AbbVie-Allergan integration, resolving cross-functional bottlenecks and building
-        reporting tools that gave leadership visibility into workstream status and risk.
+        Built reporting tools that gave leadership visibility into workstream status and risk across the $63B
+        AbbVie-Allergan integration, and resolved cross-functional bottlenecks between workstreams.
 
 projects:
   - name: Medicare Enrollment Call Evaluation Pipeline
