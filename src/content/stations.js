@@ -260,7 +260,9 @@ export const stations = [
   // team guides and the junior analyst's first Claude tool and its
   // forecasting inputs are owner detail (master résumé). No formal AI
   // trainings are claimed: he shares what he learns with the team, he did
-  // not author trainings (owner correction, Oct 2026).
+  // not author trainings (owner correction, Oct 2026). Team shape (owner,
+  // Nov 2026): the direct report is the former intern, now an analyst; the
+  // three other analysts are coached and partnered with on accounts.
   {
     id: 'force-multiplier',
     code: 'STN 09',
@@ -270,7 +272,7 @@ export const stations = [
     bullets: [
       'Built a Claude tool that critiques and corrects reasoning on drafts by a direct report and three analysts, using account data pulled through MCP connectors; used weekly, it cut my review time 50%',
       'Partnered with a junior analyst to build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
-      'Coach a direct report and three analysts on my accounts, giving ongoing feedback and guidance that develops them as analysts; write the team’s guides on running analyses and building reports, and directly managed a summer intern through a self-authored 13-week curriculum that led to a return offer',
+      'Manage a direct report I developed from summer intern to analyst through a self-authored 13-week curriculum that earned a return offer, coach three more analysts I partner with on accounts with ongoing feedback and guidance, and write the team’s guides on running analyses and building reports',
     ],
     artifact: { kind: 'none' },
   },
