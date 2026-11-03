@@ -176,7 +176,7 @@ export const work = [
     title: 'Mission Control',
     pillars: ['Build', 'Persuade'],
     summary:
-      'This site: a résumé you pilot through a 3D solar system, built with React, three.js and Supabase. Visits are logged through a deny-all row-level-security gate, and every release runs an end-to-end, accessibility and Lighthouse suite.',
+      'This site: a résumé you pilot through a 3D solar system, built with React, three.js, and Supabase. Visits are logged through a deny-all row-level-security gate, and every release runs an end-to-end, accessibility, and Lighthouse suite.',
     links: [{ label: 'camcarp.com', href: 'https://camcarp.com/' }],
     status: 'live',
     updated: '2026-09',
@@ -209,10 +209,10 @@ export const work = [
     title: 'Call analytics MCP server',
     pillars: ['Build'],
     summary:
-      'A personal MCP server that lets Claude query graded synthetic calls, grade new ones through the evaluation pipeline and draft offline-conversion batches, with a human approval gate built into the server before any batch is released.',
+      'A personal MCP server that lets Claude query graded synthetic calls, grade new ones through the evaluation pipeline, and draft offline-conversion batches, with a human approval gate built into the server before any batch is released.',
     links: [],
     status: 'in-progress',
-    blurb: 'a personal project that lets Claude query graded synthetic calls, grade new ones and draft conversion batches, with a human approval gate built into the server',
+    blurb: 'a personal project that lets Claude query graded synthetic calls, grade new ones, and draft conversion batches, with a human approval gate built into the server',
     stationId: 'call-agent',
     updated: '2026-10',
   },

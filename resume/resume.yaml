@@ -14,7 +14,7 @@ contact:
 summary: >-
   Client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution.
   Day-to-day lead for 20 client accounts and $75M+ in media since 2023.
-  Owns strategy, forecasting and budgets for healthcare, retail and logistics brands, turning performance
+  Owns strategy, forecasting, and budgets for healthcare, retail, and logistics brands, turning performance
   data into clear recommendations for senior stakeholders.
   Builds AI tools and Claude skills for conversation intelligence, and drives their adoption across analysts
   and clients.
@@ -44,9 +44,9 @@ experience:
             without a performance disruption.
           - >-
             Set client roadmaps, including the SEM launch for a new healthcare provider, winning buy-in on strategy
-            and test proposals and leading a team of analysts through execution.
+            and test proposals, and leading a team of analysts through execution.
           - >-
-            Lead new-account discovery, handle objections with data-backed rebuttals and pitch incremental
+            Lead new-account discovery, handle objections with data-backed rebuttals, and pitch incremental
             budget to decision-makers.
           - >-
             Partner with Invoca developers to integrate call tracking into client sites; pilot ad platform betas
@@ -58,7 +58,7 @@ experience:
             skills that combine Invoca call data with tracking and ad platform data through MCP connectors and
             turn the results into client-ready insights.
           - >-
-            Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics
+            Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics,
             and LLM-as-judge scoring.
           - >-
             Created a low-code workflow tool that turns flowcharts into Claude skills, cutting build time from
@@ -70,10 +70,10 @@ experience:
             direct report.
           - >-
             Coach three analysts on shared accounts with regular feedback and guidance. AI review tools I built
-            keep that feedback consistent, help them explain the why behind the numbers and cut my review time
+            keep that feedback consistent, help them explain the why behind the numbers, and cut my review time
             50%.
           - >-
-            Deployed AI reporting, pacing and forecasting automations to 5 analysts across 10+ accounts, saving
+            Deployed AI reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.
           - >-
             Wrote the analysis and reporting playbooks my account team uses, and helped a junior analyst build
@@ -84,8 +84,8 @@ experience:
     when: Jul 2025 – Present
     bullets:
       - >-
-        Founded and run a bootstrapped DTC brand solo, owning Shopify development, SEO content and
-        go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval
+        Founded and run a bootstrapped DTC brand solo, owning Shopify development, SEO content,
+        and go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval
         step.
   - org: AbbVie
     role: Strategic Initiatives Analyst
@@ -101,7 +101,7 @@ projects:
     note: Personal Project, Synthetic Data
     bullets:
       - >-
-        Python pipeline that grades synthetic Medicare sales calls on compliance, eligibility and plan
+        Python pipeline that grades synthetic Medicare sales calls on compliance, eligibility, and plan
         accuracy.
       - >-
         LLM-as-judge and rule-based checks calibrated against a blind-labeled answer key, with an eval readout
@@ -110,7 +110,7 @@ projects:
     note: Personal Project, Synthetic Data
     bullets:
       - >-
-        MCP server giving Claude tools to query, grade and batch calls for offline conversions; no batch ships
+        MCP server giving Claude tools to query, grade, and batch calls for offline conversions; no batch ships
         without human approval.
 
 education:
