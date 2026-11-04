@@ -171,7 +171,7 @@ export const stations = [
       'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP), a result that shifted how the client valued paid search, and earned $5M in incremental investment, bringing AEP spend to $35M',
-      'Designed Value-Based Bidding for healthcare programs that optimizes toward multiple funnel signals, from Invoca call-quality and spoken-phrase data to appointments, each weighted by revenue-based conversion values. Success is measured in cost per qualified call or appointment',
+      'Designed Value-Based Bidding for healthcare programs that weights funnel signals, from Invoca call-quality and spoken-phrase data to appointments, by revenue-based conversion values, giving automated bidding richer signal than raw call volume. Success is measured in cost per qualified call or appointment',
     ],
     artifact: { kind: 'none' },
   },
