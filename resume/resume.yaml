@@ -37,7 +37,7 @@ experience:
             incremental investment, bringing AEP spend to $35M.
           - >-
             Designed Value-Based Bidding around call-quality signals and revenue-based conversion values, shifting
-            healthcare programs from raw call volume to qualified outcomes, measured by cost per qualified call or appointment.
+            healthcare programs from cost per call to cost per qualified call or appointment.
           - >-
             Reversed declining efficiency for a national retail brand, growing revenue 5% and ROAS 20% while cutting
             spend 13%, then led its migration off SA360
@@ -62,7 +62,7 @@ experience:
             and LLM-as-judge scoring.
           - >-
             Created a low-code workflow tool that turns flowcharts into Claude skills, cutting build time from
-            hours to ~30 minutes.
+            an hour to ~30 minutes.
       - label: Team Leadership and Enablement
         bullets:
           - >-
@@ -70,8 +70,8 @@ experience:
             direct report.
           - >-
             Coach three analysts on shared accounts with regular feedback and guidance. AI review tools I built
-            keep that feedback consistent, help them explain the why behind the numbers, and cut my review time
-            50%.
+            help keep that feedback consistent and actionable, push them to explain the why behind the numbers,
+            and cut my review time 50%.
           - >-
             Deployed reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving
             300+ hours a quarter.

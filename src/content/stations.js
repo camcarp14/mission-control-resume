@@ -170,7 +170,7 @@ export const stations = [
       'A 175% enrollment lift that earned $5M in incremental investment, and healthcare programs moved from raw call volume to qualified outcomes.',
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace during the Annual Enrollment Period (AEP), a result that shifted how the client valued paid search, and earned $5M in incremental investment, bringing AEP spend to $35M',
-      'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals and revenue-based conversion values, shifting healthcare programs from raw call volume to qualified outcomes, measured by cost per qualified call or appointment',
+      'Designed Value-Based Bidding around Invoca call-quality and spoken-phrase signals and revenue-based conversion values, shifting healthcare programs from cost per call to cost per qualified call or appointment',
     ],
     artifact: { kind: 'none' },
   },
@@ -239,7 +239,7 @@ export const stations = [
   // -- STN 08 · PIPELINE ---------------------------------------------------
   // Absorbs the retired Diagnostics station (id firefight): its catches are
   // now the "checks that catch broken tracking" clause. 5 analysts, 10+
-  // accounts, 300+ hours and hours -> ~30 minutes are on the résumé; up to
+  // accounts, 300+ hours and an hour -> ~30 minutes (owner, Nov 2026) are on the résumé; up to
   // 50% is owner-confirmed, predates the repositioning, and is on the master
   // résumé. The workflow builder stays unnamed, by owner rule.
   {
@@ -250,7 +250,7 @@ export const stations = [
       'Reporting, pacing, and forecasting automations rolled out to 5 analysts across 10+ accounts, saving 300+ hours a quarter.',
     bullets: [
       'Deployed reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
-      'Created a low-code workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from hours to about 30 minutes',
+      'Created a low-code workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from an hour to about 30 minutes',
       'Account diagnostic agents built on it cut the time spent diagnosing performance shifts by up to 50%',
     ],
     artifact: { kind: 'none' },
@@ -274,7 +274,7 @@ export const stations = [
       'AI adoption is a people problem, so I start with the people: hands-on coaching for the analysts I work with, review tools that keep my feedback consistent, and a junior analyst who now builds with AI on his own.',
     bullets: [
       'Mentored a summer intern through a 13-week curriculum I designed; now a full-time analyst and my direct report',
-      'Coach three analysts on shared accounts with regular feedback and guidance. Claude review tools I built keep that feedback consistent and push them to explain the why behind the numbers, using account data pulled through MCP connectors; used weekly, they cut my review time 50%',
+      'Coach three analysts on shared accounts with regular feedback and guidance. Claude review tools I built help keep that feedback consistent and actionable, push them to explain the why behind the numbers, and draw on account data pulled through MCP connectors. Used weekly, they cut my review time 50%',
       'Wrote the analysis and reporting playbooks my account team uses, and helped a junior analyst build his first Claude tool, which streamlined daily budget forecasting from historical trends, tactic efficiency, channel mix, and seasonality; he now uses AI in his daily work',
     ],
     artifact: { kind: 'none' },
