@@ -99,7 +99,8 @@ export const stations = [
   // calls, 5 analysts, 10+ accounts, nine accounts, seven business units, 12+
   // stakeholders, the Fortune 5 payer, 20 accounts and $75M+ are all on the
   // résumé. The 20 accounts (owner, Nov 2026) and $75M+ are career-to-date, so
-  // don't tie them to the nine current accounts. The bullets are a highlight
+  // don't tie them to the nine current accounts. He worked on all 20 but did
+  // not lead them all (owner correction, Nov 2026): never say he led 20. The bullets are a highlight
   // reel (owner, Nov 2026): the AEP result (175%, $5M, $35M from the résumé's
   // AEP bullet), the Fortune 5 scope, and the AI work, with the one-client call
   // skills and the 5-analyst automations kept in separate clauses.
@@ -108,7 +109,7 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, and who has led 20 accounts and managed $75M+ in media since 2023.',
+      'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, and who has worked on 20 accounts since 2023, with $75M+ in media managed.',
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace, a result that earned $5M in incremental investment and brought AEP spend to $35M',
       'Channel lead and day-to-day client contact for seven healthcare business units under a Fortune 5 payer and two logistics brands, presenting weekly to 12+ client stakeholders',
@@ -126,7 +127,7 @@ export const stations = [
     code: 'STN 02',
     title: 'Flight Plan',
     proves:
-      'Scope that’s outpaced the title since 2023 — channel lead across 20 accounts, an AI leader on the team, and a company of my own on the side.',
+      'Scope that’s outpaced the title since 2023 — work across 20 accounts, an AI leader on the team, and a company of my own on the side.',
     bullets: [
       'Ovative Group — Analyst, then Senior Analyst, SEM (2023–present): channel lead for nine accounts, presenting weekly to 12+ client stakeholders, with results like a 175% year-over-year lift in Medicare enrollments during AEP, and building the AI tools the team uses',
       'Zero To Secure — Founder (2025–present): a bootstrapped DTC brand I run solo, owning the Shopify build, SEO content, and go-to-market. Built AI agents for organic growth and creator outreach, each behind a human approval step',
