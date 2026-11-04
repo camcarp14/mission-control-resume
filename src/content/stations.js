@@ -272,7 +272,7 @@ export const stations = [
     code: 'STN 09',
     title: 'Enablement',
     proves:
-      'AI adoption is a people problem, so I start with the people: hands-on coaching for the analysts I work with, review tools that keep my feedback consistent, and a junior analyst who now builds with AI on his own.',
+      'AI adoption is a people problem, so I start with the people: hands-on coaching for the analysts I work with, review tools that help keep my feedback consistent and actionable, and a junior analyst who now builds with AI on his own.',
     bullets: [
       'Mentored a summer intern through a 13-week curriculum I designed; now a full-time analyst and my direct report',
       'Coach three analysts on shared accounts with regular feedback and guidance. Claude review tools I built help keep that feedback consistent and actionable, push them to explain the why behind the numbers, and draw on account data pulled through MCP connectors. Used weekly, they cut my review time 50%',
