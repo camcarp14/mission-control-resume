@@ -108,7 +108,7 @@ export const stations = [
     code: 'STN 01',
     title: 'Liftoff',
     proves:
-      'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, across 20 accounts and $75M+ in media since 2023.',
+      'A client-facing consultant who leads discovery, answers objections, then builds and deploys the technical solution, and who has led 20 accounts and managed $75M+ in media since 2023.',
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace, a result that earned $5M in incremental investment and brought AEP spend to $35M',
       'Channel lead and day-to-day client contact for seven healthcare business units under a Fortune 5 payer and two logistics brands, presenting weekly to 12+ client stakeholders',
