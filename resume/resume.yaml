@@ -55,7 +55,7 @@ experience:
         bullets:
           - >-
             Cut call analysis from 45 minutes to 5 per run across ~1,000 weekly calls for one client, using Claude
-            skills that combine Invoca call data with tracking and ad platform data through MCP connectors and
+            skills that combine Invoca call records with tracking and ad platform data through MCP connectors and
             turn the results into client-ready insights.
           - >-
             Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics,
