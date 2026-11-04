@@ -110,8 +110,8 @@ projects:
     note: Personal Project, Synthetic Data
     bullets:
       - >-
-        MCP server giving Claude tools to query, grade, and batch calls for offline conversions; no batch ships
-        without human approval.
+        MCP server that lets Claude query, grade, and batch calls for offline conversions, holding every batch
+        until a human approves it.
 
 education:
   - school: University of Wisconsin-Madison
