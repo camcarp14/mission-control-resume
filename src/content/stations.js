@@ -112,7 +112,7 @@ export const stations = [
     bullets: [
       'Drove a 175% year-over-year enrollment increase for a national Medicare marketplace, a result that earned $5M in incremental investment and brought AEP spend to $35M',
       'Channel lead and day-to-day client contact for seven healthcare business units under a Fortune 5 payer and two logistics brands, presenting weekly to 12+ client stakeholders',
-      'Built Claude skills that cut call analysis from 45 minutes to 5 across ~1,000 weekly calls for one client, and deployed AI automations that save 5 analysts 300+ hours a quarter',
+      'Built Claude skills that cut call analysis from 45 minutes to 5 across ~1,000 weekly calls for one client, and deployed reporting automations that save 5 analysts 300+ hours a quarter',
     ],
     artifact: { kind: 'none' },
   },
@@ -248,7 +248,7 @@ export const stations = [
     proves:
       'Reporting, pacing, and forecasting automations rolled out to 5 analysts across 10+ accounts, saving 300+ hours a quarter.',
     bullets: [
-      'Deployed AI reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
+      'Deployed reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
       'Created a low-code workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from hours to about 30 minutes',
       'Account diagnostic agents built on it cut the time spent diagnosing performance shifts by up to 50%',
     ],
