@@ -61,7 +61,7 @@ experience:
             Built the evaluation layer behind those skills, testing every version with golden datasets, rubrics,
             and LLM-as-judge scoring.
           - >-
-            Created a low-code workflow tool that turns complex processes into Claude skills, cutting build time from
+            Created a low-code tool that turns complex processes into Claude skills, cutting build time from
             an hour to ~30 minutes.
       - label: Team Leadership and Enablement
         bullets:
