@@ -251,7 +251,7 @@ export const stations = [
       'Reporting, pacing, and forecasting automations rolled out to 5 analysts across 10+ accounts, saving 300+ hours a quarter.',
     bullets: [
       'Deployed reporting, pacing, and forecasting automations to 5 analysts across 10+ accounts, saving 300+ hours a quarter, with checks that catch broken tracking before clients see it',
-      'Created a low-code workflow tool that turns flowcharts into reusable Claude skills and stores the account context agents read from, cutting skill build time from an hour to about 30 minutes',
+      'Created a low-code workflow tool that turns complex processes into reusable Claude skills and stores the account context agents read from, cutting skill build time from an hour to about 30 minutes',
       'Account diagnostic agents built on it cut the time spent diagnosing performance shifts by up to 50%',
     ],
     artifact: { kind: 'none' },
